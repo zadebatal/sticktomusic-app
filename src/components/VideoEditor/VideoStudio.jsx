@@ -2712,7 +2712,10 @@ const VideoStudio = ({
               setCurrentView('home');
             }}
             onOpenEditor={(p, count, existingDraft, templateSettings) => {
+              setSelectedCategory(null);
+              setActivePipelineIdForEditor(p.id);
               setPullFromCollection(p.id);
+              setPipelineCategoryVersion(v => v + 1);
               setPendingTemplateSettings(templateSettings || null);
               handleMakeSlideshow(existingDraft || null);
             }}
@@ -2998,7 +3001,7 @@ const VideoStudio = ({
           db={db}
           isMobile={isMobile}
           artistId={currentArtistId}
-          category={selectedCategory || {
+          category={selectedCategory || pipelineCategory || {
             id: 'library-session',
             name: 'Library',
             imagesA: [],
