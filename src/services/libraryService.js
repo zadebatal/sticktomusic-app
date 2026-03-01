@@ -1277,6 +1277,8 @@ export const FORMAT_TEMPLATES = [
   { id: 'carousel', name: '3 Slide', slideCount: 3, slideLabels: ['Slide 1', 'Slide 2', 'Slide 3'], type: 'slideshow' },
   { id: 'four_slide', name: '4 Slide', slideCount: 4, slideLabels: ['Slide 1', 'Slide 2', 'Slide 3', 'Slide 4'], type: 'slideshow' },
   { id: 'hook_vibes_lyrics', name: '5 Slide', slideCount: 5, slideLabels: ['Hook', 'Text', 'Text', 'Text', 'Lyrics'], type: 'slideshow' },
+  { id: 'six_slide', name: '6 Slide', slideCount: 6, slideLabels: ['Slide 1', 'Slide 2', 'Slide 3', 'Slide 4', 'Slide 5', 'Slide 6'], type: 'slideshow' },
+  { id: 'seven_slide', name: '7 Slide', slideCount: 7, slideLabels: ['Slide 1', 'Slide 2', 'Slide 3', 'Slide 4', 'Slide 5', 'Slide 6', 'Slide 7'], type: 'slideshow' },
   { id: 'montage', name: 'Montage', slideCount: 0, slideLabels: [], type: 'video', description: 'Combine clips on a timeline, cut to beat' },
   { id: 'solo_clip', name: 'Solo Clip', slideCount: 0, slideLabels: [], type: 'video', description: 'One clip per video, batch generate' },
   { id: 'multi_clip', name: 'Multi Clip', slideCount: 0, slideLabels: [], type: 'video', description: 'Multiple clips on timeline' },
