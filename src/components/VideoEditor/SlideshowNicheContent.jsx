@@ -86,6 +86,7 @@ const SlideshowNicheContent = ({
   onWebImportToBank,
   onUploadAudio,
   onImportAudio,
+  onRemoveAudio,
 }) => {
   const [textInputs, setTextInputs] = useState({});
   const [dragOverBank, setDragOverBank] = useState(null);
@@ -505,10 +506,10 @@ const SlideshowNicheContent = ({
                       <span className="text-[10px] text-neutral-500 flex-none">{dur}</span>
                       <button
                         className="flex-none opacity-0 group-hover:opacity-100 flex items-center justify-center w-4 h-4 bg-transparent border-none cursor-pointer transition-opacity"
-                        onClick={(e) => { e.stopPropagation(); removeFromBank(artistId, niche.id, audio.id, -1, db); }}
+                        onClick={(e) => { e.stopPropagation(); onRemoveAudio?.(audio.id); }}
                         title="Remove from project"
                       >
-                        <FeatherX className="text-neutral-500 hover:text-red-400" style={{ width: 10, height: 10 }} />
+                        <FeatherTrash2 className="text-neutral-500 hover:text-red-400" style={{ width: 10, height: 10 }} />
                       </button>
                     </div>
                   );

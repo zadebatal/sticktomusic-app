@@ -40,6 +40,7 @@ import {
   updateProjectHashtagBank,
   getRecentCollectionSnapshots,
   getRecentCollectionRemovals,
+  removeFromProjectPool,
 } from '../../services/libraryService';
 import { uploadFile, uploadFileWithQuota, getMediaDuration } from '../../services/firebaseStorage';
 import { convertImageIfNeeded } from '../../utils/imageConverter';
@@ -920,6 +921,7 @@ const ProjectWorkspace = ({
             onWebImportToBank={handleWebImportToBank}
             onUploadAudio={() => { pendingBankIndexRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'audio/*'; fileInputRef.current.click(); } }}
             onImportAudio={handleImportAudio}
+            onRemoveAudio={(audioId) => { removeFromProjectPool(artistId, projectId, [audioId], db); toastSuccess('Audio removed'); }}
           />
         )}
 
