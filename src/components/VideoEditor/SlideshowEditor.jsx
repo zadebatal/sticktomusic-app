@@ -692,8 +692,10 @@ const SlideshowEditor = ({
   const previewScale = renderedCanvasWidth / baseDimensions.width;
 
   // Measure canvas area container and compute canvas pixel dimensions
-  // Debounce and threshold to prevent jitter when switching slides
+  // Only recompute when container WIDTH changes (ignore height-only changes
+  // caused by sibling content like the inline text editor appearing/disappearing)
   const canvasSizeRef = useRef({ width: 480, height: 640 });
+  const lastContainerWidthRef = useRef(0);
   useEffect(() => {
     if (!canvasAreaRef.current) return;
     let raf = null;
@@ -702,6 +704,10 @@ const SlideshowEditor = ({
       raf = requestAnimationFrame(() => {
         const { width: cw, height: ch } = entries[0].contentRect;
         if (cw <= 0 || ch <= 0) return;
+        // Skip if only height changed (content reflow from siblings)
+        const widthChanged = Math.abs(cw - lastContainerWidthRef.current) > 2;
+        if (!widthChanged && lastContainerWidthRef.current > 0) return;
+        lastContainerWidthRef.current = cw;
         const ar = baseDimensions.width / baseDimensions.height;
         let w, h;
         if (cw / ch > ar) {
@@ -711,7 +717,6 @@ const SlideshowEditor = ({
         }
         const nw = Math.floor(w);
         const nh = Math.floor(h);
-        // Only update if size changed by more than 5px to prevent jitter
         if (Math.abs(nw - canvasSizeRef.current.width) > 5 || Math.abs(nh - canvasSizeRef.current.height) > 5) {
           canvasSizeRef.current = { width: nw, height: nh };
           setCanvasSize({ width: nw, height: nh });
