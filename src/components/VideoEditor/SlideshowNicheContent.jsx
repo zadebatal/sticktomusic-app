@@ -339,10 +339,11 @@ const SlideshowNicheContent = ({
 
           return (
             <div key={bankIdx} className="flex flex-col gap-2 flex-1 overflow-hidden min-w-[150px]">
-              {/* Column header */}
+              {/* Column header — click to preview this slide */}
               <div
-                className="flex w-full flex-none items-center justify-between rounded-t-lg px-3 py-2"
+                className={`flex w-full flex-none items-center justify-between rounded-t-lg px-3 py-2 cursor-pointer transition-shadow ${previewSlideIdx === bankIdx ? 'ring-2 ring-white/30' : ''}`}
                 style={{ backgroundColor: headerColor }}
+                onClick={() => setPreviewSlideIdx(bankIdx)}
               >
                 <div className="flex items-center gap-1.5 min-w-0">
                   <IconWithBackground variant={getBankIconVariant(label)} size="small" icon={getBankIcon(label)} square />
@@ -610,17 +611,25 @@ const SlideshowNicheContent = ({
                 })()}
                 {/* Slide dots */}
                 <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center gap-2 z-10">
-                  {Array.from({ length: slideCount }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="flex h-2 w-2 flex-none rounded-full cursor-pointer"
-                      style={{
-                        backgroundColor: getBankHeaderColor(getPipelineBankLabel(pipeline, i), i),
-                        opacity: previewSlideIdx === i ? 1 : 0.3,
-                      }}
-                      onClick={(e) => { e.stopPropagation(); setPreviewSlideIdx(i); }}
-                    />
-                  ))}
+                  {Array.from({ length: slideCount }).map((_, i) => {
+                    const hasImages = (pipeline?.banks?.[i] || []).length > 0;
+                    const isActive = previewSlideIdx === i;
+                    const color = getBankHeaderColor(getPipelineBankLabel(pipeline, i), i);
+                    return (
+                      <div
+                        key={i}
+                        className="flex h-2.5 w-2.5 flex-none rounded-full cursor-pointer transition-all"
+                        style={{
+                          backgroundColor: hasImages || isActive ? color : 'transparent',
+                          border: `2px solid ${color}`,
+                          opacity: isActive ? 1 : hasImages ? 0.6 : 0.3,
+                          transform: isActive ? 'scale(1.3)' : 'scale(1)',
+                        }}
+                        onClick={(e) => { e.stopPropagation(); setPreviewSlideIdx(i); }}
+                        title={`${getPipelineBankLabel(pipeline, i)}${hasImages ? '' : ' (empty)'}`}
+                      />
+                    );
+                  })}
                 </div>
               </div>
               {/* Controls below preview */}
