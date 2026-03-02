@@ -820,6 +820,29 @@ const WordTimeline = ({
   };
 
   const handleCombineWords = () => {
+    // Multi-select: combine ALL selected words into one
+    if (selectedWordIndices.length >= 2) {
+      const sorted = [...selectedWordIndices].sort((a, b) => a - b);
+      const first = words[sorted[0]];
+      const last = words[sorted[sorted.length - 1]];
+      if (!first || !last) return;
+      saveToHistory();
+      const combinedText = sorted.map(i => words[i].text).join(' ');
+      const combined = {
+        id: first.id,
+        text: combinedText,
+        startTime: first.startTime,
+        duration: (last.startTime + last.duration) - first.startTime
+      };
+      setWords(prev => {
+        const result = [...prev];
+        result.splice(sorted[0], sorted.length, combined);
+        return result;
+      });
+      setSelectedWordIndices([sorted[0]]);
+      return;
+    }
+    // Single / playhead: combine with next word
     const index = getEffectiveWordIndex();
     if (index < 0 || index >= words.length - 1) return;
     saveToHistory();
@@ -1292,7 +1315,7 @@ const WordTimeline = ({
               flexWrap: 'nowrap'
             } : {})
           }}>
-            <Button variant="neutral-secondary" size="small" onClick={handleCombineWords} disabled={!hasWordAtPlayhead}>
+            <Button variant="neutral-secondary" size="small" onClick={handleCombineWords} disabled={selectedWordIndices.length < 2 && (!hasWordAtPlayhead || effectiveIndex >= words.length - 1)}>
               Combine
             </Button>
             <Button variant="neutral-secondary" size="small" icon={<FeatherScissors />} onClick={handleCutWord} disabled={!hasWordAtPlayhead}>
