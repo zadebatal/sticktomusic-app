@@ -30,7 +30,9 @@ async function getAudioBuffer(source) {
   if (source instanceof Blob) {
     arrayBuffer = await source.arrayBuffer();
   } else {
-    const resp = await fetch(source, { mode: 'cors' });
+    // IMPORTANT: use cache: 'no-store' to avoid getting a cached partial response
+    // from the <video preload="metadata"> range request (which only fetches the first chunk).
+    const resp = await fetch(source, { mode: 'cors', cache: 'no-store' });
     arrayBuffer = await resp.arrayBuffer();
   }
 
@@ -39,6 +41,7 @@ async function getAudioBuffer(source) {
   const buffer = await audioCtx.decodeAudioData(arrayBuffer);
   await audioCtx.close();
 
+  log.info(`[Waveform] Decoded ${buffer.duration.toFixed(1)}s audio (${buffer.sampleRate}Hz, ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB)`);
   if (cacheKey) bufferCache.set(cacheKey, buffer);
   return buffer;
 }

@@ -102,6 +102,7 @@ const ClipperEditor = ({
   const [sourceUrl, setSourceUrl] = useState(null);
   const [sourceFile, setSourceFile] = useState(null);
   const [sourceName, setSourceName] = useState('');
+  const [sourceThumbnail, setSourceThumbnail] = useState(null);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -248,6 +249,13 @@ const ClipperEditor = ({
       setSourceName(firstVideo.name);
     }
   }, [existingSession, existingVideo, availableSourceVideos]);
+
+  // Derive thumbnail from available source videos whenever sourceUrl changes
+  useEffect(() => {
+    if (!sourceUrl) { setSourceThumbnail(null); return; }
+    const match = availableSourceVideos.find(v => v.url === sourceUrl);
+    setSourceThumbnail(match?.thumbnailUrl || null);
+  }, [sourceUrl, availableSourceVideos]);
 
   // ── Time display update (throttled via timeupdate ~4x/sec for the badge) ──
   useEffect(() => {
@@ -1061,8 +1069,13 @@ const ClipperEditor = ({
               <div className="flex flex-1 items-center justify-center bg-black min-h-0 p-4 relative">
                 {!videoReady && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10">
-                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-                    <span className="text-caption font-caption text-neutral-400">Loading video...</span>
+                    {sourceThumbnail && (
+                      <img src={sourceThumbnail} alt="" className="absolute inset-0 w-full h-full object-contain opacity-60" />
+                    )}
+                    <div className="relative z-10 flex flex-col items-center gap-2">
+                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+                      <span className="text-caption font-caption text-neutral-400">Loading video...</span>
+                    </div>
                   </div>
                 )}
                 <video
@@ -1312,23 +1325,26 @@ const ClipperEditor = ({
                               </div>
                             );
                           }
-                          const barCount = Math.max(1, Math.round(duration * pxPerSec / 3));
-                          const bars = downsample(wfData, barCount);
-                          return bars.map((val, j) => (
-                            <div
-                              key={j}
-                              style={{
-                                position: 'absolute',
-                                left: `${j * 3}px`,
-                                bottom: '2px',
-                                width: '2px',
-                                height: `${Math.max(1, val * 24)}px`,
-                                backgroundColor: 'rgba(99,102,241,0.5)',
-                                borderRadius: '1px',
-                                pointerEvents: 'none',
-                              }}
-                            />
-                          ));
+                          const audioPx = duration * pxPerSec;
+                          const maxBars = Math.max(50, Math.round(audioPx / 3));
+                          const bars = downsample(wfData, maxBars);
+                          return (
+                            <div style={{ width: `${audioPx}px`, height: '100%', display: 'flex', alignItems: 'flex-end', padding: '0 1px 2px' }}>
+                              {bars.map((val, j) => (
+                                <div
+                                  key={j}
+                                  style={{
+                                    flex: 1,
+                                    minWidth: '1px',
+                                    height: `${Math.max(1, val * 24)}px`,
+                                    backgroundColor: 'rgba(99,102,241,0.5)',
+                                    borderRadius: '1px',
+                                    pointerEvents: 'none',
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          );
                         })()}
                       </div>
 
