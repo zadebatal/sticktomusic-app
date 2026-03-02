@@ -326,12 +326,11 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       margin: 0,
       fontWeight: '600',
       color: theme.text.primary,
-      fontSize: '14px'
-    },
-    audioSize: {
-      margin: '4px 0 0',
-      fontSize: '12px',
-      color: theme.text.muted
+      fontSize: '14px',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      maxWidth: '350px'
     },
     cachedSection: {
       backgroundColor: '#0f2a1f',
@@ -513,15 +512,11 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
           {/* Audio Info */}
           <div style={styles.audioInfo}>
             <div style={styles.audioIcon}>🎵</div>
-            <div>
-              <p style={styles.audioName}>{audioFile?.name || (typeof audioUrl === 'string' ? audioUrl.split('/').pop() : 'Audio file')}</p>
-              <p style={styles.audioSize}>
-                {needsTrimming ? (
-                  <>Trimmed: {formatTime(startTime || 0)} - {formatTime(endTime || 0)}</>
-                ) : audioFile ? (
-                  `${(audioFile.size / (1024 * 1024)).toFixed(2)} MB`
-                ) : ''}
-              </p>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={styles.audioName}>{(() => {
+                const raw = audioFile?.name || (typeof audioUrl === 'string' ? decodeURIComponent(audioUrl.split('/').pop().split('?')[0]) : 'Audio file');
+                return raw;
+              })()}</p>
             </div>
           </div>
 
@@ -602,18 +597,7 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
           {/* Error */}
           {(error || pipelineError) && <div style={styles.error}>{error || pipelineError}</div>}
 
-          {/* How it works (only when idle, no cache) */}
-          {!isProcessing && !error && !pipelineError && !cachedLyrics && (
-            <div style={styles.info}>
-              <h4 style={styles.infoTitle}>How it works:</h4>
-              <ol style={styles.steps}>
-                <li>Song is identified via audio fingerprint</li>
-                <li>If found, synced lyrics are loaded instantly</li>
-                <li>Otherwise, AI transcribes with word-level timestamps</li>
-                <li>Results are cached for future use</li>
-              </ol>
-            </div>
-          )}
+          {/* Spacer when idle — keeps modal from collapsing */}
           </>
           )}
         </div>

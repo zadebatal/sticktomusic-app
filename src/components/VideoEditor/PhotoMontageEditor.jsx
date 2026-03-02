@@ -180,7 +180,7 @@ const PhotoMontageEditor = ({
   // ── Settings state (global across all variations) ──
   const [speed, setSpeed] = useState(existingVideo?.montageSpeed || 1);
   const [transition, setTransition] = useState(existingVideo?.montageTransition || 'cut');
-  const [kenBurnsEnabled, setKenBurnsEnabled] = useState(existingVideo?.montageKenBurns !== undefined ? existingVideo.montageKenBurns !== false : true);
+  const [kenBurnsEnabled, setKenBurnsEnabled] = useState(existingVideo?.montageKenBurns === true);
   const [aspectRatio, setAspectRatio] = useState(existingVideo?.cropMode || '9:16');
   const [displayMode, setDisplayMode] = useState(existingVideo?.montageDisplayMode || 'cover');
 
@@ -2079,10 +2079,10 @@ const PhotoMontageEditor = ({
                 <div className="flex flex-col gap-3">
                   {selectedAudio ? (
                     <>
-                      <div className="flex items-center gap-2 p-2 rounded-lg bg-black/50">
+                      <div className="flex items-center gap-2 p-2 rounded-lg bg-black/50 min-w-0">
                         <FeatherMusic className="w-4 h-4 text-purple-400 flex-shrink-0" />
-                        <span className="text-body font-body text-[#ffffffff] flex-1 truncate">{selectedAudio.name || 'Audio'}</span>
-                        {selectedAudio.isTrimmed && <Badge>Trimmed</Badge>}
+                        <span className="text-body font-body text-[#ffffffff] flex-1 min-w-0 truncate">{selectedAudio.name || 'Audio'}</span>
+                        {selectedAudio.isTrimmed && <Badge className="flex-shrink-0">Trimmed</Badge>}
                       </div>
                       <div className="flex gap-2">
                         <Button variant="neutral-secondary" size="small" icon={<FeatherScissors />} onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}>Trim</Button>

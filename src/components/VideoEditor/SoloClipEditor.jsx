@@ -1771,10 +1771,10 @@ const SoloClipEditor = ({
                   <div className="flex flex-col gap-3">
                     {selectedAudio ? (
                       <>
-                        <div className="flex items-center gap-2 p-2 rounded-lg bg-black/50">
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-black/50 min-w-0">
                           <FeatherMusic className="w-4 h-4 text-purple-400 flex-shrink-0" />
-                          <span className="text-body font-body text-[#ffffffff] flex-1 truncate">{selectedAudio.name}</span>
-                          {selectedAudio.isTrimmed && <Badge variant="neutral">Trimmed</Badge>}
+                          <span className="text-body font-body text-[#ffffffff] flex-1 min-w-0 truncate">{selectedAudio.name}</span>
+                          {selectedAudio.isTrimmed && <Badge variant="neutral" className="flex-shrink-0">Trimmed</Badge>}
                         </div>
                         <div className="flex gap-2">
                           <Button variant="neutral-secondary" size="small" icon={<FeatherScissors />} onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}>Trim</Button>
