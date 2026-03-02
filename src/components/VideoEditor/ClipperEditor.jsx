@@ -28,6 +28,9 @@ import EditorTopBar from './shared/EditorTopBar';
 import EditorFooter from './shared/EditorFooter';
 import useIsMobile from '../../hooks/useIsMobile';
 import useUnsavedChanges from './shared/useUnsavedChanges';
+import usePixelTimeline from './shared/usePixelTimeline';
+import useTimelineZoom from '../../hooks/useTimelineZoom';
+import useWaveform from '../../hooks/useWaveform';
 import { uploadFile } from '../../services/firebaseStorage';
 import { addToLibraryAsync, addToLibrary, addToCollection, addToProjectPool, getBankColor } from '../../services/libraryService';
 import { transcribeAudio } from '../../services/whisperService';
@@ -122,6 +125,13 @@ const ClipperEditor = ({
   const [exportDestination, setExportDestination] = useState('current-niche');
   const [destPickerOpen, setDestPickerOpen] = useState(false);
 
+  // Timeline upgrade state
+  const [timelineScale, setTimelineScale] = useState(1);
+  const [clipResize, setClipResize] = useState({ active: false, clipIndex: -1, edge: null, startX: 0, startStart: 0, startEnd: 0 });
+  const [cutLineDrag, setCutLineDrag] = useState(null);
+  const [playheadDragging, setPlayheadDragging] = useState(false);
+  const [renamingClipId, setRenamingClipId] = useState(null);
+
   // Auto-detect state
   const [detecting, setDetecting] = useState(false);
   const [detectProgress, setDetectProgress] = useState('');
@@ -131,12 +141,14 @@ const ClipperEditor = ({
   // ── Refs ──
   const videoRef = useRef(null);
   const fileInputRef = useRef(null);
-  const trackAreaRef = useRef(null);
   const playheadRef = useRef(null);
   const pendingRegionRef = useRef(null);
   const markInRef = useRef(null);
   const activeBankIndexRef = useRef(0);
   const rafRef = useRef(null);
+  const wasPlayingRef = useRef(false);
+  const timelineRef = useRef(null);
+  const pxPerSecRef = useRef(40);
   // Stable session ID: set from existingSession on mount, persists across saves
   const sessionIdRef = useRef(existingSession?.id || null);
 
@@ -211,7 +223,7 @@ const ClipperEditor = ({
     const onLoadedMetadata = () => {
       setDuration(video.duration);
       // Position playhead at 0 on load
-      if (playheadRef.current) playheadRef.current.style.left = '0%';
+      if (playheadRef.current) playheadRef.current.style.left = '0px';
     };
     const onEnded = () => setIsPlaying(false);
     const onError = () => {
@@ -242,16 +254,17 @@ const ClipperEditor = ({
       const t = video.currentTime;
       const d = video.duration;
       if (d > 0) {
+        const ppx = pxPerSecRef.current;
         if (playheadRef.current) {
-          playheadRef.current.style.left = `${(t / d) * 100}%`;
+          playheadRef.current.style.left = `${t * ppx}px`;
         }
         const mi = markInRef.current;
         if (pendingRegionRef.current) {
           if (mi !== null) {
             const lo = Math.min(mi, t);
             const hi = Math.max(mi, t);
-            pendingRegionRef.current.style.left = `${(lo / d) * 100}%`;
-            pendingRegionRef.current.style.width = `${((hi - lo) / d) * 100}%`;
+            pendingRegionRef.current.style.left = `${lo * ppx}px`;
+            pendingRegionRef.current.style.width = `${(hi - lo) * ppx}px`;
             pendingRegionRef.current.style.display = '';
           }
         }
@@ -295,8 +308,9 @@ const ClipperEditor = ({
     video.currentTime = clamped;
     setCurrentTime(clamped);
     // Direct DOM update for instant playhead feedback (critical when paused)
+    const ppx = pxPerSecRef.current;
     if (playheadRef.current) {
-      playheadRef.current.style.left = `${(clamped / d) * 100}%`;
+      playheadRef.current.style.left = `${clamped * ppx}px`;
     }
     // Update pending region
     const mi = markInRef.current;
@@ -304,14 +318,135 @@ const ClipperEditor = ({
       if (mi !== null) {
         const lo = Math.min(mi, clamped);
         const hi = Math.max(mi, clamped);
-        pendingRegionRef.current.style.left = `${(lo / d) * 100}%`;
-        pendingRegionRef.current.style.width = `${((hi - lo) / d) * 100}%`;
+        pendingRegionRef.current.style.left = `${lo * ppx}px`;
+        pendingRegionRef.current.style.width = `${(hi - lo) * ppx}px`;
         pendingRegionRef.current.style.display = '';
       } else {
         pendingRegionRef.current.style.display = 'none';
       }
     }
   }, []);
+
+  // ── Pixel timeline + zoom + waveform hooks ──
+  const { pxPerSec, timelinePx, rulerTicks, handleRulerMouseDown, downsample } = usePixelTimeline({
+    timelineScale, timelineDuration: duration, timelineRef,
+    handleSeek: seekTo, isPlaying, setIsPlaying, setPlayheadDragging, wasPlayingRef,
+  });
+  pxPerSecRef.current = pxPerSec;
+  useTimelineZoom(timelineRef, { zoom: timelineScale, setZoom: setTimelineScale });
+  const sourceWaveformClips = useMemo(() =>
+    sourceUrl && duration > 0 ? [{ id: 'source', url: sourceUrl, duration }] : [],
+    [sourceUrl, duration]
+  );
+  const { clipWaveforms } = useWaveform({
+    selectedAudio: null,
+    clips: sourceWaveformClips,
+    getClipUrl: () => sourceUrl,
+  });
+
+  // ── Clip edge resize handler ──
+  useEffect(() => {
+    if (!clipResize.active) return;
+    const handleResizeMove = (e) => {
+      const deltaX = e.clientX - clipResize.startX;
+      const deltaSec = deltaX / pxPerSecRef.current;
+      setClips(prev => {
+        const updated = [...prev];
+        const clip = updated[clipResize.clipIndex];
+        if (!clip) return prev;
+        if (clipResize.edge === 'left') {
+          let newStart = clipResize.startStart + deltaSec;
+          newStart = Math.max(0, newStart);
+          const prevClip = updated[clipResize.clipIndex - 1];
+          if (prevClip) newStart = Math.max(prevClip.end, newStart);
+          if (clip.end - newStart < 0.5) newStart = clip.end - 0.5;
+          updated[clipResize.clipIndex] = { ...clip, start: newStart, duration: clip.end - newStart };
+        } else {
+          let newEnd = clipResize.startEnd + deltaSec;
+          newEnd = Math.min(duration, newEnd);
+          const nextClip = updated[clipResize.clipIndex + 1];
+          if (nextClip) newEnd = Math.min(nextClip.start, newEnd);
+          if (newEnd - clip.start < 0.5) newEnd = clip.start + 0.5;
+          updated[clipResize.clipIndex] = { ...clip, end: newEnd, duration: newEnd - clip.start };
+        }
+        return updated;
+      });
+    };
+    const handleResizeEnd = () => {
+      setClipResize({ active: false, clipIndex: -1, edge: null, startX: 0, startStart: 0, startEnd: 0 });
+      document.body.style.cursor = '';
+    };
+    document.body.style.cursor = 'ew-resize';
+    document.addEventListener('pointermove', handleResizeMove);
+    document.addEventListener('pointerup', handleResizeEnd);
+    document.addEventListener('pointercancel', handleResizeEnd);
+    return () => {
+      document.removeEventListener('pointermove', handleResizeMove);
+      document.removeEventListener('pointerup', handleResizeEnd);
+      document.removeEventListener('pointercancel', handleResizeEnd);
+      document.body.style.cursor = '';
+    };
+  }, [clipResize, duration]);
+
+  // ── Cut line drag handler ──
+  useEffect(() => {
+    if (!cutLineDrag?.active) return;
+    const { clipIndex, startX, origPrevEnd } = cutLineDrag;
+    const handleCutLineMove = (e) => {
+      const deltaX = e.clientX - startX;
+      const deltaSec = deltaX / pxPerSecRef.current;
+      setClips(prev => {
+        const updated = [...prev];
+        const prevClip = updated[clipIndex];
+        const nextClip = updated[clipIndex + 1];
+        if (!prevClip || !nextClip) return prev;
+        let newBoundary = origPrevEnd + deltaSec;
+        newBoundary = Math.max(prevClip.start + 0.5, newBoundary);
+        newBoundary = Math.min(nextClip.end - 0.5, newBoundary);
+        updated[clipIndex] = { ...prevClip, end: newBoundary, duration: newBoundary - prevClip.start };
+        updated[clipIndex + 1] = { ...nextClip, start: newBoundary, duration: nextClip.end - newBoundary };
+        return updated;
+      });
+    };
+    const handleCutLineEnd = () => {
+      setCutLineDrag(null);
+      document.body.style.cursor = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.addEventListener('pointermove', handleCutLineMove);
+    document.addEventListener('pointerup', handleCutLineEnd);
+    document.addEventListener('pointercancel', handleCutLineEnd);
+    return () => {
+      document.removeEventListener('pointermove', handleCutLineMove);
+      document.removeEventListener('pointerup', handleCutLineEnd);
+      document.removeEventListener('pointercancel', handleCutLineEnd);
+      document.body.style.cursor = '';
+    };
+  }, [cutLineDrag]);
+
+  // ── Ruler drag (playhead scrub via ruler) ──
+  useEffect(() => {
+    if (!playheadDragging) return;
+    const handleMove = (e) => {
+      const container = timelineRef.current;
+      if (!container) return;
+      const d = videoRef.current?.duration;
+      if (!d || d <= 0) return;
+      const rect = container.getBoundingClientRect();
+      const clickX = e.clientX - rect.left + container.scrollLeft;
+      seekTo(Math.max(0, Math.min(d, clickX / pxPerSecRef.current)));
+    };
+    const handleUp = () => {
+      setPlayheadDragging(false);
+      if (wasPlayingRef.current) { videoRef.current?.play()?.catch(() => {}); setIsPlaying(true); }
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [playheadDragging, seekTo]);
 
   // ── Source file selection ──
   const handleFileSelect = useCallback((e) => {
@@ -426,14 +561,15 @@ const ClipperEditor = ({
     setCollapsedBanks(prev => ({ ...prev, [bankIdx]: !prev[bankIdx] }));
   }, []);
 
-  // ── Track click-to-seek (uses trackAreaRef for correct position math) ──
+  // ── Track click-to-seek (pixel-based using timelineRef) ──
   const handleTrackClick = useCallback((e) => {
-    const rect = trackAreaRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    const container = timelineRef.current;
+    if (!container) return;
     const d = videoRef.current?.duration;
     if (!d || d <= 0) return;
-    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    seekTo(pct * d);
+    const rect = container.getBoundingClientRect();
+    const clickX = e.clientX - rect.left + container.scrollLeft;
+    seekTo(Math.max(0, Math.min(d, clickX / pxPerSecRef.current)));
   }, [seekTo]);
 
   // ── Build session data from current state ──
@@ -925,163 +1061,294 @@ const ClipperEditor = ({
                   </div>
                 </div>
 
-                {/* Multi-track timeline — labels separate from track area */}
-                <div className="flex items-start gap-2">
+                {/* Multi-track timeline — pixel-based with zoom */}
+                <div className="flex items-start">
                   {/* Labels column */}
-                  <div className="flex flex-col gap-1 w-14 shrink-0">
-                    <div className="h-10 flex items-center justify-end pr-1">
+                  <div className="flex flex-col shrink-0 w-14">
+                    <div className="h-6 flex items-center justify-end pr-2">
+                      <span className="text-[10px] text-neutral-600">Time</span>
+                    </div>
+                    <div className="h-10 flex items-center justify-end pr-2">
                       <span className="text-caption font-caption text-neutral-500">Clips</span>
                     </div>
-                    <div className="h-7 flex items-center justify-end pr-1">
+                    <div className="h-7 flex items-center justify-end pr-2">
                       <span className="text-caption font-caption text-neutral-500">Source</span>
+                    </div>
+                    <div className="h-8 flex items-center justify-end pr-2">
+                      <span className="text-caption font-caption text-neutral-500">Audio</span>
                     </div>
                   </div>
 
-                  {/* Track area — playhead + clips positioned within this container */}
+                  {/* Scrollable timeline */}
                   <div
-                    ref={trackAreaRef}
-                    className="flex-1 relative flex flex-col gap-1"
-                    style={{ cursor: 'pointer', userSelect: 'none' }}
-                    onClick={(e) => {
-                      if (e.target === e.currentTarget || e.target.dataset.seekable === 'true') {
-                        handleTrackClick(e);
-                      }
-                    }}
+                    ref={timelineRef}
+                    className="flex-1 overflow-x-auto relative"
+                    style={{ userSelect: 'none' }}
                   >
-                    {/* Clips track */}
-                    <div className="h-10 rounded-md border border-neutral-200 bg-neutral-50/40 relative overflow-hidden" data-seekable="true">
-                      {clips.map((clip, i) => {
-                        const startPct = duration > 0 ? (clip.start / duration) * 100 : 0;
-                        const widthPct = duration > 0 ? ((clip.end - clip.start) / duration) * 100 : 0;
-                        const isActive = activeClipIdx === i;
-                        const bankIdx = typeof clip.bankIndex === 'number' ? clip.bankIndex : 0;
-                        const bankColor = getBankColor(bankIdx);
-                        const isExported = !!clip.exportedMediaId;
-                        return (
-                          <div
-                            key={clip.id}
-                            style={{
-                              position: 'absolute',
-                              left: `${startPct}%`,
-                              width: `${Math.max(widthPct, 0.5)}%`,
-                              top: '2px',
-                              bottom: '2px',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              backgroundColor: isActive ? `${bankColor.primary}66` : `${bankColor.primary}33`,
-                              border: `2px solid ${isActive ? bankColor.primary : `${bankColor.primary}66`}`,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              overflow: 'hidden',
-                              zIndex: isActive ? 10 : 5,
-                              boxShadow: isActive ? `0 0 8px ${bankColor.primary}66` : 'none',
-                            }}
-                            onClick={(e) => { e.stopPropagation(); setActiveClipIdx(i); jumpToClip(clip); }}
-                          >
-                            {isExported && (
-                              <FeatherCheck style={{ width: 8, height: 8, color: '#22c55e', flexShrink: 0, marginRight: 2 }} />
+                    <div style={{ width: `${Math.max(timelinePx, 1)}px`, position: 'relative', minWidth: '100%' }}>
+                      {/* Ruler track */}
+                      <div
+                        className="h-6 relative border-b border-neutral-200/50"
+                        onMouseDown={handleRulerMouseDown}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        {rulerTicks.map((tick, i) => (
+                          <div key={i} style={{
+                            position: 'absolute', left: `${tick.time * pxPerSec}px`,
+                            top: tick.isLabel ? 0 : '50%', bottom: 0,
+                            width: '1px', backgroundColor: tick.isLabel ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
+                          }}>
+                            {tick.isLabel && (
+                              <span style={{
+                                position: 'absolute', left: '4px', top: '0px',
+                                fontSize: '9px', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap',
+                              }}>
+                                {formatTime(tick.time)}
+                              </span>
                             )}
-                            <span style={{
-                              fontSize: '10px', fontWeight: 600, color: '#fff',
-                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                              pointerEvents: 'none', textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-                            }}>
-                              {clip.name}
-                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Clips track */}
+                      <div
+                        className="h-10 relative border-b border-neutral-200/30"
+                        onClick={(e) => { if (e.target === e.currentTarget) handleTrackClick(e); }}
+                      >
+                        {clips.map((clip, i) => {
+                          const leftPx = clip.start * pxPerSec;
+                          const widthPx = (clip.end - clip.start) * pxPerSec;
+                          const isActive = activeClipIdx === i;
+                          const bankIdx = typeof clip.bankIndex === 'number' ? clip.bankIndex : 0;
+                          const bankColor = getBankColor(bankIdx);
+                          const isExported = !!clip.exportedMediaId;
+                          const isRenaming = renamingClipId === clip.id;
+                          return (
+                            <div
+                              key={clip.id}
+                              style={{
+                                position: 'absolute',
+                                left: `${leftPx}px`,
+                                width: `${Math.max(widthPx, 8)}px`,
+                                top: '2px',
+                                bottom: '2px',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                backgroundColor: isActive ? `${bankColor.primary}66` : `${bankColor.primary}33`,
+                                border: `2px solid ${isActive ? bankColor.primary : `${bankColor.primary}66`}`,
+                                display: 'flex',
+                                alignItems: 'center',
+                                overflow: 'hidden',
+                                zIndex: isActive ? 10 : 5,
+                                boxShadow: isActive ? `0 0 8px ${bankColor.primary}66` : 'none',
+                              }}
+                              onClick={(e) => { e.stopPropagation(); setActiveClipIdx(i); jumpToClip(clip); }}
+                              onDoubleClick={(e) => { e.stopPropagation(); setRenamingClipId(clip.id); }}
+                            >
+                              {/* Left resize handle */}
+                              <div
+                                style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px', cursor: 'ew-resize', zIndex: 2 }}
+                                onPointerDown={(e) => {
+                                  e.stopPropagation(); e.preventDefault();
+                                  setClipResize({ active: true, clipIndex: i, edge: 'left', startX: e.clientX, startStart: clip.start, startEnd: clip.end });
+                                }}
+                              />
+                              {/* Clip content */}
+                              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '2px', padding: '0 8px' }}>
+                                {isExported && (
+                                  <FeatherCheck style={{ width: 8, height: 8, color: '#22c55e', flexShrink: 0 }} />
+                                )}
+                                {isRenaming ? (
+                                  <input
+                                    autoFocus
+                                    className="bg-transparent text-[10px] font-semibold text-white outline-none w-full"
+                                    value={clip.name}
+                                    onChange={(e2) => renameClip(i, e2.target.value)}
+                                    onBlur={() => setRenamingClipId(null)}
+                                    onKeyDown={(e2) => { if (e2.key === 'Enter' || e2.key === 'Escape') setRenamingClipId(null); }}
+                                    onClick={(e2) => e2.stopPropagation()}
+                                  />
+                                ) : (
+                                  <span style={{
+                                    fontSize: '10px', fontWeight: 600, color: '#fff',
+                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                    pointerEvents: 'none', textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                                  }}>
+                                    {clip.name}
+                                  </span>
+                                )}
+                              </div>
+                              {/* Right resize handle */}
+                              <div
+                                style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '6px', cursor: 'ew-resize', zIndex: 2 }}
+                                onPointerDown={(e) => {
+                                  e.stopPropagation(); e.preventDefault();
+                                  setClipResize({ active: true, clipIndex: i, edge: 'right', startX: e.clientX, startStart: clip.start, startEnd: clip.end });
+                                }}
+                              />
+                            </div>
+                          );
+                        })}
+
+                        {/* Mark-in pending region (rAF-updated via ref) */}
+                        <div
+                          ref={pendingRegionRef}
+                          style={{
+                            position: 'absolute', left: '0px', width: '0px', top: 0, bottom: 0,
+                            backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                            borderLeft: '2px solid #22c55e',
+                            borderRight: '2px solid rgba(34, 197, 94, 0.5)',
+                            zIndex: 3, pointerEvents: 'none', display: 'none',
+                          }}
+                        />
+
+                        {/* Mark-in line (static position) */}
+                        {markIn !== null && duration > 0 && (
+                          <div style={{
+                            position: 'absolute', left: `${markIn * pxPerSec}px`,
+                            top: 0, bottom: 0, width: '2px', backgroundColor: '#22c55e',
+                            zIndex: 15, pointerEvents: 'none',
+                          }} />
+                        )}
+
+                        {/* Empty hint */}
+                        {clips.length === 0 && markIn === null && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <span className="text-[10px] text-neutral-600">Press I to mark in, O to mark out</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Source track */}
+                      <div
+                        className="h-7 relative border-b border-neutral-200/30"
+                        onClick={(e) => { if (e.target === e.currentTarget) handleTrackClick(e); }}
+                      >
+                        <div style={{
+                          position: 'absolute', left: 0, top: 0, bottom: 0,
+                          width: `${duration * pxPerSec}px`,
+                          background: 'linear-gradient(90deg, rgba(99,102,241,0.06) 0%, rgba(99,102,241,0.02) 100%)',
+                          borderRadius: '4px',
+                        }} />
+                        <span style={{
+                          position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)',
+                          fontSize: '10px', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none',
+                        }}>
+                          {sourceName || 'No source'}
+                        </span>
+                      </div>
+
+                      {/* Audio waveform track */}
+                      <div
+                        className="h-8 relative"
+                        onClick={(e) => { if (e.target === e.currentTarget) handleTrackClick(e); }}
+                      >
+                        {(() => {
+                          const wfData = clipWaveforms?.source || [];
+                          if (wfData.length === 0) {
+                            return (
+                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <span className="text-[10px] text-neutral-600">No audio</span>
+                              </div>
+                            );
+                          }
+                          const barCount = Math.max(1, Math.round(duration * pxPerSec / 3));
+                          const bars = downsample(wfData, barCount);
+                          return bars.map((val, j) => (
+                            <div
+                              key={j}
+                              style={{
+                                position: 'absolute',
+                                left: `${j * 3}px`,
+                                bottom: '2px',
+                                width: '2px',
+                                height: `${Math.max(1, val * 24)}px`,
+                                backgroundColor: 'rgba(99,102,241,0.5)',
+                                borderRadius: '1px',
+                                pointerEvents: 'none',
+                              }}
+                            />
+                          ));
+                        })()}
+                      </div>
+
+                      {/* Cut lines — between adjacent clips */}
+                      {clips.length > 1 && clips.map((clip, i) => {
+                        if (i >= clips.length - 1) return null;
+                        const next = clips[i + 1];
+                        if (Math.abs(clip.end - next.start) > 0.1) return null;
+                        const boundary = clip.end;
+                        return (
+                          <div key={`cut-${i}`}>
+                            <div style={{
+                              position: 'absolute', top: '24px', bottom: 0,
+                              left: `${boundary * pxPerSec}px`, width: '2px',
+                              backgroundColor: 'rgba(255,255,255,0.5)',
+                              zIndex: 12, pointerEvents: 'none',
+                            }} />
+                            <div
+                              style={{
+                                position: 'absolute', top: '24px', bottom: 0,
+                                left: `${boundary * pxPerSec - 6}px`, width: '12px',
+                                cursor: 'col-resize', zIndex: 13,
+                              }}
+                              onMouseDown={(e) => {
+                                e.stopPropagation(); e.preventDefault();
+                                setCutLineDrag({
+                                  active: true, clipIndex: i, startX: e.clientX,
+                                  origPrevEnd: clip.end,
+                                });
+                              }}
+                            />
                           </div>
                         );
                       })}
 
-                      {/* Mark-in pending region (rAF-updated via ref) */}
-                      <div
-                        ref={pendingRegionRef}
-                        style={{
-                          position: 'absolute', left: '0%', width: '0%', top: 0, bottom: 0,
-                          backgroundColor: 'rgba(34, 197, 94, 0.15)',
-                          borderLeft: '2px solid #22c55e',
-                          borderRight: '2px solid rgba(34, 197, 94, 0.5)',
-                          zIndex: 3, pointerEvents: 'none', display: 'none',
-                        }}
-                      />
-
-                      {/* Mark-in line (static position) */}
-                      {markIn !== null && duration > 0 && (
-                        <div style={{
-                          position: 'absolute', left: `${(markIn / duration) * 100}%`,
-                          top: 0, bottom: 0, width: '2px', backgroundColor: '#22c55e',
-                          zIndex: 15, pointerEvents: 'none',
-                        }} />
-                      )}
-
-                      {/* Empty hint */}
-                      {clips.length === 0 && markIn === null && (
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                          <span className="text-[10px] text-neutral-600">Press I to mark in, O to mark out</span>
+                      {/* Playhead (rAF-positioned via ref — pixel-based) */}
+                      {duration > 0 && (
+                        <div
+                          ref={playheadRef}
+                          style={{
+                            position: 'absolute', left: '0px', top: 0, bottom: 0,
+                            width: '2px', backgroundColor: '#ef4444',
+                            zIndex: 20, pointerEvents: 'auto', cursor: 'ew-resize',
+                          }}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            document.body.style.userSelect = 'none';
+                            const wasPlaying = isPlaying;
+                            if (isPlaying) { videoRef.current?.pause(); setIsPlaying(false); }
+                            const handleDragMove = (moveE) => {
+                              const container = timelineRef.current;
+                              if (!container) return;
+                              const d = videoRef.current?.duration;
+                              if (!d || d <= 0) return;
+                              const rect = container.getBoundingClientRect();
+                              const clickX = moveE.clientX - rect.left + container.scrollLeft;
+                              seekTo(Math.max(0, Math.min(d, clickX / pxPerSecRef.current)));
+                            };
+                            const handleDragEnd = () => {
+                              document.body.style.userSelect = '';
+                              window.removeEventListener('mousemove', handleDragMove);
+                              window.removeEventListener('mouseup', handleDragEnd);
+                              window.removeEventListener('pointercancel', handleDragEnd);
+                              if (wasPlaying) { videoRef.current?.play()?.catch(() => {}); setIsPlaying(true); }
+                            };
+                            window.addEventListener('mousemove', handleDragMove);
+                            window.addEventListener('mouseup', handleDragEnd);
+                            window.addEventListener('pointercancel', handleDragEnd);
+                          }}
+                        >
+                          <div style={{ position: 'absolute', left: '-6px', right: '-6px', top: 0, bottom: 0, cursor: 'ew-resize' }} />
+                          <div style={{
+                            position: 'absolute', top: '-2px', left: '50%', transform: 'translateX(-50%)',
+                            width: '10px', height: '10px', backgroundColor: '#ef4444', borderRadius: '2px',
+                            clipPath: 'polygon(0 0, 100% 0, 50% 100%)',
+                          }} />
                         </div>
                       )}
                     </div>
-
-                    {/* Source track */}
-                    <div className="h-7 rounded-md border border-neutral-200 bg-neutral-50/30 relative overflow-hidden" data-seekable="true">
-                      <div
-                        style={{
-                          position: 'absolute', left: 0, top: 0, right: 0, bottom: 0,
-                          background: 'linear-gradient(90deg, rgba(99,102,241,0.06) 0%, rgba(99,102,241,0.02) 100%)',
-                        }}
-                        data-seekable="true"
-                      />
-                      <span style={{
-                        position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)',
-                        fontSize: '10px', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none',
-                      }}>
-                        {sourceName || 'No source'}
-                      </span>
-                    </div>
-
-                    {/* Playhead (rAF-positioned via ref — no CSS transition) */}
-                    {duration > 0 && (
-                      <div
-                        ref={playheadRef}
-                        style={{
-                          position: 'absolute', left: '0%', top: 0, bottom: 0,
-                          width: '2px', backgroundColor: '#ef4444',
-                          zIndex: 20, pointerEvents: 'auto', cursor: 'ew-resize',
-                        }}
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          document.body.style.userSelect = 'none';
-                          const wasPlaying = isPlaying;
-                          if (isPlaying) { videoRef.current?.pause(); setIsPlaying(false); }
-                          const handleDragMove = (moveE) => {
-                            const rect = trackAreaRef.current?.getBoundingClientRect();
-                            if (!rect) return;
-                            const d = videoRef.current?.duration;
-                            if (!d || d <= 0) return;
-                            const pct = Math.max(0, Math.min(1, (moveE.clientX - rect.left) / rect.width));
-                            seekTo(pct * d);
-                          };
-                          const handleDragEnd = () => {
-                            document.body.style.userSelect = '';
-                            window.removeEventListener('mousemove', handleDragMove);
-                            window.removeEventListener('mouseup', handleDragEnd);
-                            window.removeEventListener('pointercancel', handleDragEnd);
-                            if (wasPlaying) { videoRef.current?.play()?.catch(() => {}); setIsPlaying(true); }
-                          };
-                          window.addEventListener('mousemove', handleDragMove);
-                          window.addEventListener('mouseup', handleDragEnd);
-                          window.addEventListener('pointercancel', handleDragEnd);
-                        }}
-                      >
-                        <div style={{ position: 'absolute', left: '-6px', right: '-6px', top: 0, bottom: 0, cursor: 'ew-resize' }} />
-                        <div style={{
-                          position: 'absolute', top: '-2px', left: '50%', transform: 'translateX(-50%)',
-                          width: '10px', height: '10px', backgroundColor: '#ef4444', borderRadius: '2px',
-                          clipPath: 'polygon(0 0, 100% 0, 50% 100%)',
-                        }} />
-                      </div>
-                    )}
                   </div>
                 </div>
 
