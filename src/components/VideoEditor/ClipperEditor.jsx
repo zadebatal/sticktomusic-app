@@ -1070,7 +1070,7 @@ const ClipperEditor = ({
                   ref={videoRef}
                   src={sourceUrl}
                   crossOrigin="anonymous"
-                  preload="auto"
+                  preload="metadata"
                   className={`max-w-full max-h-full rounded-lg ${!videoReady ? 'opacity-0' : 'opacity-100'}`}
                   onClick={togglePlay}
                   playsInline

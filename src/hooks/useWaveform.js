@@ -71,36 +71,44 @@ export default function useWaveform({ selectedAudio, clips = [], getClipUrl }) {
 
     let cancelled = false;
     setClipWaveformsLoading(true);
-    (async () => {
-      const results = {};
-      for (const clip of clips) {
-        if (cancelled) return;
-        // Prefer local file (Blob) to avoid re-downloading from remote URL
-        const source = clip.file instanceof Blob
-          ? clip.file
-          : (getClipUrl ? getClipUrl(clip) : (clip?.url || clip?.localUrl));
-        if (!source) continue;
-        const key = clip.id || clip.sourceId || (typeof source === 'string' ? source : 'blob');
-        const clipDur = clip.duration || 0;
-        let data;
-        if (source instanceof Blob) {
-          // Blob path — use generateWaveformData which handles Blobs directly
-          data = await generateWaveformData(source, 400);
-        } else {
-          data = clipDur > 0
-            ? await generateWaveformForClip(source, clipDur, 400)
-            : await generateWaveformData(source, 400);
+
+    // Defer waveform generation so it doesn't block initial page render.
+    // decodeAudioData is CPU-heavy and can freeze the main thread.
+    const delayId = setTimeout(() => {
+      if (cancelled) return;
+      (async () => {
+        const results = {};
+        for (const clip of clips) {
+          if (cancelled) return;
+          // Prefer local file (Blob) to avoid re-downloading from remote URL
+          const source = clip.file instanceof Blob
+            ? clip.file
+            : (getClipUrl ? getClipUrl(clip) : (clip?.url || clip?.localUrl));
+          if (!source) continue;
+          const key = clip.id || clip.sourceId || (typeof source === 'string' ? source : 'blob');
+          const clipDur = clip.duration || 0;
+          let data;
+          if (source instanceof Blob) {
+            data = await generateWaveformData(source, 400);
+          } else {
+            data = clipDur > 0
+              ? await generateWaveformForClip(source, clipDur, 400)
+              : await generateWaveformData(source, 400);
+          }
+          if (data.length > 0) {
+            results[key] = data;
+          }
+          // Yield to main thread between clips to prevent UI freeze
+          await new Promise(r => setTimeout(r, 0));
         }
-        if (data.length > 0) {
-          results[key] = data;
+        if (!cancelled && mountedRef.current) {
+          setClipWaveforms(results);
+          setClipWaveformsLoading(false);
         }
-      }
-      if (!cancelled && mountedRef.current) {
-        setClipWaveforms(results);
-        setClipWaveformsLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
+      })();
+    }, 1500); // Wait 1.5s for page to become interactive first
+
+    return () => { cancelled = true; clearTimeout(delayId); };
 
   }, [clips, getClipUrl]);
 

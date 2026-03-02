@@ -16,6 +16,9 @@ async function getAudioBuffer(source) {
   const cacheKey = source instanceof Blob ? null : source;
   if (cacheKey && bufferCache.has(cacheKey)) return bufferCache.get(cacheKey);
 
+  // Yield to main thread before heavy work
+  await new Promise(r => setTimeout(r, 0));
+
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
   // Safari AudioContext may start in 'suspended' state - resume on first use
@@ -30,6 +33,9 @@ async function getAudioBuffer(source) {
     const resp = await fetch(source, { mode: 'cors' });
     arrayBuffer = await resp.arrayBuffer();
   }
+
+  // Yield before CPU-heavy decode
+  await new Promise(r => setTimeout(r, 0));
   const buffer = await audioCtx.decodeAudioData(arrayBuffer);
   await audioCtx.close();
 
