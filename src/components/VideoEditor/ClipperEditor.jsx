@@ -21,7 +21,7 @@ import {
   FeatherPlus, FeatherDownload, FeatherUpload, FeatherX,
   FeatherSkipBack, FeatherSkipForward, FeatherVolume2, FeatherVolumeX,
   FeatherChevronDown, FeatherChevronRight, FeatherCheck, FeatherZap,
-  FeatherLoader,
+  FeatherLoader, FeatherZoomIn, FeatherZoomOut,
 } from '@subframe/core';
 import EditorShell from './shared/EditorShell';
 import EditorTopBar from './shared/EditorTopBar';
@@ -386,7 +386,7 @@ const ClipperEditor = ({
     handleSeek: seekTo, isPlaying, setIsPlaying, setPlayheadDragging, wasPlayingRef,
   });
   pxPerSecRef.current = pxPerSec;
-  useTimelineZoom(timelineRef, { zoom: timelineScale, setZoom: setTimelineScale });
+  useTimelineZoom(timelineRef, { zoom: timelineScale, setZoom: setTimelineScale, minZoom: 0.3, maxZoom: 3, basePixelsPerSecond: 40 });
   const sourceWaveformClips = useMemo(() =>
     sourceUrl && duration > 0 ? [{ id: 'source', url: sourceUrl, duration, file: sourceFile || undefined }] : [],
     [sourceUrl, duration, sourceFile]
@@ -1135,6 +1135,21 @@ const ClipperEditor = ({
                     >
                       {markIn !== null ? 'Mark Out (O)' : 'Mark In (I)'}
                     </Button>
+                    {/* Zoom slider */}
+                    <div className="flex items-center gap-1.5 ml-2 pl-2 border-l border-neutral-200">
+                      <FeatherZoomOut style={{ width: 12, height: 12, color: '#737373' }} />
+                      <input
+                        type="range"
+                        min="0.3"
+                        max="3"
+                        step="0.05"
+                        value={timelineScale}
+                        onChange={e => setTimelineScale(parseFloat(e.target.value))}
+                        style={{ width: '80px', height: '4px', accentColor: '#6366f1', cursor: 'pointer' }}
+                        title={`Zoom: ${Math.round(timelineScale * 100)}%`}
+                      />
+                      <FeatherZoomIn style={{ width: 12, height: 12, color: '#737373' }} />
+                    </div>
                   </div>
                 </div>
 
