@@ -43,13 +43,14 @@ export const isCollectionPendingDeletion = (id) => pendingDeletionIds.has(id);
 // localStorage with stale merged data. This map tracks recent writes so guards
 // can always recover the data.
 // ============================================================================
-const recentCollectionSnapshots = new Map(); // collectionId -> { mediaIds, banks, ts }
+const recentCollectionSnapshots = new Map(); // collectionId -> { mediaIds, banks, updatedAt, ts }
 export const getRecentCollectionSnapshots = () => recentCollectionSnapshots;
 const trackCollectionWrite = (collectionId, collection) => {
   const ts = Date.now();
   recentCollectionSnapshots.set(collectionId, {
     mediaIds: [...(collection.mediaIds || [])],
     banks: (collection.banks || []).map(b => [...(b || [])]),
+    updatedAt: collection.updatedAt || new Date().toISOString(),
     ts,
   });
   // Auto-expire after 60 seconds
@@ -4168,6 +4169,17 @@ export const subscribeToCollections = (db, artistId, callback) => {
             // Migrate both sources to new format, then merge
             const migratedCol = migrateCollectionBanks(col);
             const migratedLocal = migrateCollectionBanks(localCol);
+
+            // ── Timestamp comparison for smarter merge ──
+            // If a recent local write is tracked, trust local over potentially stale Firestore.
+            // Otherwise compare updatedAt: if Firestore is >5s newer (from another device),
+            // prefer Firestore for scalar fields (captions, hashtags, text banks).
+            const recentWrite = recentCollectionSnapshots.get(col.id);
+            const localTime = new Date(localCol.updatedAt || 0).getTime();
+            const fsUpdatedAt = col.updatedAt?.toMillis ? col.updatedAt.toMillis() : new Date(col.updatedAt || 0).getTime();
+            const localIsRecent = recentWrite && (Date.now() - recentWrite.ts < 60000);
+            const firestoreIsNewer = !localIsRecent && fsUpdatedAt > localTime + 5000;
+
             // Merge banks: union Firestore + local to prevent race condition data loss
             const mergedBanks = (migratedCol.banks || []).map((fsBank, i) => {
               const localBank = (migratedLocal.banks || [])[i] || [];
@@ -4188,6 +4200,13 @@ export const subscribeToCollections = (db, artistId, callback) => {
                 mergedTextBanks.push(migratedLocal.textBanks[i] || []);
               }
             }
+
+            // For scalar fields (captions, hashtags), use timestamp to pick the fresher source
+            const pickScalar = (fsVal, localVal) => {
+              if (firestoreIsNewer) return fsVal?.length > 0 ? fsVal : localVal || [];
+              return localVal?.length > 0 ? localVal : fsVal || [];
+            };
+
             return {
               ...col,
               // Preserve project fields from localStorage if Firestore hasn't caught up yet
@@ -4195,11 +4214,11 @@ export const subscribeToCollections = (db, artistId, callback) => {
               ...(localCol.isProjectRoot && !col.isProjectRoot ? { isProjectRoot: localCol.isProjectRoot, projectColor: localCol.projectColor, linkedPage: localCol.linkedPage } : {}),
               banks: mergedBanks,
               textBanks: mergedTextBanks,
-              captionBank: col.captionBank || localCol.captionBank || [],
-              hashtagBank: col.hashtagBank || localCol.hashtagBank || [],
-              videoTextBank1: (col.videoTextBank1?.length > 0 ? col.videoTextBank1 : localCol.videoTextBank1) || [],
-              videoTextBank2: (col.videoTextBank2?.length > 0 ? col.videoTextBank2 : localCol.videoTextBank2) || [],
-              textTemplates: (col.textTemplates?.length > 0 ? col.textTemplates : localCol.textTemplates) || [],
+              captionBank: pickScalar(col.captionBank, localCol.captionBank),
+              hashtagBank: pickScalar(col.hashtagBank, localCol.hashtagBank),
+              videoTextBank1: pickScalar(col.videoTextBank1, localCol.videoTextBank1),
+              videoTextBank2: pickScalar(col.videoTextBank2, localCol.videoTextBank2),
+              textTemplates: pickScalar(col.textTemplates, localCol.textTemplates),
               mediaIds: (() => {
                 let ids = [...new Set([...(col.mediaIds || []), ...(localCol.mediaIds || [])])];
                 const removed = recentCollectionRemovals.get(col.id)?.removedIds;

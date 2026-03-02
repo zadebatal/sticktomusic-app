@@ -121,9 +121,42 @@ const ClipperEditor = ({
   const [activeBankIndex, setActiveBankIndexRaw] = useState(0);
   const [collapsedBanks, setCollapsedBanks] = useState({});
 
-  // Export destination: 'current-niche' | 'project-pool' | 'library-only' | nicheId
-  const [exportDestination, setExportDestination] = useState('current-niche');
+  // Export destinations: Set of selected targets (multi-select)
+  const [exportDestinations, setExportDestinations] = useState(() => new Set(['current-niche']));
   const [destPickerOpen, setDestPickerOpen] = useState(false);
+
+  const toggleDestination = useCallback((value) => {
+    setExportDestinations(prev => {
+      const next = new Set(prev);
+      if (next.has(value)) {
+        next.delete(value);
+        // Must have at least one destination
+        if (next.size === 0) return prev;
+      } else {
+        // 'library-only' is exclusive — clear others when selected
+        if (value === 'library-only') return new Set(['library-only']);
+        // Selecting anything else removes 'library-only'
+        next.delete('library-only');
+        next.add(value);
+      }
+      return next;
+    });
+  }, []);
+
+  const destSummary = useMemo(() => {
+    const dests = exportDestinations;
+    if (dests.has('library-only')) return 'All Media Only';
+    const parts = [];
+    if (dests.has('current-niche')) parts.push(category?.name || 'Current Niche');
+    if (dests.has('project-pool')) parts.push('Project Pool');
+    for (const d of dests) {
+      if (d !== 'current-niche' && d !== 'project-pool') {
+        const niche = projectNiches.find(n => n.id === d);
+        if (niche) parts.push(niche.name);
+      }
+    }
+    return parts.length > 0 ? parts.join(', ') : 'Select destination';
+  }, [exportDestinations, category?.name, projectNiches]);
 
   // Timeline upgrade state
   const [timelineScale, setTimelineScale] = useState(1);
@@ -805,18 +838,28 @@ const ClipperEditor = ({
           // Always add to library (write to both localStorage + Firestore)
           await addToLibraryAsync(db, artistId, mediaItem);
 
-          // Route based on export destination
-          if (exportDestination === 'library-only') {
-            // Library only — done
-          } else if (exportDestination === 'project-pool') {
-            if (projectId) addToProjectPool(artistId, projectId, [mediaId], db);
-          } else {
-            // 'current-niche' or a specific nicheId
-            const targetNicheId = exportDestination === 'current-niche' ? nicheId : exportDestination;
-            if (targetNicheId) {
-              addToCollection(artistId, targetNicheId, [mediaId], db);
+          // Route to all selected destinations
+          if (!exportDestinations.has('library-only')) {
+            const addedToPool = new Set();
+            for (const dest of exportDestinations) {
+              if (dest === 'project-pool') {
+                if (projectId && !addedToPool.has('pool')) {
+                  addToProjectPool(artistId, projectId, [mediaId], db);
+                  addedToPool.add('pool');
+                }
+              } else {
+                // 'current-niche' or a specific nicheId
+                const targetNicheId = dest === 'current-niche' ? nicheId : dest;
+                if (targetNicheId) {
+                  addToCollection(artistId, targetNicheId, [mediaId], db);
+                }
+                // Also add to project pool when sending to any niche
+                if (projectId && !addedToPool.has('pool')) {
+                  addToProjectPool(artistId, projectId, [mediaId], db);
+                  addedToPool.add('pool');
+                }
+              }
             }
-            if (projectId) addToProjectPool(artistId, projectId, [mediaId], db);
           }
 
           results.push({ clipId: clip.id, cloudUrl, mediaId });
@@ -860,7 +903,7 @@ const ClipperEditor = ({
         toastSuccess(`Exported ${results.length} clip${results.length !== 1 ? 's' : ''} to banks`);
       }
     }
-  }, [clips, sourceFile, sourceUrl, sourceName, videoName, bankLabels, buildSessionData, onSaveSession, toastSuccess, toastError, artistId, db, nicheId, projectId, exportDestination]);
+  }, [clips, sourceFile, sourceUrl, sourceName, videoName, bankLabels, buildSessionData, onSaveSession, toastSuccess, toastError, artistId, db, nicheId, projectId, exportDestinations]);
 
   // ── Keyboard shortcuts (reads video.currentTime directly for accuracy) ──
   useEffect(() => {
@@ -1661,18 +1704,15 @@ const ClipperEditor = ({
                     </div>
                   </div>
                 )}
-                {/* Destination picker */}
+                {/* Destination picker (multi-select) */}
                 <div className="relative">
-                  <span className="text-caption font-caption text-neutral-500 mb-1 block">Destination</span>
+                  <span className="text-caption font-caption text-neutral-500 mb-1 block">Destinations</span>
                   <button
                     className="flex w-full items-center gap-2 rounded-md border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-2 hover:bg-[#262626] transition text-left"
                     onClick={() => setDestPickerOpen(!destPickerOpen)}
                   >
                     <span className="text-caption font-caption text-white truncate grow">
-                      {exportDestination === 'current-niche' ? `Current Niche${category?.name ? ` (${category.name})` : ''}`
-                        : exportDestination === 'project-pool' ? 'Project Pool Only'
-                        : exportDestination === 'library-only' ? 'All Media Only'
-                        : projectNiches.find(n => n.id === exportDestination)?.name || 'Other Niche'}
+                      {destSummary}
                     </span>
                     <FeatherChevronDown
                       className="text-neutral-400 flex-none transition-transform"
@@ -1683,21 +1723,28 @@ const ClipperEditor = ({
                     <div className="absolute bottom-full left-0 right-0 mb-1 flex flex-col gap-0.5 px-2 py-2 bg-[#111111] border border-neutral-200 rounded-lg max-h-48 overflow-y-auto shadow-xl z-20">
                       {[
                         { value: 'current-niche', label: `Current Niche${category?.name ? ` — ${category.name}` : ''}` },
-                        { value: 'project-pool', label: 'Project Pool Only' },
+                        { value: 'project-pool', label: 'Project Pool' },
                         { value: 'library-only', label: 'All Media Only' },
-                        ...projectNiches.map(n => ({ value: n.id, label: n.name })),
-                      ].map(opt => (
-                        <button
-                          key={opt.value}
-                          className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition ${
-                            exportDestination === opt.value ? 'bg-indigo-600' : 'hover:bg-neutral-100'
-                          }`}
-                          onClick={() => { setExportDestination(opt.value); setDestPickerOpen(false); }}
-                        >
-                          <span className="text-caption font-caption text-white truncate grow">{opt.label}</span>
-                          {exportDestination === opt.value && <FeatherCheck className="text-indigo-300 flex-none" style={{ width: 12, height: 12 }} />}
-                        </button>
-                      ))}
+                        ...projectNiches.filter(n => n.id !== nicheId).map(n => ({ value: n.id, label: n.name })),
+                      ].map(opt => {
+                        const isSelected = exportDestinations.has(opt.value);
+                        return (
+                          <button
+                            key={opt.value}
+                            className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition ${
+                              isSelected ? 'bg-indigo-500/15' : 'hover:bg-neutral-100'
+                            }`}
+                            onClick={() => toggleDestination(opt.value)}
+                          >
+                            <div className={`w-3.5 h-3.5 rounded border flex-none flex items-center justify-center ${
+                              isSelected ? 'bg-indigo-500 border-indigo-500' : 'border-neutral-300'
+                            }`}>
+                              {isSelected && <FeatherCheck className="text-white" style={{ width: 8, height: 8 }} />}
+                            </div>
+                            <span className="text-caption font-caption text-white truncate grow">{opt.label}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1710,12 +1757,7 @@ const ClipperEditor = ({
                   {exporting
                     ? `Exporting ${exportedCount}/${unexportedCount}...`
                     : unexportedCount > 0
-                      ? `Export ${unexportedCount} to ${
-                          exportDestination === 'current-niche' ? 'Banks'
-                          : exportDestination === 'project-pool' ? 'Project Pool'
-                          : exportDestination === 'library-only' ? 'Library'
-                          : projectNiches.find(n => n.id === exportDestination)?.name || 'Niche'
-                        }`
+                      ? `Export ${unexportedCount} → ${destSummary}`
                       : 'All Exported'}
                 </Button>
               </div>
@@ -1749,12 +1791,7 @@ const ClipperEditor = ({
             disabled={unexportedCount === 0 || exporting} loading={exporting}
             onClick={handleExportToBanks}
           >
-            {unexportedCount > 0 ? `Export ${unexportedCount} to ${
-              exportDestination === 'current-niche' ? 'Banks'
-              : exportDestination === 'project-pool' ? 'Project Pool'
-              : exportDestination === 'library-only' ? 'Library'
-              : projectNiches.find(n => n.id === exportDestination)?.name || 'Niche'
-            }` : 'All Exported'}
+            {unexportedCount > 0 ? `Export ${unexportedCount} → ${destSummary}` : 'All Exported'}
           </Button>
         </div>
       )}
