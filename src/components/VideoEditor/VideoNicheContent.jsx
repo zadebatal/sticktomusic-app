@@ -96,122 +96,6 @@ const VideoNicheContent = ({
   const bankDragPriorRef = useRef(new Set());
   const bankGridRefs = useRef({});
 
-  const handleBankItemClick = useCallback((itemId, bankId, e) => {
-    // If clicking in a different bank, reset selection to this bank
-    if (selectionBankId !== bankId) {
-      setSelectionBankId(bankId);
-      setBankSelectedIds(new Set([itemId]));
-      return;
-    }
-    setBankSelectedIds(prev => {
-      const next = new Set(prev);
-      if (e?.shiftKey && prev.size > 0) {
-        // Shift-click range select within bank
-        const bankObj = mediaBanks.find(b => b.id === bankId);
-        const ids = (bankObj?.mediaIds || []).filter(id => library.some(l => l.id === id && l.type !== 'audio'));
-        const lastSelected = [...prev].pop();
-        const startIdx = ids.indexOf(lastSelected);
-        const endIdx = ids.indexOf(itemId);
-        if (startIdx >= 0 && endIdx >= 0) {
-          const [lo, hi] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
-          for (let i = lo; i <= hi; i++) next.add(ids[i]);
-        }
-      } else if (e?.metaKey || e?.ctrlKey) {
-        if (next.has(itemId)) next.delete(itemId);
-        else next.add(itemId);
-      } else {
-        // Plain click — toggle if already sole selection, else select only this
-        if (next.size === 1 && next.has(itemId)) return new Set();
-        return new Set([itemId]);
-      }
-      return next;
-    });
-  }, [selectionBankId, mediaBanks, library]);
-
-  const clearBankSelection = useCallback(() => {
-    setBankSelectedIds(new Set());
-    setSelectionBankId(null);
-  }, []);
-
-  // Rubber-band handlers for bank grids
-  const handleBankGridMouseDown = useCallback((e, bankId) => {
-    if (e.button !== 0) return;
-    const gridEl = bankGridRefs.current[bankId];
-    if (!gridEl) return;
-    // Don't start rubber-band on buttons or already-selected items
-    if (e.target.closest('button')) return;
-    const mediaEl = e.target.closest('[data-media-id]');
-    if (mediaEl && bankSelectedIds.has(mediaEl.getAttribute('data-media-id')) && selectionBankId === bankId) return;
-    e.preventDefault();
-    const rect = gridEl.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top + gridEl.scrollTop;
-    bankDragStartRef.current = { x, y, bankId };
-    bankDragPriorRef.current = (e.shiftKey && selectionBankId === bankId) ? new Set(bankSelectedIds) : new Set();
-    setSelectionBankId(bankId);
-    if (!e.shiftKey) setBankSelectedIds(new Set());
-  }, [bankSelectedIds, selectionBankId]);
-
-  const handleBankGridMouseMove = useCallback((e) => {
-    if (!bankDragStartRef.current) return;
-    const { bankId } = bankDragStartRef.current;
-    const gridEl = bankGridRefs.current[bankId];
-    if (!gridEl) return;
-    const rect = gridEl.getBoundingClientRect();
-    const curX = e.clientX - rect.left;
-    const curY = e.clientY - rect.top + gridEl.scrollTop;
-    const startX = bankDragStartRef.current.x;
-    const startY = bankDragStartRef.current.y;
-    // Only start rubber-band if moved >4px
-    if (Math.abs(curX - startX) < 4 && Math.abs(curY - startY) < 4) return;
-    const scrollTop = gridEl.scrollTop;
-    setBankRubberBand({
-      bankId,
-      left: Math.min(startX, curX),
-      top: Math.min(startY, curY) - scrollTop,
-      width: Math.abs(curX - startX),
-      height: Math.abs(curY - startY),
-    });
-    // Hit-test
-    const minX = Math.min(startX, curX);
-    const maxX = Math.max(startX, curX);
-    const minY = Math.min(startY, curY);
-    const maxY = Math.max(startY, curY);
-    const els = gridEl.querySelectorAll('[data-media-id]');
-    const next = new Set(bankDragPriorRef.current);
-    els.forEach(el => {
-      const elLeft = el.offsetLeft;
-      const elTop = el.offsetTop;
-      const elRight = elLeft + el.offsetWidth;
-      const elBottom = elTop + el.offsetHeight;
-      if (elRight >= minX && elLeft <= maxX && elBottom >= minY && elTop <= maxY) {
-        next.add(el.getAttribute('data-media-id'));
-      }
-    });
-    setBankSelectedIds(next);
-  }, []);
-
-  const handleBankGridMouseUp = useCallback(() => {
-    bankDragStartRef.current = null;
-    setBankRubberBand(null);
-  }, []);
-
-  // Move selected media to another bank
-  const handleMoveToBank = useCallback((toBankId) => {
-    if (!niche || !selectionBankId || bankSelectedIds.size === 0) return;
-    moveMediaBetweenBanks(artistId, niche.id, [...bankSelectedIds], selectionBankId, toBankId, db);
-    clearBankSelection();
-    onRefreshCollections?.();
-  }, [niche, artistId, selectionBankId, bankSelectedIds, db, clearBankSelection, onRefreshCollections]);
-
-  // Delete selected from bank
-  const handleDeleteSelected = useCallback(() => {
-    if (!niche || !selectionBankId || bankSelectedIds.size === 0) return;
-    removeFromMediaBank(artistId, niche.id, [...bankSelectedIds], selectionBankId, db, true);
-    clearBankSelection();
-    onRefreshCollections?.();
-  }, [niche, artistId, selectionBankId, bankSelectedIds, db, clearBankSelection, onRefreshCollections]);
-
   // Audio preview playback
   const [playingAudioId, setPlayingAudioId] = useState(null);
   const audioPreviewRef = useRef(null);
@@ -536,6 +420,114 @@ const VideoNicheContent = ({
       setSelectedBankIds(new Set(mediaBanks.map(b => b.id)));
     }
   }, [mediaBanks, selectedBankIds]);
+
+  // Multi-select callbacks (must be after mediaBanks is defined)
+  const handleBankItemClick = useCallback((itemId, bankId, e) => {
+    if (selectionBankId !== bankId) {
+      setSelectionBankId(bankId);
+      setBankSelectedIds(new Set([itemId]));
+      return;
+    }
+    setBankSelectedIds(prev => {
+      const next = new Set(prev);
+      if (e?.shiftKey && prev.size > 0) {
+        const bankObj = mediaBanks.find(b => b.id === bankId);
+        const ids = (bankObj?.mediaIds || []).filter(id => library.some(l => l.id === id && l.type !== 'audio'));
+        const lastSelected = [...prev].pop();
+        const startIdx = ids.indexOf(lastSelected);
+        const endIdx = ids.indexOf(itemId);
+        if (startIdx >= 0 && endIdx >= 0) {
+          const [lo, hi] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+          for (let i = lo; i <= hi; i++) next.add(ids[i]);
+        }
+      } else if (e?.metaKey || e?.ctrlKey) {
+        if (next.has(itemId)) next.delete(itemId);
+        else next.add(itemId);
+      } else {
+        if (next.size === 1 && next.has(itemId)) return new Set();
+        return new Set([itemId]);
+      }
+      return next;
+    });
+  }, [selectionBankId, mediaBanks, library]);
+
+  const clearBankSelection = useCallback(() => {
+    setBankSelectedIds(new Set());
+    setSelectionBankId(null);
+  }, []);
+
+  const handleBankGridMouseDown = useCallback((e, bankId) => {
+    if (e.button !== 0) return;
+    const gridEl = bankGridRefs.current[bankId];
+    if (!gridEl) return;
+    if (e.target.closest('button')) return;
+    const mediaEl = e.target.closest('[data-media-id]');
+    if (mediaEl && bankSelectedIds.has(mediaEl.getAttribute('data-media-id')) && selectionBankId === bankId) return;
+    e.preventDefault();
+    const rect = gridEl.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top + gridEl.scrollTop;
+    bankDragStartRef.current = { x, y, bankId };
+    bankDragPriorRef.current = (e.shiftKey && selectionBankId === bankId) ? new Set(bankSelectedIds) : new Set();
+    setSelectionBankId(bankId);
+    if (!e.shiftKey) setBankSelectedIds(new Set());
+  }, [bankSelectedIds, selectionBankId]);
+
+  const handleBankGridMouseMove = useCallback((e) => {
+    if (!bankDragStartRef.current) return;
+    const { bankId } = bankDragStartRef.current;
+    const gridEl = bankGridRefs.current[bankId];
+    if (!gridEl) return;
+    const rect = gridEl.getBoundingClientRect();
+    const curX = e.clientX - rect.left;
+    const curY = e.clientY - rect.top + gridEl.scrollTop;
+    const startX = bankDragStartRef.current.x;
+    const startY = bankDragStartRef.current.y;
+    if (Math.abs(curX - startX) < 4 && Math.abs(curY - startY) < 4) return;
+    const scrollTop = gridEl.scrollTop;
+    setBankRubberBand({
+      bankId,
+      left: Math.min(startX, curX),
+      top: Math.min(startY, curY) - scrollTop,
+      width: Math.abs(curX - startX),
+      height: Math.abs(curY - startY),
+    });
+    const minX = Math.min(startX, curX);
+    const maxX = Math.max(startX, curX);
+    const minY = Math.min(startY, curY);
+    const maxY = Math.max(startY, curY);
+    const els = gridEl.querySelectorAll('[data-media-id]');
+    const next = new Set(bankDragPriorRef.current);
+    els.forEach(el => {
+      const elLeft = el.offsetLeft;
+      const elTop = el.offsetTop;
+      const elRight = elLeft + el.offsetWidth;
+      const elBottom = elTop + el.offsetHeight;
+      if (elRight >= minX && elLeft <= maxX && elBottom >= minY && elTop <= maxY) {
+        next.add(el.getAttribute('data-media-id'));
+      }
+    });
+    setBankSelectedIds(next);
+  }, []);
+
+  const handleBankGridMouseUp = useCallback(() => {
+    bankDragStartRef.current = null;
+    setBankRubberBand(null);
+  }, []);
+
+  const handleMoveToBank = useCallback((toBankId) => {
+    if (!niche || !selectionBankId || bankSelectedIds.size === 0) return;
+    moveMediaBetweenBanks(artistId, niche.id, [...bankSelectedIds], selectionBankId, toBankId, db);
+    clearBankSelection();
+    onRefreshCollections?.();
+  }, [niche, artistId, selectionBankId, bankSelectedIds, db, clearBankSelection, onRefreshCollections]);
+
+  const handleDeleteSelected = useCallback(() => {
+    if (!niche || !selectionBankId || bankSelectedIds.size === 0) return;
+    removeFromMediaBank(artistId, niche.id, [...bankSelectedIds], selectionBankId, db, true);
+    clearBankSelection();
+    onRefreshCollections?.();
+  }, [niche, artistId, selectionBankId, bankSelectedIds, db, clearBankSelection, onRefreshCollections]);
 
   // Bank selection toggle
   const toggleBankSelection = useCallback((bankId) => {
