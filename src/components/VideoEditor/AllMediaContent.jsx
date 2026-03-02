@@ -8,11 +8,15 @@ import { Badge } from '../../ui/components/Badge';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
 import {
   FeatherUpload, FeatherDownloadCloud, FeatherImage, FeatherMusic,
-  FeatherPlay, FeatherX, FeatherSearch, FeatherFilm,
+  FeatherPlay, FeatherX, FeatherSearch, FeatherFilm, FeatherTrash2,
 } from '@subframe/core';
-import { MEDIA_TYPES } from '../../services/libraryService';
+import { removeFromLibraryAsync } from '../../services/libraryService';
+import { useToast } from '../ui';
+import log from '../../utils/logger';
 
 const AllMediaContent = ({
+  db,
+  artistId,
   projectMedia,
   library,
   activeNicheId,
@@ -22,9 +26,21 @@ const AllMediaContent = ({
   isUploading,
   uploadProgress,
 }) => {
+  const { success: toastSuccess, error: toastError } = useToast();
   const [mediaScope, setMediaScope] = useState('all');
   const [mediaSearch, setMediaSearch] = useState('');
   const [videoPreviewUrl, setVideoPreviewUrl] = useState(null);
+
+  const handleDelete = useCallback(async (item) => {
+    if (!window.confirm(`Delete "${item.name || 'this item'}"? This cannot be undone.`)) return;
+    try {
+      await removeFromLibraryAsync(db, artistId, item.id);
+      toastSuccess('Media deleted');
+    } catch (err) {
+      log.error('[AllMedia] Delete failed:', err);
+      toastError('Failed to delete media');
+    }
+  }, [db, artistId, toastSuccess, toastError]);
 
   // Scoped media
   const nicheMedia = useMemo(() => {
@@ -134,6 +150,13 @@ const AllMediaContent = ({
                     loading="lazy"
                     draggable={false}
                   />
+                  <button
+                    className="absolute top-0.5 right-0.5 z-[4] flex h-5 w-5 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
+                    onClick={(e) => { e.stopPropagation(); handleDelete(item); }}
+                    title="Delete"
+                  >
+                    <FeatherTrash2 className="text-white" style={{ width: 10, height: 10 }} />
+                  </button>
                 </div>
               ))}
             </div>
@@ -164,16 +187,23 @@ const AllMediaContent = ({
                       <FeatherFilm className="text-neutral-600" style={{ width: 16, height: 16 }} />
                     </div>
                   )}
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
                     <div className="flex h-5 w-5 items-center justify-center rounded-full bg-black/60 border border-white/20">
                       <FeatherPlay className="text-white" style={{ width: 8, height: 8 }} />
                     </div>
                   </div>
                   {item.duration && (
-                    <div className="absolute top-0.5 right-0.5 bg-black/70 rounded px-1 py-px">
+                    <div className="absolute top-0.5 left-0.5 bg-black/70 rounded px-1 py-px pointer-events-none">
                       <span className="text-[8px] text-neutral-300 font-mono">{formatDuration(item.duration)}</span>
                     </div>
                   )}
+                  <button
+                    className="absolute top-0.5 right-0.5 z-[4] flex h-5 w-5 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
+                    onClick={(e) => { e.stopPropagation(); handleDelete(item); }}
+                    title="Delete"
+                  >
+                    <FeatherTrash2 className="text-white" style={{ width: 10, height: 10 }} />
+                  </button>
                 </div>
               ))}
             </div>
@@ -191,7 +221,7 @@ const AllMediaContent = ({
           </div>
           <div className="flex flex-col gap-1 rounded-lg border border-solid border-neutral-200 bg-[#111118] overflow-hidden">
             {scopedAudio.map(audio => (
-              <div key={audio.id} className="flex items-center gap-3 px-3 py-2 hover:bg-neutral-100/30 transition-colors">
+              <div key={audio.id} className="group flex items-center gap-3 px-3 py-2 hover:bg-neutral-100/30 transition-colors">
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-indigo-500/10 flex-none">
                   <FeatherPlay className="text-indigo-400" style={{ width: 11, height: 11 }} />
                 </div>
@@ -199,6 +229,13 @@ const AllMediaContent = ({
                 {audio.duration && (
                   <span className="text-[11px] text-neutral-500 tabular-nums flex-none">{formatDuration(audio.duration)}</span>
                 )}
+                <button
+                  className="flex h-6 w-6 items-center justify-center rounded bg-transparent border-none cursor-pointer text-neutral-600 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400"
+                  onClick={() => handleDelete(audio)}
+                  title="Delete"
+                >
+                  <FeatherTrash2 style={{ width: 12, height: 12 }} />
+                </button>
               </div>
             ))}
           </div>

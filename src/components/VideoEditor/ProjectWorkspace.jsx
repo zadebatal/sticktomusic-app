@@ -1123,6 +1123,8 @@ const ProjectWorkspace = ({
         {/* All Media tab */}
         {showAllMedia && (
           <AllMediaContent
+            db={db}
+            artistId={artistId}
             projectMedia={projectMedia}
             library={library}
             activeNicheId={activeNicheId}
