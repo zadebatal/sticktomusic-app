@@ -200,6 +200,7 @@ const ClipperEditor = ({
       url: v.url || v.cloudUrl,
       name: v.name || v.originalName || 'Video',
       thumbnailUrl: v.thumbnailUrl || v.thumbnail || null,
+      duration: v.duration || 0,
     })).filter(v => v.url);
     if (fromProp.length > 0) return fromProp;
     // Fallback to category.videos (pipelineCategory)
@@ -208,6 +209,7 @@ const ClipperEditor = ({
       url: v.url || v.cloudUrl,
       name: v.name || v.originalName || 'Video',
       thumbnailUrl: v.thumbnailUrl || v.thumbnail || null,
+      duration: v.duration || 0,
     })).filter(v => v.url);
   }, [sourceVideos, category?.videos]);
 
@@ -250,75 +252,18 @@ const ClipperEditor = ({
     }
   }, [existingSession, existingVideo, availableSourceVideos]);
 
-  // Derive thumbnail from available source videos whenever sourceUrl changes
+  // Derive thumbnail + stored duration from available source videos whenever sourceUrl changes
+  const durationRef = useRef(duration);
+  durationRef.current = duration;
   useEffect(() => {
     if (!sourceUrl) { setSourceThumbnail(null); return; }
     const match = availableSourceVideos.find(v => v.url === sourceUrl);
     setSourceThumbnail(match?.thumbnailUrl || null);
+    // Use stored duration immediately so timeline is interactive before video loads
+    if (match?.duration > 0 && durationRef.current === 0) {
+      setDuration(match.duration);
+    }
   }, [sourceUrl, availableSourceVideos]);
-
-  // ── Blob preloading: fetch remote URL → local blob for instant playback ──
-  const videoBlobUrl = useRef(null); // current blob URL being used
-  const blobCacheRef = useRef(new Map()); // URL → blobUrl cache
-  const [videoSrc, setVideoSrc] = useState(null); // actual src for <video>
-
-  useEffect(() => {
-    if (!sourceUrl) { setVideoSrc(null); return; }
-    // Already a blob or local file — use directly
-    if (sourceUrl.startsWith('blob:')) {
-      setVideoSrc(sourceUrl);
-      return;
-    }
-    // Check cache
-    if (blobCacheRef.current.has(sourceUrl)) {
-      setVideoSrc(blobCacheRef.current.get(sourceUrl));
-      return;
-    }
-    // Start with raw URL immediately so metadata can begin loading
-    setVideoSrc(sourceUrl);
-
-    // Fetch full file in background → swap to blob URL for fast playback
-    let cancelled = false;
-    (async () => {
-      try {
-        const resp = await fetch(sourceUrl, { mode: 'cors', cache: 'no-store' });
-        const blob = await resp.blob();
-        if (cancelled) return;
-        const blobUrl = URL.createObjectURL(blob);
-        blobCacheRef.current.set(sourceUrl, blobUrl);
-        videoBlobUrl.current = blobUrl;
-        // Also store blob for waveform generation (avoids re-fetch)
-        setSourceFile(blob);
-        // Swap video src to blob — preserves current time
-        const video = videoRef.current;
-        if (video) {
-          const t = video.currentTime;
-          setVideoSrc(blobUrl);
-          // Restore playback position after src swap
-          const onSeekable = () => {
-            video.currentTime = t;
-            video.removeEventListener('loadedmetadata', onSeekable);
-          };
-          video.addEventListener('loadedmetadata', onSeekable);
-        } else {
-          setVideoSrc(blobUrl);
-        }
-        log.info(`[Clipper] Blob preload complete: ${(blob.size / 1024 / 1024).toFixed(1)}MB`);
-      } catch (err) {
-        // Fallback: keep using raw URL (already set)
-        log.warn('[Clipper] Blob preload failed, using raw URL:', err.message);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [sourceUrl]);
-
-  // Cleanup blob URLs on unmount
-  useEffect(() => {
-    return () => {
-      blobCacheRef.current.forEach(blobUrl => URL.revokeObjectURL(blobUrl));
-      blobCacheRef.current.clear();
-    };
-  }, []);
 
   // ── Time display update (throttled via timeupdate ~4x/sec for the badge) ──
   useEffect(() => {
@@ -351,7 +296,7 @@ const ClipperEditor = ({
       video.removeEventListener('ended', onEnded);
       video.removeEventListener('error', onError);
     };
-  }, [videoSrc]);
+  }, [sourceUrl]);
 
   // ── Smooth playhead via rAF (60fps DOM updates, no React re-renders per frame) ──
   useEffect(() => {
@@ -1130,23 +1075,26 @@ const ClipperEditor = ({
             <>
               {/* Video player */}
               <div className="flex flex-1 items-center justify-center bg-black min-h-0 p-4 relative">
-                {!videoReady && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10">
-                    {sourceThumbnail && (
-                      <img src={sourceThumbnail} alt="" className="absolute inset-0 w-full h-full object-contain opacity-60" />
-                    )}
-                    <div className="relative z-10 flex flex-col items-center gap-2">
-                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-                      <span className="text-caption font-caption text-neutral-400">Loading video...</span>
+                {!videoReady && sourceThumbnail && (
+                  <div className="absolute inset-0 flex items-center justify-center z-10">
+                    <img src={sourceThumbnail} alt="" className="max-w-full max-h-full object-contain rounded-lg" />
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/60 rounded-full px-3 py-1">
+                      <div className="h-3 w-3 animate-spin rounded-full border border-white/60 border-t-transparent" />
+                      <span className="text-[11px] text-white/70">Loading video...</span>
                     </div>
                   </div>
                 )}
+                {!videoReady && !sourceThumbnail && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+                    <span className="text-caption font-caption text-neutral-400">Loading video...</span>
+                  </div>
+                )}
                 <video
-                  key={videoSrc}
                   ref={videoRef}
-                  src={videoSrc}
+                  src={sourceUrl}
                   crossOrigin="anonymous"
-                  preload={videoSrc?.startsWith('blob:') ? 'auto' : 'metadata'}
+                  preload="auto"
                   className={`max-w-full max-h-full rounded-lg ${!videoReady ? 'opacity-0' : 'opacity-100'}`}
                   onClick={togglePlay}
                   playsInline
