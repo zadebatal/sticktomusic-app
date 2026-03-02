@@ -257,6 +257,69 @@ const ClipperEditor = ({
     setSourceThumbnail(match?.thumbnailUrl || null);
   }, [sourceUrl, availableSourceVideos]);
 
+  // ── Blob preloading: fetch remote URL → local blob for instant playback ──
+  const videoBlobUrl = useRef(null); // current blob URL being used
+  const blobCacheRef = useRef(new Map()); // URL → blobUrl cache
+  const [videoSrc, setVideoSrc] = useState(null); // actual src for <video>
+
+  useEffect(() => {
+    if (!sourceUrl) { setVideoSrc(null); return; }
+    // Already a blob or local file — use directly
+    if (sourceUrl.startsWith('blob:')) {
+      setVideoSrc(sourceUrl);
+      return;
+    }
+    // Check cache
+    if (blobCacheRef.current.has(sourceUrl)) {
+      setVideoSrc(blobCacheRef.current.get(sourceUrl));
+      return;
+    }
+    // Start with raw URL immediately so metadata can begin loading
+    setVideoSrc(sourceUrl);
+
+    // Fetch full file in background → swap to blob URL for fast playback
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await fetch(sourceUrl, { mode: 'cors', cache: 'no-store' });
+        const blob = await resp.blob();
+        if (cancelled) return;
+        const blobUrl = URL.createObjectURL(blob);
+        blobCacheRef.current.set(sourceUrl, blobUrl);
+        videoBlobUrl.current = blobUrl;
+        // Also store blob for waveform generation (avoids re-fetch)
+        setSourceFile(blob);
+        // Swap video src to blob — preserves current time
+        const video = videoRef.current;
+        if (video) {
+          const t = video.currentTime;
+          setVideoSrc(blobUrl);
+          // Restore playback position after src swap
+          const onSeekable = () => {
+            video.currentTime = t;
+            video.removeEventListener('loadedmetadata', onSeekable);
+          };
+          video.addEventListener('loadedmetadata', onSeekable);
+        } else {
+          setVideoSrc(blobUrl);
+        }
+        log.info(`[Clipper] Blob preload complete: ${(blob.size / 1024 / 1024).toFixed(1)}MB`);
+      } catch (err) {
+        // Fallback: keep using raw URL (already set)
+        log.warn('[Clipper] Blob preload failed, using raw URL:', err.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sourceUrl]);
+
+  // Cleanup blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      blobCacheRef.current.forEach(blobUrl => URL.revokeObjectURL(blobUrl));
+      blobCacheRef.current.clear();
+    };
+  }, []);
+
   // ── Time display update (throttled via timeupdate ~4x/sec for the badge) ──
   useEffect(() => {
     const video = videoRef.current;
@@ -288,7 +351,7 @@ const ClipperEditor = ({
       video.removeEventListener('ended', onEnded);
       video.removeEventListener('error', onError);
     };
-  }, [sourceUrl]);
+  }, [videoSrc]);
 
   // ── Smooth playhead via rAF (60fps DOM updates, no React re-renders per frame) ──
   useEffect(() => {
@@ -1079,11 +1142,11 @@ const ClipperEditor = ({
                   </div>
                 )}
                 <video
-                  key={sourceUrl}
+                  key={videoSrc}
                   ref={videoRef}
-                  src={sourceUrl}
+                  src={videoSrc}
                   crossOrigin="anonymous"
-                  preload="metadata"
+                  preload={videoSrc?.startsWith('blob:') ? 'auto' : 'metadata'}
                   className={`max-w-full max-h-full rounded-lg ${!videoReady ? 'opacity-0' : 'opacity-100'}`}
                   onClick={togglePlay}
                   playsInline
