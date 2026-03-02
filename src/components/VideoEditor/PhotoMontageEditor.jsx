@@ -213,7 +213,7 @@ const PhotoMontageEditor = ({
 
   // Audio trim boundaries for beat normalization
   const audioStartTime = selectedAudio?.startTime || 0;
-  const audioEndTime = selectedAudio?.endTime || audioDuration || selectedAudio?.duration || 0;
+  const audioEndTime = selectedAudio?.endTime || waveformDuration || audioDuration || selectedAudio?.duration || 0;
 
   // Filter beats to trimmed range and normalize to local time
   const filteredBeats = useMemo(() => {
@@ -317,7 +317,7 @@ const PhotoMontageEditor = ({
   // ── Waveform (for future timeline rendering) ──
   const EMPTY_CLIPS = useRef([]).current;
   const NULL_URL = useRef(() => null).current;
-  const { waveformData } = useWaveform({
+  const { waveformData, waveformDuration } = useWaveform({
     selectedAudio,
     clips: EMPTY_CLIPS,
     getClipUrl: NULL_URL
@@ -488,8 +488,8 @@ const PhotoMontageEditor = ({
   // Effective audio duration (trimmed range or full)
   const effectiveAudioDuration = useMemo(() => {
     if (!selectedAudio) return 0;
-    return (selectedAudio.endTime || audioDuration || selectedAudio.duration || 0) - (selectedAudio.startTime || 0);
-  }, [selectedAudio, audioDuration]);
+    return (selectedAudio.endTime || waveformDuration || audioDuration || selectedAudio.duration || 0) - (selectedAudio.startTime || 0);
+  }, [selectedAudio, audioDuration, waveformDuration]);
 
   // ── Computed: photo durations (beat-synced or fixed), expanded to fill audio ──
   const photoDurations = useMemo(() => {
@@ -875,7 +875,7 @@ const PhotoMontageEditor = ({
       setShowBeatSelector(false);
       return;
     }
-    const effectiveDur = (selectedAudio?.endTime || audioDuration || selectedAudio?.duration || 0) - (selectedAudio?.startTime || 0);
+    const effectiveDur = (selectedAudio?.endTime || waveformDuration || audioDuration || selectedAudio?.duration || 0) - (selectedAudio?.startTime || 0);
     setPhotos(prev => {
       const updated = [...prev];
       for (let i = 0; i < updated.length; i++) {
@@ -1694,7 +1694,7 @@ const PhotoMontageEditor = ({
               const playheadPercent = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
               const audioTrackH = hasAudioTrack ? Math.round(4 + 28 * externalAudioVolume) : 0;
               const trimmedDuration = selectedAudio
-                ? ((selectedAudio.endTime || audioDuration || selectedAudio.duration || 0) - (selectedAudio.startTime || 0))
+                ? ((selectedAudio.endTime || waveformDuration || audioDuration || selectedAudio.duration || 0) - (selectedAudio.startTime || 0))
                 : 0;
               const MIN_CELL_W = MIN_CELL_W_HOOK;
               const effectiveTimelinePx = totalDuration * effectivePxPerSecHook;

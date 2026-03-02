@@ -79,6 +79,26 @@ export async function generateWaveformData(source, samples = 200) {
 }
 
 /**
+ * Same as generateWaveformData but also returns the authoritative audio duration
+ * from AudioBuffer (more reliable than HTML audio element or stored metadata).
+ * @returns {Promise<{ data: number[], duration: number }>}
+ */
+export async function generateWaveformDataWithDuration(source, samples = 200) {
+  if (!source) return { data: [], duration: 0 };
+  if (typeof source === 'string' && source.startsWith('blob:')) {
+    return { data: [], duration: 0 };
+  }
+  try {
+    const buffer = await getAudioBuffer(source);
+    const rawData = buffer.getChannelData(0);
+    return { data: sampleWaveform(rawData, samples), duration: buffer.duration };
+  } catch (err) {
+    log.warn('Waveform generation failed:', err.message);
+    return { data: [], duration: 0 };
+  }
+}
+
+/**
  * Generate waveform data from a URL with in-memory caching.
  * @param {string} url — audio or video URL
  * @param {number} samples

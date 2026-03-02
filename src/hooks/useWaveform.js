@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { generateWaveformData, generateWaveformForClip, clearWaveformCache } from '../utils/waveformGenerator';
+import { generateWaveformDataWithDuration, generateWaveformForClip, clearWaveformCache } from '../utils/waveformGenerator';
 
 /**
  * Shared hook for waveform generation across all video editors.
@@ -18,6 +18,7 @@ import { generateWaveformData, generateWaveformForClip, clearWaveformCache } fro
  */
 export default function useWaveform({ selectedAudio, clips = [], getClipUrl }) {
   const [waveformData, setWaveformData] = useState([]);
+  const [waveformDuration, setWaveformDuration] = useState(0); // Authoritative duration from AudioBuffer
   const [clipWaveforms, setClipWaveforms] = useState({});
   const [waveformSource, setWaveformSource] = useState('none');
   const mountedRef = useRef(true);
@@ -46,10 +47,11 @@ export default function useWaveform({ selectedAudio, clips = [], getClipUrl }) {
         : (selectedAudio.localUrl && !selectedAudio.localUrl.startsWith('blob:'))
           ? selectedAudio.localUrl
           : selectedAudio.url;
-      if (!source) { setWaveformData([]); return; }
-      const data = await generateWaveformData(source, 400);
+      if (!source) { setWaveformData([]); setWaveformDuration(0); return; }
+      const { data, duration } = await generateWaveformDataWithDuration(source, 400);
       if (!cancelled && mountedRef.current) {
         setWaveformData(data);
+        if (duration > 0) setWaveformDuration(duration);
       }
     })();
     return () => { cancelled = true; };
@@ -98,5 +100,5 @@ export default function useWaveform({ selectedAudio, clips = [], getClipUrl }) {
     else setWaveformSource('none');
   }, [waveformData, clipWaveforms]);
 
-  return { waveformData, clipWaveforms, waveformSource };
+  return { waveformData, waveformDuration, clipWaveforms, waveformSource };
 }
