@@ -793,8 +793,25 @@ const ClipperEditor = ({
     setExportProgress(0);
     setExportedCount(0);
 
+    // Granular progress: each clip has 4 weighted phases (total 100 per clip)
+    // Loading source=10%, FFmpeg cut=15%, Upload video=55%, Thumbnail+save=20%
+    const total = toExport.length;
+    const updateProgress = (clipIdx, phase) => {
+      // phase: 0=loading, 1=cutting, 2=uploading(0-100), 3=thumbnail+save, 4=done
+      let clipPct;
+      if (typeof phase === 'object') {
+        // Upload progress: { upload: 0-100 }
+        clipPct = 25 + (phase.upload * 0.55);
+      } else {
+        clipPct = phase === 0 ? 0 : phase === 1 ? 10 : phase === 2 ? 25 : phase === 3 ? 80 : 100;
+      }
+      const overall = Math.round(((clipIdx + clipPct / 100) / total) * 100);
+      setExportProgress(Math.min(overall, 99));
+    };
+
     const results = [];
     try {
+      updateProgress(0, 0);
       const ffmpeg = await loadFFmpeg();
       const { fetchFile } = await import('@ffmpeg/util');
       let sourceData;
@@ -816,7 +833,8 @@ const ClipperEditor = ({
         const clipDuration = clip.end - clip.start;
 
         try {
-          // -ss before -i for fast keyframe seek, -t for duration
+          // Phase 1: FFmpeg stream-copy extract
+          updateProgress(i, 1);
           await ffmpeg.exec([
             '-ss', clip.start.toFixed(3),
             '-i', inputName,
@@ -829,13 +847,17 @@ const ClipperEditor = ({
           const data = await ffmpeg.readFile(outputName);
           const mimeType = ext === 'webm' ? 'video/webm' : 'video/mp4';
           const blob = new Blob([data.buffer], { type: mimeType });
-          // Give blob a name — uploadFile requires file.name for the storage path
           blob.name = `${clip.name || `clip_${i + 1}`}.${ext}`;
           await ffmpeg.deleteFile(outputName);
 
-          const { url: cloudUrl } = await uploadFile(blob, 'clips', () => {});
+          // Phase 2: Upload video (main bottleneck — wire progress callback)
+          updateProgress(i, 2);
+          const { url: cloudUrl } = await uploadFile(blob, 'clips', (pct) => {
+            updateProgress(i, { upload: pct });
+          });
 
-          // Generate thumbnail from the clip video
+          // Phase 3: Generate thumbnail + save to library
+          updateProgress(i, 3);
           let thumbUrl = cloudUrl;
           try {
             const vidEl = document.createElement('video');
@@ -853,7 +875,7 @@ const ClipperEditor = ({
             const thumbBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.7));
             thumbBlob.name = `thumb_${clip.name || `clip_${i + 1}`}.jpg`;
             URL.revokeObjectURL(blobUrl);
-            const { url: uploadedThumbUrl } = await uploadFile(thumbBlob, 'thumbnails', () => {});
+            const { url: uploadedThumbUrl } = await uploadFile(thumbBlob, 'thumbnails', null);
             thumbUrl = uploadedThumbUrl;
           } catch (thumbErr) {
             log.warn('[Clipper] Failed to generate thumbnail, using video URL:', thumbErr.message);
@@ -875,7 +897,6 @@ const ClipperEditor = ({
             isClipperClip: true,
             createdAt: new Date().toISOString(),
           };
-          // Always add to library (write to both localStorage + Firestore)
           await addToLibraryAsync(db, artistId, mediaItem);
 
           // Route to all selected destinations
@@ -888,12 +909,10 @@ const ClipperEditor = ({
                   addedToPool.add('pool');
                 }
               } else {
-                // 'current-niche' or a specific nicheId
                 const targetNicheId = dest === 'current-niche' ? nicheId : dest;
                 if (targetNicheId) {
                   addToCollection(artistId, targetNicheId, [mediaId], db);
                 }
-                // Also add to project pool when sending to any niche
                 if (projectId && !addedToPool.has('pool')) {
                   addToProjectPool(artistId, projectId, [mediaId], db);
                   addedToPool.add('pool');
@@ -908,7 +927,7 @@ const ClipperEditor = ({
         }
 
         setExportedCount(i + 1);
-        setExportProgress(Math.round(((i + 1) / toExport.length) * 100));
+        updateProgress(i, 4);
       }
 
       await ffmpeg.deleteFile(inputName);
@@ -1043,7 +1062,7 @@ const ClipperEditor = ({
         onExport={handleExportToBanks}
         exportDisabled={unexportedCount === 0 || exporting}
         exportLoading={exporting}
-        exportLabel={exporting ? `Exporting ${exportedCount}/${unexportedCount}...` : `Export ${unexportedCount} to Banks`}
+        exportLabel={exporting ? `Exporting… ${exportProgress}%` : `Export ${unexportedCount} to Banks`}
       />
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -1843,7 +1862,7 @@ const ClipperEditor = ({
                   onClick={handleExportToBanks}
                 >
                   {exporting
-                    ? `Exporting ${exportedCount}/${unexportedCount}...`
+                    ? `Exporting… ${exportProgress}%`
                     : unexportedCount > 0
                       ? `Export ${unexportedCount} → ${destSummary}`
                       : 'All Exported'}
