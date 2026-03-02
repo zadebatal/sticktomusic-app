@@ -47,6 +47,7 @@ import {
   getRecentCollectionSnapshots,
   getRecentCollectionRemovals,
   removeFromProjectPool,
+  assignToMediaBank,
 } from '../../services/libraryService';
 import { uploadFile, uploadFileWithQuota, getMediaDuration } from '../../services/firebaseStorage';
 import { convertImageIfNeeded } from '../../utils/imageConverter';
@@ -133,6 +134,9 @@ const ProjectWorkspace = ({
   // Create count for the centered Create bar
   const [createCount, setCreateCount] = useState(1);
 
+  // Selected media bank IDs for video niche editor filtering
+  const [selectedMediaBankIds, setSelectedMediaBankIds] = useState(null);
+
   // Caption & Hashtag page
   const [showCaptionPage, setShowCaptionPageRaw] = useState(false);
 
@@ -202,6 +206,9 @@ const ProjectWorkspace = ({
   // Web import modal
   const [showWebImportModal, setShowWebImportModal] = useState(false);
   const pendingWebImportBankRef = useRef(null);
+
+  // Named media bank upload/import targeting
+  const pendingMediaBankIdRef = useRef(null);
 
   // Audio web import modal
   const [showAudioWebImport, setShowAudioWebImport] = useState(false);
@@ -515,6 +522,15 @@ const ProjectWorkspace = ({
           imageItems.forEach(item => assignToBank(artistId, activeNicheId, item.id, bankIdx, db));
           pendingBankIndexRef.current = null;
         }
+        // If triggered from a named media bank, assign to that bank
+        const mediaBankId = pendingMediaBankIdRef.current;
+        if (mediaBankId && activeNicheId) {
+          const mediaItems = uploadedItems.filter(i => i.type !== MEDIA_TYPES.AUDIO);
+          if (mediaItems.length > 0) {
+            assignToMediaBank(artistId, activeNicheId, mediaItems.map(i => i.id), mediaBankId, db);
+          }
+          pendingMediaBankIdRef.current = null;
+        }
         // Merge localStorage changes into state safely (union, never lose data)
         setCollections(prev => {
           const freshLocal = getCollections(artistId);
@@ -622,12 +638,20 @@ const ProjectWorkspace = ({
         if (targetBank !== null && targetBank !== undefined) {
           assignToBank(artistId, activeNicheId, [item.id], targetBank, db);
         }
+        // Assign to named media bank if specified
+        const mediaBankId = pendingMediaBankIdRef.current;
+        if (mediaBankId) {
+          assignToMediaBank(artistId, activeNicheId, [item.id], mediaBankId, db);
+        }
       }
 
       // Add to project pool
       if (projectId) {
         addToProjectPool(artistId, projectId, importedIds, db);
       }
+
+      // Clear media bank ref
+      pendingMediaBankIdRef.current = null;
 
       // Refresh data
       setLibrary(getLibrary(artistId));
@@ -704,6 +728,29 @@ const ProjectWorkspace = ({
 
     setShowAudioWebImport(false);
   }, [artistId, projectId, db, toastSuccess, toastError]);
+
+  // Named media bank upload/import handlers (for VideoNicheContent)
+  const handleUploadToMediaBank = useCallback((bankId) => {
+    pendingMediaBankIdRef.current = bankId;
+    pendingBankIndexRef.current = null; // Clear slideshow bank ref
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.accept = 'image/*,video/*';
+      fileInputRef.current.click();
+    }
+  }, []);
+
+  const handleImportToMediaBank = useCallback((bankId) => {
+    pendingMediaBankIdRef.current = bankId;
+    pendingImportBankRef.current = null;
+    setShowImportModal(true);
+  }, []);
+
+  const handleWebImportToMediaBank = useCallback((bankId) => {
+    pendingMediaBankIdRef.current = bankId;
+    pendingWebImportBankRef.current = null;
+    setShowWebImportModal(true);
+  }, []);
 
   // Create niche
   const handleCreateNiche = useCallback(async (format) => {
@@ -804,6 +851,18 @@ const ProjectWorkspace = ({
       imageIds.forEach(id => assignToBank(artistId, activeNicheId, id, bankIdx, db));
       pendingImportBankRef.current = null;
     }
+    // If triggered from a named media bank "Import"
+    const mediaBankId = pendingMediaBankIdRef.current;
+    if (mediaBankId && activeNicheId) {
+      const mediaIds = selectedIds.filter(id => {
+        const item = library.find(m => m.id === id);
+        return item && item.type !== MEDIA_TYPES.AUDIO;
+      });
+      if (mediaIds.length > 0) {
+        assignToMediaBank(artistId, activeNicheId, mediaIds, mediaBankId, db);
+      }
+      pendingMediaBankIdRef.current = null;
+    }
     setShowImportModal(false);
     toastSuccess(`Imported ${selectedIds.length} item${selectedIds.length !== 1 ? 's' : ''}`);
   }, [project, artistId, projectId, activeNicheId, db, library, toastSuccess]);
@@ -826,9 +885,21 @@ const ProjectWorkspace = ({
     }
     saveCollections(artistId, cols);
     if (db) saveCollectionToFirestore(db, artistId, cols[nicheIdx]);
+    // If triggered from a named media bank
+    const mediaBankId = pendingMediaBankIdRef.current;
+    if (mediaBankId) {
+      const mediaIds = newIds.filter(id => {
+        const item = library.find(m => m.id === id);
+        return item && item.type !== MEDIA_TYPES.AUDIO;
+      });
+      if (mediaIds.length > 0) {
+        assignToMediaBank(artistId, activeNicheId, mediaIds, mediaBankId, db);
+      }
+      pendingMediaBankIdRef.current = null;
+    }
     setShowImportModal(false);
     toastSuccess(`Pulled ${newIds.length} item${newIds.length !== 1 ? 's' : ''} into niche`);
-  }, [artistId, activeNicheId, projectId, project, db, toastSuccess]);
+  }, [artistId, activeNicheId, projectId, project, db, library, toastSuccess]);
 
   if (!artistId) {
     return (
@@ -975,7 +1046,8 @@ const ProjectWorkspace = ({
               } else if (activeFormat?.id === 'clipper') {
                 onOpenVideoEditor?.(activeFormat, activeNiche.id, null, null);
               } else {
-                onOpenVideoEditor?.(activeFormat, activeNiche.id, null, null);
+                const bankIds = selectedMediaBankIds && selectedMediaBankIds.size > 0 ? [...selectedMediaBankIds] : null;
+                onOpenVideoEditor?.(activeFormat, activeNiche.id, null, null, null, bankIds);
               }
             }}
           >
@@ -1060,15 +1132,20 @@ const ProjectWorkspace = ({
             library={library}
             createdContent={createdContent}
             projectAudio={projectAudio}
-            onMakeVideo={(format, nicheId, existingDraft) => {
-              onOpenVideoEditor?.(format, nicheId, existingDraft, null);
+            selectedMediaBankIds={selectedMediaBankIds}
+            onSelectedMediaBankIdsChange={setSelectedMediaBankIds}
+            onMakeVideo={(format, nicheId, existingDraft, bankIds) => {
+              onOpenVideoEditor?.(format, nicheId, existingDraft, null, null, bankIds);
             }}
-            onUpload={() => { pendingBankIndexRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'image/*,audio/*,video/*'; fileInputRef.current.click(); } }}
-            onUploadAudio={() => { pendingBankIndexRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'audio/*'; fileInputRef.current.click(); } }}
-            onImport={() => { pendingImportBankRef.current = null; setShowImportModal(true); }}
+            onUpload={() => { pendingBankIndexRef.current = null; pendingMediaBankIdRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'image/*,audio/*,video/*'; fileInputRef.current.click(); } }}
+            onUploadAudio={() => { pendingBankIndexRef.current = null; pendingMediaBankIdRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'audio/*'; fileInputRef.current.click(); } }}
+            onImport={() => { pendingImportBankRef.current = null; pendingMediaBankIdRef.current = null; setShowImportModal(true); }}
             onImportAudio={handleImportAudio}
             onWebImport={handleWebImport}
             onWebImportAudio={handleWebImportAudio}
+            onUploadToMediaBank={handleUploadToMediaBank}
+            onImportToMediaBank={handleImportToMediaBank}
+            onWebImportToMediaBank={handleWebImportToMediaBank}
             onAddLyrics={onAddLyrics}
             onUpdateLyrics={onUpdateLyrics}
             onDeleteLyrics={onDeleteLyrics}

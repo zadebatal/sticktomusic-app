@@ -7,7 +7,7 @@ import { IconButton } from '../../ui/components/IconButton';
 import { Badge } from '../../ui/components/Badge';
 import {
   FeatherPlay, FeatherSquare, FeatherImage, FeatherFilm, FeatherLayers, FeatherCamera,
-  FeatherPlus, FeatherX,
+  FeatherPlus, FeatherX, FeatherEdit2, FeatherCheck,
   FeatherType,
   FeatherUpload, FeatherDownloadCloud, FeatherScissors, FeatherLink,
   FeatherMusic,
@@ -23,6 +23,13 @@ import {
   addToCollectionAsync,
   addToProjectPool,
   removeFromCollection,
+  migrateToMediaBanks,
+  addMediaBank,
+  removeMediaBank,
+  renameMediaBank,
+  removeFromMediaBank,
+  getBankColor,
+  MAX_MEDIA_BANKS,
 } from '../../services/libraryService';
 import { getLyrics } from '../../services/libraryService';
 import useDragReorder from './shared/useDragReorder';
@@ -54,6 +61,11 @@ const VideoNicheContent = ({
   onImportAudio,
   onWebImport,
   onWebImportAudio,
+  onUploadToMediaBank,
+  onImportToMediaBank,
+  onWebImportToMediaBank,
+  selectedMediaBankIds: externalSelectedBankIds,
+  onSelectedMediaBankIdsChange,
   onAddLyrics,
   onUpdateLyrics,
   onDeleteLyrics,
@@ -64,6 +76,15 @@ const VideoNicheContent = ({
   const [textBankInput2, setTextBankInput2] = useState('');
   const [lightboxItem, setLightboxItem] = useState(null);
   const [trimItemId, setTrimItemId] = useState(null);
+
+  // Media banks state
+  const [newBankName, setNewBankName] = useState('');
+  const [showNewBankInput, setShowNewBankInput] = useState(false);
+  const [renamingBankId, setRenamingBankId] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+  // Use external state if provided (lifted to parent), otherwise internal
+  const selectedBankIds = externalSelectedBankIds !== undefined ? externalSelectedBankIds : null;
+  const setSelectedBankIds = onSelectedMediaBankIdsChange || (() => {});
 
   // Audio preview playback
   const [playingAudioId, setPlayingAudioId] = useState(null);
@@ -333,11 +354,73 @@ const VideoNicheContent = ({
     setShowBankPicker(false);
   }, [pendingTranscription, artistId, niche, db]);
 
+  // Migrate niche to mediaBanks format
+  const migratedNiche = useMemo(() => niche ? migrateToMediaBanks(niche) : niche, [niche]);
+  const mediaBanks = migratedNiche?.mediaBanks || [];
+
   // All niche media (images + videos) for the grid
   const nicheMedia = useMemo(() => {
     if (!niche) return [];
     return library.filter(item => (niche.mediaIds || []).includes(item.id) && item.type !== 'audio');
   }, [niche, library]);
+
+  // Initialize selectedBankIds to all banks when banks change
+  useEffect(() => {
+    if (mediaBanks.length > 0 && selectedBankIds === null) {
+      setSelectedBankIds(new Set(mediaBanks.map(b => b.id)));
+    }
+  }, [mediaBanks, selectedBankIds]);
+
+  // Bank selection toggle
+  const toggleBankSelection = useCallback((bankId) => {
+    setSelectedBankIds(prev => {
+      const next = new Set(prev || mediaBanks.map(b => b.id));
+      if (next.has(bankId)) next.delete(bankId);
+      else next.add(bankId);
+      return next;
+    });
+  }, [mediaBanks]);
+
+  // Add new media bank handler
+  const handleAddMediaBank = useCallback(() => {
+    if (!newBankName.trim() || !niche) return;
+    addMediaBank(artistId, niche.id, newBankName.trim(), db);
+    setNewBankName('');
+    setShowNewBankInput(false);
+  }, [newBankName, artistId, niche, db]);
+
+  // Rename media bank handler
+  const handleRenameMediaBank = useCallback(() => {
+    if (!renameValue.trim() || !niche || !renamingBankId) return;
+    renameMediaBank(artistId, niche.id, renamingBankId, renameValue.trim(), db);
+    setRenamingBankId(null);
+    setRenameValue('');
+  }, [renameValue, artistId, niche, renamingBankId, db]);
+
+  // Delete media bank handler
+  const handleDeleteMediaBank = useCallback((bankId) => {
+    if (!niche) return;
+    removeMediaBank(artistId, niche.id, bankId, db);
+    setSelectedBankIds(prev => {
+      if (!prev) return prev;
+      const next = new Set(prev);
+      next.delete(bankId);
+      return next;
+    });
+  }, [artistId, niche, db]);
+
+  // Remove item from a specific bank
+  const handleRemoveFromBank = useCallback((mediaId, bankId) => {
+    if (!niche) return;
+    removeFromMediaBank(artistId, niche.id, [mediaId], bankId, db);
+  }, [artistId, niche, db]);
+
+  // Filtered onMakeVideo — passes selected bank IDs
+  const handleMakeVideoFiltered = useCallback((format, nicheId, existingDraft) => {
+    if (!onMakeVideo) return;
+    const bankIds = selectedBankIds && selectedBankIds.size > 0 ? [...selectedBankIds] : null;
+    onMakeVideo(format, nicheId, existingDraft, bankIds);
+  }, [onMakeVideo, selectedBankIds]);
 
   // Drag-to-reorder media
   const handleMediaReorder = useCallback((reordered) => {
@@ -407,120 +490,204 @@ const VideoNicheContent = ({
     <div className="flex items-stretch overflow-hidden flex-1 self-stretch">
       {/* Left/center — scrollable content */}
       <div className="flex grow basis-0 min-h-0 flex-col items-center self-stretch overflow-y-auto">
-        {/* Media section */}
-        {nicheMedia.length === 0 ? (
-          /* Empty state — hero with upload/import */
-          <div className="flex w-full flex-col items-center gap-5 px-8 py-8">
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-500/10 border border-indigo-500/30">
-                <IconComponent className="text-indigo-400" style={{ width: 28, height: 28 }} />
+        {/* Media Banks */}
+        <div className="flex w-full flex-col gap-3 px-8 py-6">
+          {mediaBanks.length === 0 ? (
+            /* Empty state — no banks yet */
+            <div className="flex w-full flex-col items-center gap-5 py-8">
+              <div className="flex flex-col items-center gap-3">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-500/10 border border-indigo-500/30">
+                  <IconComponent className="text-indigo-400" style={{ width: 28, height: 28 }} />
+                </div>
+                <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{activeFormat.name}</span>
+                <span className="text-body font-body text-neutral-400 text-center max-w-sm">No media banks yet — add one to organize your content</span>
               </div>
-              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{activeFormat.name}</span>
-              {activeFormat.description && (
-                <span className="text-body font-body text-neutral-400 text-center max-w-sm">{activeFormat.description}</span>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
-              <Button variant="brand-primary" size="large" icon={<FeatherUpload />} onClick={onUpload}>
-                Upload Media
-              </Button>
-              <Button variant="neutral-secondary" size="large" icon={<FeatherDownloadCloud />} onClick={onImport}>
-                Import from Library
-              </Button>
-              <Button variant="neutral-secondary" size="large" icon={<FeatherLink />} onClick={onWebImport}>
-                Import from Web
+              <Button variant="brand-primary" size="large" icon={<FeatherPlus />}
+                onClick={() => setShowNewBankInput(true)}>
+                Add Bank
               </Button>
             </div>
-          </div>
-        ) : (
-          /* Media grid — images & videos in scrollable area */
-          <div className="flex w-full flex-col gap-3 px-8 py-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-body-bold font-body-bold text-[#ffffffff]">Media</span>
-                <Badge variant="neutral">{nicheMedia.length}</Badge>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="brand-tertiary" size="small" icon={<FeatherUpload />} onClick={onUpload}>Upload</Button>
-                <Button variant="neutral-tertiary" size="small" icon={<FeatherDownloadCloud />} onClick={onImport}>Import</Button>
-                <Button variant="neutral-tertiary" size="small" icon={<FeatherLink />} onClick={onWebImport}>Web</Button>
-              </div>
-            </div>
-            <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-200 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
-              <div className="grid w-full grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-1.5">
-                {nicheMedia.map((item, idx) => (
-                  <div
-                    key={item.id}
-                    className={`relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group ${
-                      dragOverIndex === idx ? 'ring-2 ring-indigo-500' : ''
-                    }`}
-                    onClick={() => setLightboxItem(item)}
-                    {...makeDragProps(idx)}
+          ) : (
+            <>
+              {mediaBanks.map((bank, bankIdx) => {
+                const color = getBankColor(bankIdx);
+                const bankMedia = library.filter(item =>
+                  (bank.mediaIds || []).includes(item.id) && item.type !== 'audio'
+                );
+                const isSelected = selectedBankIds === null || selectedBankIds.has(bank.id);
+                const isRenaming = renamingBankId === bank.id;
+                return (
+                  <div key={bank.id}
+                    className="flex w-full flex-col gap-2 rounded-lg border border-solid p-3"
+                    style={{ borderColor: color.border, backgroundColor: color.bg }}
                   >
-                    {item.type === 'video' ? (
-                      <>
-                        {item.thumbnailUrl ? (
-                          <img src={item.thumbnailUrl} alt={item.name} className="w-full h-full object-cover" loading="lazy" draggable={false} />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <FeatherFilm className="text-neutral-600" style={{ width: 16, height: 16 }} />
-                          </div>
-                        )}
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-black/60 border border-white/20">
-                            <FeatherPlay className="text-white" style={{ width: 8, height: 8 }} />
+                    {/* Bank header */}
+                    <div className="flex items-center gap-2">
+                      {/* Selection checkbox */}
+                      <button
+                        className="flex-none flex items-center justify-center w-4 h-4 rounded border border-solid cursor-pointer transition-colors"
+                        style={{
+                          borderColor: color.primary,
+                          backgroundColor: isSelected ? color.primary : 'transparent',
+                        }}
+                        onClick={() => toggleBankSelection(bank.id)}
+                        title={isSelected ? 'Exclude from editor' : 'Include in editor'}
+                      >
+                        {isSelected && <FeatherCheck className="text-white" style={{ width: 10, height: 10 }} />}
+                      </button>
+                      <div className="h-2.5 w-2.5 rounded-full flex-none" style={{ backgroundColor: color.primary }} />
+                      {isRenaming ? (
+                        <input
+                          className="flex-1 rounded-md border border-solid border-neutral-200 bg-black px-2 py-0.5 text-caption-bold font-caption-bold text-white outline-none"
+                          value={renameValue}
+                          onChange={e => setRenameValue(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleRenameMediaBank(); if (e.key === 'Escape') setRenamingBankId(null); }}
+                          onBlur={handleRenameMediaBank}
+                          autoFocus
+                        />
+                      ) : (
+                        <span className="text-caption-bold font-caption-bold" style={{ color: color.light }}>{bank.name}</span>
+                      )}
+                      <Badge variant="neutral">{bankMedia.length}</Badge>
+                      <div className="flex-1" />
+                      {/* Per-bank actions */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          className="text-caption font-caption hover:text-white bg-transparent border-none cursor-pointer px-1 py-0.5 rounded transition-colors"
+                          style={{ color: color.light }}
+                          onClick={() => onUploadToMediaBank?.(bank.id)}
+                        >Upload</button>
+                        <button
+                          className="text-caption font-caption hover:text-white bg-transparent border-none cursor-pointer px-1 py-0.5 rounded transition-colors"
+                          style={{ color: color.light }}
+                          onClick={() => onImportToMediaBank?.(bank.id)}
+                        >Import</button>
+                        <button
+                          className="text-caption font-caption hover:text-white bg-transparent border-none cursor-pointer px-1 py-0.5 rounded transition-colors"
+                          style={{ color: color.light }}
+                          onClick={() => onWebImportToMediaBank?.(bank.id)}
+                        >Web</button>
+                      </div>
+                      {!isRenaming && (
+                        <IconButton variant="neutral-tertiary" size="small"
+                          icon={<FeatherEdit2 />} aria-label="Rename bank"
+                          onClick={() => { setRenamingBankId(bank.id); setRenameValue(bank.name); }}
+                        />
+                      )}
+                      {mediaBanks.length > 1 && (
+                        <IconButton variant="neutral-tertiary" size="small"
+                          icon={<FeatherX />} aria-label="Delete bank"
+                          onClick={() => handleDeleteMediaBank(bank.id)}
+                        />
+                      )}
+                    </div>
+                    {/* Bank media grid */}
+                    {bankMedia.length > 0 ? (
+                      <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-200 bg-[#111118] p-2" style={{ maxHeight: 220 }}>
+                        <div className="grid w-full grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-1.5">
+                          {bankMedia.map((item, idx) => (
+                            <div
+                              key={item.id}
+                              className="relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group"
+                              onClick={() => setLightboxItem(item)}
+                            >
+                              {item.type === 'video' ? (
+                                <>
+                                  {item.thumbnailUrl ? (
+                                    <img src={item.thumbnailUrl} alt={item.name} className="w-full h-full object-cover" loading="lazy" draggable={false} />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <FeatherFilm className="text-neutral-600" style={{ width: 16, height: 16 }} />
+                                    </div>
+                                  )}
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-black/60 border border-white/20">
+                                      <FeatherPlay className="text-white" style={{ width: 8, height: 8 }} />
+                                    </div>
+                                  </div>
+                                  <button
+                                    className="absolute bottom-0.5 right-0.5 z-[4] flex h-4 w-4 items-center justify-center rounded bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={(e) => { e.stopPropagation(); setTrimItemId(item.id); }}
+                                    title="Quick trim"
+                                  >
+                                    <FeatherScissors className="text-white" style={{ width: 9, height: 9 }} />
+                                  </button>
+                                  {trimData[item.id] && (
+                                    <div className="absolute bottom-0.5 left-0.5 z-[3] rounded bg-green-500/80 px-0.5 py-px">
+                                      <span className="text-[7px] font-mono text-white">trimmed</span>
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <img
+                                  src={item.thumbnailUrl || item.url}
+                                  alt={item.name}
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                  draggable={false}
+                                />
+                              )}
+                              <div className="absolute top-0.5 left-0.5 z-[3] rounded bg-black/60 px-1 py-px">
+                                <span className="text-[9px] font-mono text-white/70">{idx + 1}</span>
+                              </div>
+                              <button
+                                className="absolute top-0.5 right-0.5 z-[4] flex h-4 w-4 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
+                                onClick={(e) => { e.stopPropagation(); handleRemoveFromBank(item.id, bank.id); }}
+                                title="Remove from bank"
+                              >
+                                <FeatherX className="text-white" style={{ width: 8, height: 8 }} />
+                              </button>
+                            </div>
+                          ))}
+                          <div
+                            className="flex flex-col items-center justify-center aspect-square rounded border border-dashed cursor-pointer hover:bg-opacity-10 transition-colors"
+                            style={{ borderColor: color.border }}
+                            onClick={() => onUploadToMediaBank?.(bank.id)}
+                            title="Upload to this bank"
+                          >
+                            <FeatherPlus style={{ width: 12, height: 12, color: color.primary }} />
                           </div>
                         </div>
-                        {/* Scissors for quick trim */}
-                        <button
-                          className="absolute bottom-0.5 right-0.5 z-[4] flex h-4 w-4 items-center justify-center rounded bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => { e.stopPropagation(); setTrimItemId(item.id); }}
-                          title="Quick trim"
-                        >
-                          <FeatherScissors className="text-white" style={{ width: 9, height: 9 }} />
-                        </button>
-                        {/* Trim indicator */}
-                        {trimData[item.id] && (
-                          <div className="absolute bottom-0.5 left-0.5 z-[3] rounded bg-green-500/80 px-0.5 py-px">
-                            <span className="text-[7px] font-mono text-white">trimmed</span>
-                          </div>
-                        )}
-                      </>
+                      </div>
                     ) : (
-                      <img
-                        src={item.thumbnailUrl || item.url}
-                        alt={item.name}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                        draggable={false}
-                      />
+                      <div
+                        className="flex items-center justify-center rounded-lg border-2 border-dashed py-6 cursor-pointer transition-colors"
+                        style={{ borderColor: color.border }}
+                        onClick={() => onUploadToMediaBank?.(bank.id)}
+                      >
+                        <span className="text-caption font-caption text-neutral-500">Drop media here or click to upload</span>
+                      </div>
                     )}
-                    {/* Order badge */}
-                    <div className="absolute top-0.5 left-0.5 z-[3] rounded bg-black/60 px-1 py-px">
-                      <span className="text-[9px] font-mono text-white/70">{idx + 1}</span>
-                    </div>
-                    {/* Delete button */}
-                    <button
-                      className="absolute top-0.5 right-0.5 z-[4] flex h-4 w-4 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
-                      onClick={(e) => { e.stopPropagation(); removeFromCollection(artistId, niche.id, [item.id], db); }}
-                      title="Remove from niche"
-                    >
-                      <FeatherX className="text-white" style={{ width: 8, height: 8 }} />
-                    </button>
                   </div>
-                ))}
-                {/* Upload placeholder tile */}
-                <div
-                  className="flex flex-col items-center justify-center aspect-square rounded border border-dashed border-neutral-200 cursor-pointer hover:border-indigo-500 hover:bg-indigo-500/5 transition-colors"
-                  onClick={onUpload}
-                  title="Upload media"
-                >
-                  <FeatherPlus className="text-neutral-500" style={{ width: 12, height: 12 }} />
+                );
+              })}
+              {/* Add Bank button */}
+              {mediaBanks.length < MAX_MEDIA_BANKS && (
+                <div className="flex items-center gap-2">
+                  {showNewBankInput ? (
+                    <>
+                      <input
+                        className="flex-1 rounded-md border border-solid border-neutral-200 bg-black px-3 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500"
+                        placeholder="Bank name..."
+                        value={newBankName}
+                        onChange={e => setNewBankName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleAddMediaBank(); if (e.key === 'Escape') { setShowNewBankInput(false); setNewBankName(''); } }}
+                        autoFocus
+                      />
+                      <Button variant="brand-primary" size="small" onClick={handleAddMediaBank} disabled={!newBankName.trim()}>Add</Button>
+                      <Button variant="neutral-tertiary" size="small" onClick={() => { setShowNewBankInput(false); setNewBankName(''); }}>Cancel</Button>
+                    </>
+                  ) : (
+                    <Button variant="neutral-tertiary" size="small" icon={<FeatherPlus />}
+                      onClick={() => setShowNewBankInput(true)}>
+                      Add Bank
+                    </Button>
+                  )}
                 </div>
-              </div>
-            </div>
-          </div>
-        )}
+              )}
+            </>
+          )}
+        </div>
 
 
         {/* Text Banks */}
@@ -738,7 +905,7 @@ const VideoNicheContent = ({
                   <div
                     key={draft.id}
                     className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
-                    onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id, draft)}
+                    onClick={() => handleMakeVideoFiltered(activeFormat, niche.id, draft)}
                   >
                     {draft.thumbnail ? (
                       <div className="w-full aspect-video bg-[#171717]">

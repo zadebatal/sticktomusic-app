@@ -451,6 +451,7 @@ const VideoStudio = ({
   const [activePipelineId, setActivePipelineId] = useState(urlWorkspaceId);
   const [activePipelineIdForEditor, setActivePipelineIdForEditor] = useState(null);
   const [pipelineCategoryVersion, setPipelineCategoryVersion] = useState(0);
+  const [selectedMediaBankIds, setSelectedMediaBankIds] = useState(null); // array of bank IDs for filtering
   const [homeTab, setHomeTab] = useState(savedSession?.homeTab || 'production');
 
   // Project system state
@@ -541,7 +542,23 @@ const VideoStudio = ({
     const pipeline = cols.find(c => c.id === activePipelineIdForEditor);
     if (!pipeline) return null;
     const lib = getLibrary(currentArtistId);
-    const pipelineMedia = lib.filter(item => (pipeline.mediaIds || []).includes(item.id));
+    let pipelineMedia = lib.filter(item => (pipeline.mediaIds || []).includes(item.id));
+
+    // Filter by selected media banks if provided
+    if (selectedMediaBankIds && pipeline.mediaBanks) {
+      const selectedBankSet = new Set(selectedMediaBankIds);
+      const allowedIds = new Set();
+      pipeline.mediaBanks.forEach(bank => {
+        if (selectedBankSet.has(bank.id)) {
+          (bank.mediaIds || []).forEach(id => allowedIds.add(id));
+        }
+      });
+      // Audio is always included (not in media banks)
+      pipelineMedia = pipelineMedia.filter(item =>
+        item.type === MEDIA_TYPES.AUDIO || allowedIds.has(item.id)
+      );
+    }
+
     // textBanks = slideshow text banks (array of arrays), videoTextBank1/2 = video niche text banks
     // Check length to avoid empty-array short-circuit ([] is truthy in JS)
     const nicheTextBanks =
@@ -572,7 +589,7 @@ const VideoStudio = ({
       nicheTextBanks,
       textBanks: nicheTextBanks,
     };
-  }, [activePipelineIdForEditor, currentArtistId, pipelineCategoryVersion]);
+  }, [activePipelineIdForEditor, currentArtistId, pipelineCategoryVersion, selectedMediaBankIds]);
 
   // Project niches for clipper destination picker (all niches in same project, excluding current)
   const clipperProjectNiches = useMemo(() => {
@@ -1032,6 +1049,7 @@ const VideoStudio = ({
     setClipperSourceVideos([]);
     setClipperSession(null);
     setClipperBankLabels(null);
+    setSelectedMediaBankIds(null);
     // If opened from pipeline, go back to pipeline list or project view
     if (activePipelineIdForEditor) {
       const nicheId = activePipelineIdForEditor;
@@ -2717,13 +2735,14 @@ const VideoStudio = ({
               setPipelineCategoryVersion(v => v + 1);
               handleMakeSlideshow(existingDraft || null);
             }}
-            onOpenVideoEditor={(format, nicheId, existingDraft, _templateSettings, nicheSourceVideos) => {
+            onOpenVideoEditor={(format, nicheId, existingDraft, _templateSettings, nicheSourceVideos, bankIds) => {
               if (nicheId) {
                 setSelectedCategory(null); // Clear stale category so pipelineCategory is used
                 setActivePipelineIdForEditor(nicheId);
                 setPullFromCollection(nicheId);
                 setPipelineCategoryVersion(v => v + 1); // Force recompute to pick up latest text banks
               }
+              setSelectedMediaBankIds(bankIds || null);
               setClipperSourceVideos(nicheSourceVideos || []);
               // Clipper: compute bank labels from niche + handle session objects
               if (format?.id === 'clipper' && nicheId && currentArtistId) {

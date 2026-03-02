@@ -1045,6 +1045,138 @@ export const getTextBankText = (entry) =>
 export const getTextBankStyle = (entry) =>
   typeof entry === 'object' && entry?.style ? entry.style : null;
 
+// ── Named Media Banks (for video niches) ──────────────────────────────────────
+
+export const MAX_MEDIA_BANKS = 6;
+
+/**
+ * Migrate a video niche from flat mediaIds to named mediaBanks.
+ * No-op if mediaBanks already present. Safe to call multiple times.
+ */
+export const migrateToMediaBanks = (collection) => {
+  if (!collection) return collection;
+  if (collection.mediaBanks) return collection;
+  const defaultBank = {
+    id: Date.now().toString(36),
+    name: 'All Media',
+    mediaIds: [...(collection.mediaIds || [])].filter(id => {
+      // Only include non-audio items in media banks
+      return id; // All IDs — we can't filter by type here without library access
+    }),
+  };
+  return { ...collection, mediaBanks: [defaultBank] };
+};
+
+/**
+ * Sync niche.mediaIds to be the union of all mediaBanks' mediaIds
+ */
+const syncMediaBankIds = (collection) => {
+  if (!collection.mediaBanks) return;
+  const allIds = new Set();
+  collection.mediaBanks.forEach(bank => (bank.mediaIds || []).forEach(id => allIds.add(id)));
+  // Preserve any audio IDs that are in mediaIds but not in any media bank
+  (collection.mediaIds || []).forEach(id => {
+    // Keep IDs not in any bank (they could be audio or other non-bank items)
+    const inBank = collection.mediaBanks.some(b => (b.mediaIds || []).includes(id));
+    if (!inBank) allIds.add(id);
+  });
+  collection.mediaIds = [...allIds];
+};
+
+/**
+ * Add a named media bank to a video niche
+ */
+export const addMediaBank = (artistId, collectionId, name, db = null) => {
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection) return;
+  const migrated = migrateToMediaBanks(collection);
+  Object.assign(collection, migrated);
+  if ((collection.mediaBanks || []).length >= MAX_MEDIA_BANKS) return;
+  collection.mediaBanks.push({
+    id: Date.now().toString(36),
+    name: name || `Bank ${collection.mediaBanks.length + 1}`,
+    mediaIds: [],
+  });
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+  if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
+};
+
+/**
+ * Remove a named media bank. Moves its media to the first remaining bank.
+ */
+export const removeMediaBank = (artistId, collectionId, bankId, db = null) => {
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection?.mediaBanks) return;
+  if (collection.mediaBanks.length <= 1) return; // Must keep at least 1
+  const idx = collection.mediaBanks.findIndex(b => b.id === bankId);
+  if (idx === -1) return;
+  const removed = collection.mediaBanks.splice(idx, 1)[0];
+  // Move orphaned media to first remaining bank
+  if (removed.mediaIds?.length > 0) {
+    const target = collection.mediaBanks[0];
+    target.mediaIds = [...new Set([...(target.mediaIds || []), ...removed.mediaIds])];
+  }
+  syncMediaBankIds(collection);
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+  if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
+};
+
+/**
+ * Rename a named media bank
+ */
+export const renameMediaBank = (artistId, collectionId, bankId, newName, db = null) => {
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection?.mediaBanks) return;
+  const bank = collection.mediaBanks.find(b => b.id === bankId);
+  if (!bank) return;
+  bank.name = newName;
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+  if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
+};
+
+/**
+ * Add media IDs to a specific named media bank + sync niche.mediaIds
+ */
+export const assignToMediaBank = (artistId, collectionId, mediaIds, bankId, db = null) => {
+  const ids = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection) return;
+  const migrated = migrateToMediaBanks(collection);
+  Object.assign(collection, migrated);
+  const bank = collection.mediaBanks.find(b => b.id === bankId);
+  if (!bank) return;
+  bank.mediaIds = [...new Set([...(bank.mediaIds || []), ...ids])];
+  // Ensure all items are in the flat mediaIds too
+  collection.mediaIds = [...new Set([...(collection.mediaIds || []), ...ids])];
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+  if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
+};
+
+/**
+ * Remove media IDs from a specific named media bank + sync niche.mediaIds
+ */
+export const removeFromMediaBank = (artistId, collectionId, mediaIds, bankId, db = null) => {
+  const ids = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection?.mediaBanks) return;
+  const bank = collection.mediaBanks.find(b => b.id === bankId);
+  if (!bank) return;
+  bank.mediaIds = (bank.mediaIds || []).filter(id => !ids.includes(id));
+  syncMediaBankIds(collection);
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+  if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
+};
+
 /**
  * Add text to a text bank
  * @param {string} artistId
@@ -3964,6 +4096,7 @@ export const subscribeToCollections = (db, artistId, callback) => {
         if (typeof data.banks === 'string') try { data.banks = JSON.parse(data.banks); } catch { data.banks = []; }
         if (typeof data.textBanks === 'string') try { data.textBanks = JSON.parse(data.textBanks); } catch { data.textBanks = []; }
         if (typeof data.clipperSessions === 'string') try { data.clipperSessions = JSON.parse(data.clipperSessions); } catch { data.clipperSessions = []; }
+        if (typeof data.mediaBanks === 'string') try { data.mediaBanks = JSON.parse(data.mediaBanks); } catch { data.mediaBanks = null; }
         return { id: doc.id, ...data };
       });
 
@@ -4136,6 +4269,7 @@ export const saveCollectionToFirestore = async (db, artistId, collectionData) =>
     if (Array.isArray(data.banks)) data.banks = JSON.stringify(data.banks);
     if (Array.isArray(data.textBanks)) data.textBanks = JSON.stringify(data.textBanks);
     if (Array.isArray(data.clipperSessions)) data.clipperSessions = JSON.stringify(data.clipperSessions);
+    if (Array.isArray(data.mediaBanks)) data.mediaBanks = JSON.stringify(data.mediaBanks);
     await setDoc(docRef, data);
     return true;
   } catch (error) {
@@ -4726,6 +4860,15 @@ export default {
   resolveCollectionBanks,
   updateCollectionPlatformHashtags,
   updateCollectionPlatformExcludes,
+
+  // Named Media Banks (video niches)
+  MAX_MEDIA_BANKS,
+  migrateToMediaBanks,
+  addMediaBank,
+  removeMediaBank,
+  renameMediaBank,
+  assignToMediaBank,
+  removeFromMediaBank,
 
   // Niche / Format System
   FORMAT_TEMPLATES,
