@@ -1419,9 +1419,6 @@ const WordTimeline = ({
                   </span>
                 </div>
               )}
-              <Button variant="brand-primary" size="small" icon={<FeatherPlay />} onClick={handleApplyTextCells}>
-                Apply to Timeline
-              </Button>
             </div>
           )}
         </div>
@@ -1729,12 +1726,12 @@ const WordTimeline = ({
 
         <div style={{
           ...styles.footer,
-          ...(isMobile ? { padding: '12px 16px' } : {})
+          ...(isMobile ? { padding: '12px 16px' } : {}),
+          gap: '12px'
         }}>
           <Button
             variant="brand-primary"
             icon={<FeatherSave />}
-            className={isMobile ? "w-full" : ""}
             onClick={() => {
               if (loadedBankLyricId && onSaveToBank) {
                 onSaveToBank(loadedBankLyricId, words);
@@ -1748,6 +1745,11 @@ const WordTimeline = ({
           >
             Save word timings
           </Button>
+          {onApplyTextCells && words.length > 0 && (
+            <Button variant="brand-primary" icon={<FeatherPlay />} onClick={handleApplyTextCells}>
+              Apply to Timeline
+            </Button>
+          )}
         </div>
       </div>
 
