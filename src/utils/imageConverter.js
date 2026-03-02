@@ -87,13 +87,13 @@ export const convertImageIfNeeded = async (file) => {
 
 /**
  * Batch convert an array of files, converting any HEIC/HEIF/TIFF to JPEG.
- * Uses concurrency of 3 for parallel conversion.
+ * Uses concurrency of 5 for parallel conversion.
  * @param {File[]} files — input files array
  * @returns {Promise<File[]>} — array with converted files
  */
 export const convertImageFilesIfNeeded = async (files) => {
   const { runPool } = await import('./uploadPool');
-  const { results } = await runPool(files, convertImageIfNeeded, { concurrency: 3 });
+  const { results } = await runPool(files, convertImageIfNeeded, { concurrency: 5 });
   return results.map((r, i) => r || files[i]); // fallback to original on error
 };
 

@@ -61,6 +61,7 @@ import {
   FeatherArrowLeft, FeatherImage, FeatherMusic, FeatherPlay,
   FeatherCheck, FeatherFilm, FeatherLayers, FeatherCamera,
   FeatherHash, FeatherMessageSquare, FeatherTrash2, FeatherScissors,
+  FeatherZap,
 } from '@subframe/core';
 import { useToast, ConfirmDialog } from '../ui';
 import SlideshowNicheContent from './SlideshowNicheContent';
@@ -69,6 +70,7 @@ import FinishedMediaNicheContent from './FinishedMediaNicheContent';
 import ClipperNicheContent from './ClipperNicheContent';
 import AllMediaContent from './AllMediaContent';
 import WebImportModal from './WebImportModal';
+import { generateCaptions } from '../../services/captionGeneratorService';
 import log from '../../utils/logger';
 
 const FORMAT_TO_EDITOR = {
@@ -413,13 +415,30 @@ const ProjectWorkspace = ({
   const fileInputRef = useRef(null);
   const handleUploadRef = useRef(null);
 
+  // Byte-level upload progress tracking
+  const byteProgressRef = useRef({ files: {}, totalBytes: 0 });
+  const progressRafRef = useRef(null);
+
   const handleUpload = async (files) => {
     if (!files?.length) { toastError('No files selected'); return; }
     if (!artistId || !project) { toastError('No project selected'); return; }
     setIsUploading(true);
-    setUploadProgress({ current: 0, total: files.length });
+    // Initialize byte-level progress
+    const totalBytes = Array.from(files).reduce((sum, f) => sum + (f.size || 0), 0);
+    byteProgressRef.current = { files: {}, totalBytes: totalBytes || 1 };
+    setUploadProgress({ current: 0, total: files.length, bytes: 0, totalBytes });
+
+    // rAF loop to smoothly update progress bar from byte-level data
+    const updateProgress = () => {
+      const bp = byteProgressRef.current;
+      const transferred = Object.values(bp.files).reduce((s, v) => s + v, 0);
+      setUploadProgress(prev => prev ? { ...prev, bytes: transferred } : prev);
+      progressRafRef.current = requestAnimationFrame(updateProgress);
+    };
+    progressRafRef.current = requestAnimationFrame(updateProgress);
 
     const processOne = async (rawFile) => {
+      const fileKey = `${rawFile.name}_${rawFile.size}_${rawFile.lastModified}`;
       let file = rawFile;
       const isVideo = rawFile.type?.startsWith('video');
       if (rawFile.type?.startsWith('image')) file = await convertImageIfNeeded(rawFile);
@@ -428,68 +447,85 @@ const ProjectWorkspace = ({
       const isAudio = file.type?.startsWith('audio');
       const folder = isVideo ? 'videos' : isAudio ? 'audio' : 'images';
       const quotaCtx = { userData: user, userEmail: user?.email };
-      const { url, path } = await uploadFileWithQuota(file, folder, null, {}, quotaCtx);
 
-      let thumbnailUrl = null;
-      if (isVideo) {
-        // Generate thumbnail from video first frame
-        try {
-          const video = document.createElement('video');
-          video.preload = 'metadata';
-          video.muted = true;
-          const objUrl = URL.createObjectURL(file);
-          video.src = objUrl;
-          await new Promise((resolve, reject) => {
-            video.onloadeddata = resolve;
-            video.onerror = reject;
-          });
-          video.currentTime = 0.1;
-          await new Promise((resolve) => { video.onseeked = resolve; });
-          const canvas = document.createElement('canvas');
-          const scale = Math.min(1, THUMB_MAX_SIZE / Math.max(video.videoWidth, video.videoHeight));
-          canvas.width = Math.round(video.videoWidth * scale);
-          canvas.height = Math.round(video.videoHeight * scale);
-          canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-          const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', THUMB_QUALITY));
-          if (blob) {
-            const tf = new File([blob], `thumb_${file.name}.jpg`, { type: 'image/jpeg' });
-            const tr = await uploadFile(tf, 'thumbnails');
-            thumbnailUrl = tr.url;
-          }
-          URL.revokeObjectURL(objUrl);
-        } catch (e) { /* skip video thumb */ }
-      } else if (!isAudio) {
-        try {
-          const img = new Image();
-          img.src = URL.createObjectURL(file);
-          await new Promise(r => { img.onload = r; });
-          const scale = Math.min(1, THUMB_MAX_SIZE / Math.max(img.naturalWidth, img.naturalHeight));
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.round(img.naturalWidth * scale);
-          canvas.height = Math.round(img.naturalHeight * scale);
-          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-          const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', THUMB_QUALITY));
-          if (blob) {
-            const tf = new File([blob], `thumb_${file.name}`, { type: 'image/jpeg' });
-            const tr = await uploadFile(tf, 'thumbnails');
-            thumbnailUrl = tr.url;
-          }
-        } catch (e) { /* skip thumb */ }
-      }
+      // Per-file byte-level progress callback
+      const onFileProgress = (pct) => {
+        byteProgressRef.current.files[fileKey] = Math.round((pct / 100) * rawFile.size);
+      };
 
-      // Extract duration for audio/video — try local blob first (no CORS), fall back to remote URL
-      let duration = undefined;
-      if (isAudio || isVideo) {
+      // Run upload + thumbnail + duration in parallel
+      const thumbPromise = (async () => {
+        if (isVideo) {
+          try {
+            const video = document.createElement('video');
+            video.preload = 'metadata';
+            video.muted = true;
+            const objUrl = URL.createObjectURL(file);
+            video.src = objUrl;
+            await new Promise((resolve, reject) => { video.onloadeddata = resolve; video.onerror = reject; });
+            video.currentTime = 0.1;
+            await new Promise((resolve) => { video.onseeked = resolve; });
+            const canvas = document.createElement('canvas');
+            const scale = Math.min(1, THUMB_MAX_SIZE / Math.max(video.videoWidth, video.videoHeight));
+            canvas.width = Math.round(video.videoWidth * scale);
+            canvas.height = Math.round(video.videoHeight * scale);
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+            const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', THUMB_QUALITY));
+            URL.revokeObjectURL(objUrl);
+            if (blob) {
+              const tf = new File([blob], `thumb_${file.name}.jpg`, { type: 'image/jpeg' });
+              const tr = await uploadFile(tf, 'thumbnails');
+              return tr.url;
+            }
+          } catch (e) { /* skip video thumb */ }
+        } else if (!isAudio) {
+          try {
+            const objUrl = URL.createObjectURL(file);
+            const img = new Image();
+            img.src = objUrl;
+            await new Promise(r => { img.onload = r; });
+            const scale = Math.min(1, THUMB_MAX_SIZE / Math.max(img.naturalWidth, img.naturalHeight));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(img.naturalWidth * scale);
+            canvas.height = Math.round(img.naturalHeight * scale);
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+            const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', THUMB_QUALITY));
+            URL.revokeObjectURL(objUrl);
+            if (blob) {
+              const tf = new File([blob], `thumb_${file.name}`, { type: 'image/jpeg' });
+              const tr = await uploadFile(tf, 'thumbnails');
+              return tr.url;
+            }
+          } catch (e) { /* skip thumb */ }
+        }
+        return null;
+      })();
+
+      const durationPromise = (async () => {
+        if (!isAudio && !isVideo) return undefined;
         const localBlobUrl = URL.createObjectURL(file);
         try {
-          duration = await getMediaDuration(localBlobUrl, isVideo ? 'video' : 'audio');
-        } catch (e) { /* try remote */ }
-        URL.revokeObjectURL(localBlobUrl);
-        if (!duration) {
-          try {
-            duration = await getMediaDuration(url, isVideo ? 'video' : 'audio');
-          } catch (e) { /* duration stays undefined */ }
+          const dur = await getMediaDuration(localBlobUrl, isVideo ? 'video' : 'audio');
+          URL.revokeObjectURL(localBlobUrl);
+          return dur || undefined;
+        } catch (e) {
+          URL.revokeObjectURL(localBlobUrl);
+          return undefined;
         }
+      })();
+
+      // Upload + thumbnail + duration all in parallel
+      const [uploadResult, thumbnailUrl, duration] = await Promise.all([
+        uploadFileWithQuota(file, folder, onFileProgress, {}, quotaCtx),
+        thumbPromise,
+        durationPromise,
+      ]);
+      const { url, path } = uploadResult;
+
+      // If duration still unknown, try from remote URL
+      let finalDuration = duration;
+      if (finalDuration === undefined && (isAudio || isVideo)) {
+        try { finalDuration = await getMediaDuration(url, isVideo ? 'video' : 'audio'); } catch (e) { /* skip */ }
       }
 
       // Target collection: active niche (if exists) or project root
@@ -505,7 +541,7 @@ const ProjectWorkspace = ({
         storagePath: path,
         collectionIds: [targetCollectionId],
         metadata: { fileSize: file.size, mimeType: file.type },
-        ...(duration ? { duration } : {}),
+        ...(finalDuration ? { duration: finalDuration } : {}),
       };
 
       const savedItem = await addToLibraryAsync(db, artistId, item);
@@ -515,13 +551,15 @@ const ProjectWorkspace = ({
       if (activeNicheId && activeNicheId !== projectId) {
         addToProjectPool(artistId, projectId, [savedItem.id], db);
       }
+      // Mark file as fully uploaded for byte progress
+      byteProgressRef.current.files[fileKey] = rawFile.size;
       return savedItem;
     };
 
     try {
       const { results, errors } = await runPool(Array.from(files), processOne, {
         concurrency: 5,
-        onProgress: (done, total) => setUploadProgress({ current: done, total }),
+        onProgress: (done, total) => setUploadProgress(prev => prev ? { ...prev, current: done, total } : { current: done, total }),
       });
       const uploadedItems = results.filter(Boolean);
       if (uploadedItems.length > 0) {
@@ -575,6 +613,9 @@ const ProjectWorkspace = ({
     } catch (err) {
       toastError(`Upload error: ${err.message}`);
     }
+    // Stop byte-level progress rAF loop
+    if (progressRafRef.current) cancelAnimationFrame(progressRafRef.current);
+    byteProgressRef.current = { files: {}, totalBytes: 0 };
     setIsUploading(false);
     setUploadProgress(null);
   };
@@ -1364,11 +1405,18 @@ const ProjectWorkspace = ({
           <div className="flex flex-col gap-0.5">
             <span className="text-body-bold font-body-bold text-[#ffffffff]">
               Uploading {uploadProgress.current} of {uploadProgress.total}
+              {uploadProgress.totalBytes > 0 && (
+                <span className="text-neutral-400 font-normal text-caption ml-1.5">
+                  {uploadProgress.totalBytes >= 1048576
+                    ? `${Math.round((uploadProgress.bytes || 0) / 1048576)}/${Math.round(uploadProgress.totalBytes / 1048576)} MB`
+                    : `${Math.round((uploadProgress.bytes || 0) / 1024)}/${Math.round(uploadProgress.totalBytes / 1024)} KB`}
+                </span>
+              )}
             </span>
             <div className="w-48 h-1.5 rounded-full bg-neutral-100 overflow-hidden">
               <div
-                className="h-full rounded-full bg-indigo-500 transition-all"
-                style={{ width: `${Math.round((uploadProgress.current / uploadProgress.total) * 100)}%` }}
+                className="h-full rounded-full bg-indigo-500"
+                style={{ width: `${uploadProgress.totalBytes > 0 ? Math.round(((uploadProgress.bytes || 0) / uploadProgress.totalBytes) * 100) : Math.round((uploadProgress.current / uploadProgress.total) * 100)}%` }}
               />
             </div>
           </div>
@@ -1720,6 +1768,9 @@ const PLATFORM_COLORS_MAP = { instagram: '#E1306C', tiktok: '#00f2ea', youtube: 
 const PLATFORM_NAMES = { instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', facebook: 'Facebook' };
 const ALL_PLATFORMS = ['tiktok', 'instagram', 'youtube', 'facebook'];
 
+// Helper: extract text from caption (supports string | { text, generatedBy, generatedAt })
+const getCaptionText = (cap) => typeof cap === 'string' ? cap : (cap?.text || '');
+
 const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], accounts = [] }) => {
   const { success: toastSuccess } = useToast();
   const [newCaption, setNewCaption] = useState('');
@@ -1729,6 +1780,13 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
   const [scope, setScope] = useState('project'); // 'project' | niche ID
   const [showPlatformRules, setShowPlatformRules] = useState(false);
   const [newPlatformTag, setNewPlatformTag] = useState({});
+  // AI generation state
+  const [showAiPanel, setShowAiPanel] = useState(false);
+  const [aiContext, setAiContext] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResults, setAiResults] = useState(null); // { captions: string[], hashtags: string[] }
+  const [aiError, setAiError] = useState(null);
+  const [aiAccepted, setAiAccepted] = useState({ captions: new Set(), hashtags: new Set() });
 
   // Determine which entity we're editing
   const isProjectScope = scope === 'project';
@@ -1759,7 +1817,8 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
     return target.hashtagBank.platformExclude || {};
   }, [target]);
 
-  const allCaptions = [...captions.always, ...captions.pool];
+  const allCaptionEntries = [...captions.always, ...captions.pool];
+  const allCaptions = allCaptionEntries.map(getCaptionText);
   const allHashtags = [...hashtags.always, ...hashtags.pool];
 
   // Connected platforms from Late.co accounts
@@ -1804,7 +1863,8 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
       ? lines.map(l => l.replace(/^\d+[\.\)]\s*/, '').replace(/^[-•]\s*/, '').trim()).filter(Boolean)
       : [text];
     const existing = captions[captionAddTier];
-    const unique = newItems.filter(item => !existing.includes(item));
+    const existingTexts = new Set(existing.map(getCaptionText));
+    const unique = newItems.filter(item => !existingTexts.has(item));
     if (unique.length === 0) { setNewCaption(''); return; }
     saveCaptions({ ...captions, [captionAddTier]: [...existing, ...unique] });
     setNewCaption('');
@@ -1890,6 +1950,65 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
     updateCollectionPlatformExcludes(artistId, targetId, updated, db);
   }, [db, artistId, targetId, platformExclude]);
 
+  // AI generation handler
+  const handleAiGenerate = useCallback(async () => {
+    setAiLoading(true);
+    setAiError(null);
+    setAiResults(null);
+    setAiAccepted({ captions: new Set(), hashtags: new Set() });
+    try {
+      const result = await generateCaptions({
+        projectName: project?.name || '',
+        nicheName: activeNiche?.name || '',
+        context: aiContext.trim() || undefined,
+        platforms: connectedPlatforms,
+        existingCaptions: allCaptions,
+        existingHashtags: allHashtags,
+        captionCount: 5,
+      });
+      setAiResults(result);
+    } catch (err) {
+      setAiError(err.message);
+    } finally {
+      setAiLoading(false);
+    }
+  }, [project, activeNiche, aiContext, connectedPlatforms, allCaptions, allHashtags]);
+
+  const handleAcceptCaption = useCallback((caption, idx) => {
+    const entry = { text: caption, generatedBy: 'ai', generatedAt: new Date().toISOString() };
+    const existing = captions[captionAddTier];
+    if (existing.some(c => (typeof c === 'string' ? c : c.text) === caption)) return;
+    saveCaptions({ ...captions, [captionAddTier]: [...existing, entry] });
+    setAiAccepted(prev => ({ ...prev, captions: new Set([...prev.captions, idx]) }));
+  }, [captions, captionAddTier, saveCaptions]);
+
+  const handleAcceptHashtag = useCallback((tag, idx) => {
+    if (allHashtags.includes(tag)) return;
+    saveHashtags({ ...hashtags, [hashtagAddTier]: [...hashtags[hashtagAddTier], tag] });
+    setAiAccepted(prev => ({ ...prev, hashtags: new Set([...prev.hashtags, idx]) }));
+  }, [hashtags, hashtagAddTier, allHashtags, saveHashtags]);
+
+  const handleAcceptAllCaptions = useCallback(() => {
+    if (!aiResults?.captions?.length) return;
+    const existing = captions[captionAddTier];
+    const existingTexts = new Set(existing.map(c => typeof c === 'string' ? c : c.text));
+    const newEntries = aiResults.captions
+      .filter(cap => !existingTexts.has(cap))
+      .map(cap => ({ text: cap, generatedBy: 'ai', generatedAt: new Date().toISOString() }));
+    if (newEntries.length === 0) return;
+    saveCaptions({ ...captions, [captionAddTier]: [...existing, ...newEntries] });
+    setAiAccepted(prev => ({ ...prev, captions: new Set(aiResults.captions.map((_, i) => i)) }));
+  }, [aiResults, captions, captionAddTier, saveCaptions]);
+
+  const handleAcceptAllHashtags = useCallback(() => {
+    if (!aiResults?.hashtags?.length) return;
+    const existingSet = new Set(allHashtags);
+    const newTags = aiResults.hashtags.filter(t => !existingSet.has(t));
+    if (newTags.length === 0) return;
+    saveHashtags({ ...hashtags, [hashtagAddTier]: [...hashtags[hashtagAddTier], ...newTags] });
+    setAiAccepted(prev => ({ ...prev, hashtags: new Set(aiResults.hashtags.map((_, i) => i)) }));
+  }, [aiResults, hashtags, hashtagAddTier, allHashtags, saveHashtags]);
+
   if (!project) return null;
 
   const renderHashtagPill = (tag, tier, idx) => {
@@ -1942,6 +2061,115 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
         ))}
       </div>
 
+      {/* AI Generate Panel */}
+      <div className="flex w-full flex-col gap-3 rounded-lg border border-solid border-indigo-500/30 bg-indigo-500/5 p-5">
+        <button
+          className="flex items-center gap-2 bg-transparent border-none cursor-pointer p-0 w-full"
+          onClick={() => setShowAiPanel(!showAiPanel)}
+        >
+          <FeatherZap className="text-indigo-400" style={{ width: 14, height: 14 }} />
+          <span className="text-body-bold font-body-bold text-indigo-300">AI Generate</span>
+          <span className="ml-auto text-neutral-500 text-xs">{showAiPanel ? '▲' : '▼'}</span>
+        </button>
+
+        {showAiPanel && (
+          <div className="flex flex-col gap-3 mt-1">
+            <textarea
+              className="min-h-[48px] max-h-[100px] rounded-md border border-solid border-indigo-500/30 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500 resize-none"
+              placeholder="Describe the song/vibe (e.g., 'upbeat indie folk about summer love, acoustic guitar, chill vibes')..."
+              value={aiContext}
+              onChange={e => setAiContext(e.target.value)}
+              rows={2}
+            />
+            <div className="flex items-center gap-2">
+              <Button
+                variant="brand-primary"
+                size="small"
+                icon={<FeatherZap />}
+                loading={aiLoading}
+                disabled={aiLoading}
+                onClick={handleAiGenerate}
+              >
+                {aiLoading ? 'Generating...' : 'Generate Captions & Hashtags'}
+              </Button>
+              {aiResults && (
+                <span className="text-caption font-caption text-green-400">
+                  {aiResults.captions.length} captions, {aiResults.hashtags.length} hashtags
+                </span>
+              )}
+            </div>
+            {aiError && (
+              <span className="text-caption font-caption text-red-400">{aiError}</span>
+            )}
+
+            {/* AI Results — Captions */}
+            {aiResults?.captions?.length > 0 && (
+              <div className="flex flex-col gap-2 mt-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-indigo-400 uppercase tracking-wider">Generated Captions</span>
+                  <button
+                    className="text-[10px] font-semibold text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer ml-auto"
+                    onClick={handleAcceptAllCaptions}
+                  >
+                    Accept All → {captionAddTier === 'always' ? 'Always On' : 'Pool'}
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto">
+                  {aiResults.captions.map((cap, idx) => {
+                    const accepted = aiAccepted.captions.has(idx);
+                    return (
+                      <div key={idx} className={`flex items-start gap-2 rounded-md px-2.5 py-1.5 group ${accepted ? 'bg-green-500/10 border border-green-500/20' : 'bg-black/40 border border-neutral-200'}`}>
+                        <span className={`grow text-caption font-caption ${accepted ? 'text-green-300' : 'text-neutral-300'} line-clamp-3`}>{cap}</span>
+                        {!accepted ? (
+                          <button
+                            className="text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer p-0 flex-none text-[10px] font-semibold"
+                            onClick={() => handleAcceptCaption(cap, idx)}
+                          >
+                            Add
+                          </button>
+                        ) : (
+                          <FeatherCheck className="text-green-400 flex-none" style={{ width: 12, height: 12 }} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* AI Results — Hashtags */}
+            {aiResults?.hashtags?.length > 0 && (
+              <div className="flex flex-col gap-2 mt-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-indigo-400 uppercase tracking-wider">Generated Hashtags</span>
+                  <button
+                    className="text-[10px] font-semibold text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer ml-auto"
+                    onClick={handleAcceptAllHashtags}
+                  >
+                    Accept All → {hashtagAddTier === 'always' ? 'Always On' : 'Pool'}
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {aiResults.hashtags.map((tag, idx) => {
+                    const accepted = aiAccepted.hashtags.has(idx);
+                    return (
+                      <button
+                        key={idx}
+                        className={`rounded-full px-2.5 py-0.5 text-caption font-caption border cursor-pointer transition-all ${accepted ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20'}`}
+                        onClick={() => !accepted && handleAcceptHashtag(tag, idx)}
+                        disabled={accepted}
+                      >
+                        {accepted && <span className="mr-1">✓</span>}{tag}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Captions Section */}
       <div className="flex w-full flex-col gap-3 rounded-lg border border-solid border-neutral-200 bg-[#111111] p-5">
         <div className="flex items-center gap-2">
@@ -1955,13 +2183,18 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-green-500 uppercase tracking-wider">Always On</span>
             <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto">
-              {captions.always.map((cap, idx) => (
-                <div key={idx} className="flex items-start gap-2 rounded-md bg-green-500/5 border border-green-500/20 px-2.5 py-1.5 group">
-                  <span className="grow text-caption font-caption text-green-300 cursor-pointer hover:text-white line-clamp-3" title="Click to copy" onClick={() => { navigator.clipboard.writeText(cap); toastSuccess('Copied'); }}>{cap}</span>
-                  <button className="text-neutral-500 hover:text-indigo-400 bg-transparent border-none cursor-pointer p-0 text-[9px] opacity-0 group-hover:opacity-100" onClick={() => handleToggleCaptionTier('always', idx)} title="Move to Pool">↓</button>
-                  <button className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 flex-none opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveCaption('always', idx)}><FeatherTrash2 style={{ width: 12, height: 12 }} /></button>
-                </div>
-              ))}
+              {captions.always.map((cap, idx) => {
+                const text = getCaptionText(cap);
+                const isAi = typeof cap === 'object' && cap?.generatedBy === 'ai';
+                return (
+                  <div key={idx} className="flex items-start gap-2 rounded-md bg-green-500/5 border border-green-500/20 px-2.5 py-1.5 group">
+                    {isAi && <FeatherZap className="text-indigo-400 flex-none mt-0.5" style={{ width: 10, height: 10 }} />}
+                    <span className="grow text-caption font-caption text-green-300 cursor-pointer hover:text-white line-clamp-3" title="Click to copy" onClick={() => { navigator.clipboard.writeText(text); toastSuccess('Copied'); }}>{text}</span>
+                    <button className="text-neutral-500 hover:text-indigo-400 bg-transparent border-none cursor-pointer p-0 text-[9px] opacity-0 group-hover:opacity-100" onClick={() => handleToggleCaptionTier('always', idx)} title="Move to Pool">↓</button>
+                    <button className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 flex-none opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveCaption('always', idx)}><FeatherTrash2 style={{ width: 12, height: 12 }} /></button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -1971,13 +2204,18 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Pool</span>
             <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto">
-              {captions.pool.map((cap, idx) => (
-                <div key={idx} className="flex items-start gap-2 rounded-md bg-black px-2.5 py-1.5 group">
-                  <span className="grow text-caption font-caption text-neutral-300 cursor-pointer hover:text-white line-clamp-3" title="Click to copy" onClick={() => { navigator.clipboard.writeText(cap); toastSuccess('Copied'); }}>{cap}</span>
-                  <button className="text-neutral-500 hover:text-indigo-400 bg-transparent border-none cursor-pointer p-0 text-[9px] opacity-0 group-hover:opacity-100" onClick={() => handleToggleCaptionTier('pool', idx)} title="Make Always-On">↑</button>
-                  <button className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 flex-none opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveCaption('pool', idx)}><FeatherTrash2 style={{ width: 12, height: 12 }} /></button>
-                </div>
-              ))}
+              {captions.pool.map((cap, idx) => {
+                const text = getCaptionText(cap);
+                const isAi = typeof cap === 'object' && cap?.generatedBy === 'ai';
+                return (
+                  <div key={idx} className="flex items-start gap-2 rounded-md bg-black px-2.5 py-1.5 group">
+                    {isAi && <FeatherZap className="text-indigo-400 flex-none mt-0.5" style={{ width: 10, height: 10 }} />}
+                    <span className="grow text-caption font-caption text-neutral-300 cursor-pointer hover:text-white line-clamp-3" title="Click to copy" onClick={() => { navigator.clipboard.writeText(text); toastSuccess('Copied'); }}>{text}</span>
+                    <button className="text-neutral-500 hover:text-indigo-400 bg-transparent border-none cursor-pointer p-0 text-[9px] opacity-0 group-hover:opacity-100" onClick={() => handleToggleCaptionTier('pool', idx)} title="Make Always-On">↑</button>
+                    <button className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 flex-none opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveCaption('pool', idx)}><FeatherTrash2 style={{ width: 12, height: 12 }} /></button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

@@ -653,30 +653,37 @@ const StudioHome = ({
       e.target.value = '';
       return;
     }
-    // Multiple files → bulk upload directly to library + collection audio bank
+    // Multiple files → parallel upload via runPool
     setUploadProgress({ current: 0, total: files.length, percent: 0, name: files[0].name });
-    for (let i = 0; i < files.length; i++) {
-      try {
-        setUploadProgress({ current: i, total: files.length, percent: Math.round((i / files.length) * 100), name: files[i].name });
-        const converted = await convertAudioIfNeeded(files[i]);
-        const storagePath = `artists/${artistId}/audio/${Date.now()}_${converted.name}`;
-        const downloadURL = await uploadFile(converted, storagePath);
-        const duration = await getMediaDuration(converted);
-        const audioItem = {
-          id: `audio_${Date.now()}_${i}`,
-          name: converted.name,
-          type: MEDIA_TYPES.AUDIO,
-          url: downloadURL,
-          duration: duration || 0,
-          addedAt: new Date().toISOString()
-        };
-        await addToLibraryAsync(artistId, audioItem, db);
-        if (selectedCollection) {
-          await addToCollectionAsync(artistId, selectedCollection, [audioItem.id], db);
-        }
-      } catch (err) {
-        log.error(`[StudioHome] Failed to upload audio file ${files[i].name}:`, err);
+    const processAudio = async (rawFile, i) => {
+      const converted = await convertAudioIfNeeded(rawFile);
+      const storagePath = `artists/${artistId}/audio/${Date.now()}_${i}_${converted.name}`;
+      // Upload + duration in parallel
+      const [downloadURL, duration] = await Promise.all([
+        uploadFile(converted, storagePath),
+        getMediaDuration(URL.createObjectURL(converted), 'audio').catch(() => 0),
+      ]);
+      const audioItem = {
+        id: `audio_${Date.now()}_${i}`,
+        name: converted.name,
+        type: MEDIA_TYPES.AUDIO,
+        url: downloadURL,
+        duration: duration || 0,
+        addedAt: new Date().toISOString()
+      };
+      await addToLibraryAsync(artistId, audioItem, db);
+      if (selectedCollection) {
+        await addToCollectionAsync(artistId, selectedCollection, [audioItem.id], db);
       }
+      return audioItem;
+    };
+    try {
+      await runPool(files, processAudio, {
+        concurrency: 5,
+        onProgress: (done, total) => setUploadProgress({ current: done, total, percent: Math.round((done / total) * 100), name: '' }),
+      });
+    } catch (err) {
+      log.error('[StudioHome] Audio upload pool error:', err);
     }
     setUploadProgress({ current: 0, total: 0, percent: 0 });
     loadData();

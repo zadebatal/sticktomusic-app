@@ -106,6 +106,7 @@ const ClipperEditor = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
   const [videoName, setVideoName] = useState(existingSession?.name || existingVideo?.name || 'Untitled Clip');
   const [clips, setClips] = useState([]);
   const [markIn, setMarkIn] = useState(null);
@@ -252,9 +253,11 @@ const ClipperEditor = ({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    setVideoReady(false);
     const onTimeUpdate = () => setCurrentTime(video.currentTime);
     const onLoadedMetadata = () => {
       setDuration(video.duration);
+      setVideoReady(true);
       // Position playhead at 0 on load
       if (playheadRef.current) playheadRef.current.style.left = '0px';
     };
@@ -269,6 +272,7 @@ const ClipperEditor = ({
     // If metadata already loaded (race condition), read duration now
     if (video.readyState >= 1 && video.duration) {
       setDuration(video.duration);
+      setVideoReady(true);
     }
     return () => {
       video.removeEventListener('timeupdate', onTimeUpdate);
@@ -1054,14 +1058,20 @@ const ClipperEditor = ({
           ) : (
             <>
               {/* Video player */}
-              <div className="flex flex-1 items-center justify-center bg-black min-h-0 p-4">
+              <div className="flex flex-1 items-center justify-center bg-black min-h-0 p-4 relative">
+                {!videoReady && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+                    <span className="text-caption font-caption text-neutral-400">Loading video...</span>
+                  </div>
+                )}
                 <video
                   key={sourceUrl}
                   ref={videoRef}
                   src={sourceUrl}
                   crossOrigin="anonymous"
-                  preload="metadata"
-                  className="max-w-full max-h-full rounded-lg"
+                  preload="auto"
+                  className={`max-w-full max-h-full rounded-lg ${!videoReady ? 'opacity-0' : 'opacity-100'}`}
                   onClick={togglePlay}
                   playsInline
                 />
