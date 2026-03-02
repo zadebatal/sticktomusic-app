@@ -1411,12 +1411,13 @@ const ClipperEditor = ({
                         })()}
                       </div>
 
-                      {/* Cut lines — between adjacent clips */}
+                      {/* Cut lines — between adjacent clips (within 1s gap) */}
                       {clips.length > 1 && clips.map((clip, i) => {
                         if (i >= clips.length - 1) return null;
                         const next = clips[i + 1];
-                        if (Math.abs(clip.end - next.start) > 0.1) return null;
-                        const boundary = clip.end;
+                        const gap = next.start - clip.end;
+                        if (gap < -0.5 || gap > 1.0) return null; // skip if overlapping >0.5s or gap >1s
+                        const boundary = gap <= 0 ? clip.end : (clip.end + next.start) / 2; // midpoint for small gaps
                         return (
                           <div key={`cut-${i}`}>
                             <div style={{
