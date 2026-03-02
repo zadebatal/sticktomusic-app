@@ -1166,7 +1166,7 @@ export const assignToMediaBank = (artistId, collectionId, mediaIds, bankId, db =
 /**
  * Remove media IDs from a specific named media bank + sync niche.mediaIds
  */
-export const removeFromMediaBank = (artistId, collectionId, mediaIds, bankId, db = null) => {
+export const removeFromMediaBank = (artistId, collectionId, mediaIds, bankId, db = null, alsoRemoveFromNiche = false) => {
   const ids = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
   const collections = getUserCollections(artistId);
   const collection = collections.find(c => c.id === collectionId);
@@ -1177,7 +1177,15 @@ export const removeFromMediaBank = (artistId, collectionId, mediaIds, bankId, db
   const bank = collection.mediaBanks.find(b => b.id === bankId);
   if (!bank) return;
   bank.mediaIds = (bank.mediaIds || []).filter(id => !ids.includes(id));
-  syncMediaBankIds(collection);
+  // Also remove from niche entirely (mediaIds + all banks) in one atomic write
+  if (alsoRemoveFromNiche) {
+    collection.mediaBanks.forEach(b => {
+      b.mediaIds = (b.mediaIds || []).filter(id => !ids.includes(id));
+    });
+    collection.mediaIds = (collection.mediaIds || []).filter(id => !ids.includes(id));
+  } else {
+    syncMediaBankIds(collection);
+  }
   collection.updatedAt = new Date().toISOString();
   saveCollections(artistId, collections);
   if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);

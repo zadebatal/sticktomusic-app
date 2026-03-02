@@ -22,7 +22,6 @@ import {
   addToLibraryAsync,
   addToCollectionAsync,
   addToProjectPool,
-  removeFromCollection,
   migrateToMediaBanks,
   addMediaBank,
   removeMediaBank,
@@ -449,11 +448,10 @@ const VideoNicheContent = ({
     });
   }, [artistId, niche, db]);
 
-  // Remove item from a specific bank + remove from niche entirely
+  // Remove item from bank + niche entirely in one atomic write
   const handleRemoveFromBank = useCallback((mediaId, bankId) => {
     if (!niche) return;
-    removeFromMediaBank(artistId, niche.id, [mediaId], bankId, db);
-    removeFromCollection(artistId, niche.id, [mediaId], db);
+    removeFromMediaBank(artistId, niche.id, [mediaId], bankId, db, true);
   }, [artistId, niche, db]);
 
   // Filtered onMakeVideo — passes selected bank IDs
