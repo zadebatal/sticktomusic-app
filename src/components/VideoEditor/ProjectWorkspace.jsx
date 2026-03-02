@@ -1161,6 +1161,7 @@ const ProjectWorkspace = ({
             onUploadToMediaBank={handleUploadToMediaBank}
             onImportToMediaBank={handleImportToMediaBank}
             onWebImportToMediaBank={handleWebImportToMediaBank}
+            onRefreshCollections={() => setCollections(getCollections(artistId))}
             onAddLyrics={onAddLyrics}
             onUpdateLyrics={onUpdateLyrics}
             onDeleteLyrics={onDeleteLyrics}

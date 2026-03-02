@@ -65,6 +65,7 @@ const VideoNicheContent = ({
   onWebImportToMediaBank,
   selectedMediaBankIds: externalSelectedBankIds,
   onSelectedMediaBankIdsChange,
+  onRefreshCollections,
   onAddLyrics,
   onUpdateLyrics,
   onDeleteLyrics,
@@ -426,7 +427,8 @@ const VideoNicheContent = ({
     addMediaBank(artistId, niche.id, newBankName.trim(), db);
     setNewBankName('');
     setShowNewBankInput(false);
-  }, [newBankName, artistId, niche, db]);
+    onRefreshCollections?.();
+  }, [newBankName, artistId, niche, db, onRefreshCollections]);
 
   // Rename media bank handler
   const handleRenameMediaBank = useCallback(() => {
@@ -434,7 +436,8 @@ const VideoNicheContent = ({
     renameMediaBank(artistId, niche.id, renamingBankId, renameValue.trim(), db);
     setRenamingBankId(null);
     setRenameValue('');
-  }, [renameValue, artistId, niche, renamingBankId, db]);
+    onRefreshCollections?.();
+  }, [renameValue, artistId, niche, renamingBankId, db, onRefreshCollections]);
 
   // Delete media bank handler
   const handleDeleteMediaBank = useCallback((bankId) => {
@@ -446,13 +449,15 @@ const VideoNicheContent = ({
       next.delete(bankId);
       return next;
     });
-  }, [artistId, niche, db]);
+    onRefreshCollections?.();
+  }, [artistId, niche, db, onRefreshCollections]);
 
   // Remove item from bank + niche entirely in one atomic write
   const handleRemoveFromBank = useCallback((mediaId, bankId) => {
     if (!niche) return;
     removeFromMediaBank(artistId, niche.id, [mediaId], bankId, db, true);
-  }, [artistId, niche, db]);
+    onRefreshCollections?.();
+  }, [artistId, niche, db, onRefreshCollections]);
 
   // Filtered onMakeVideo — passes selected bank IDs
   const handleMakeVideoFiltered = useCallback((format, nicheId, existingDraft) => {
