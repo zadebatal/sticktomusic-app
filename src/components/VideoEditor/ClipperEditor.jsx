@@ -638,6 +638,8 @@ const ClipperEditor = ({
     const rect = container.getBoundingClientRect();
     const clickX = e.clientX - rect.left + container.scrollLeft;
     seekTo(Math.max(0, Math.min(d, clickX / pxPerSecRef.current)));
+    // Deselect active clip when clicking empty space on the timeline
+    setActiveClipIdx(null);
   }, [seekTo]);
 
   // ── Build session data from current state ──
@@ -779,8 +781,11 @@ const ClipperEditor = ({
 
   // ── Export clips to banks (replaces handleExport) ──
   const handleExportToBanks = useCallback(async () => {
-    const unexported = clips.filter(c => !c.exportedMediaId);
-    if (unexported.length === 0) {
+    // Use the selection-aware list: if a clip is selected, only that one; otherwise all unexported
+    const toExport = activeClipIdx !== null && activeClipIdx >= 0 && activeClipIdx < clips.length
+      ? (clips[activeClipIdx] && !clips[activeClipIdx].exportedMediaId ? [clips[activeClipIdx]] : [])
+      : clips.filter(c => !c.exportedMediaId);
+    if (toExport.length === 0) {
       toastSuccess('All clips already exported');
       return;
     }
@@ -805,8 +810,8 @@ const ClipperEditor = ({
       const inputName = `source.${ext}`;
       await ffmpeg.writeFile(inputName, sourceData);
 
-      for (let i = 0; i < unexported.length; i++) {
-        const clip = unexported[i];
+      for (let i = 0; i < toExport.length; i++) {
+        const clip = toExport[i];
         const outputName = `clip_${i}.${ext}`;
         const clipDuration = clip.end - clip.start;
 
@@ -903,7 +908,7 @@ const ClipperEditor = ({
         }
 
         setExportedCount(i + 1);
-        setExportProgress(Math.round(((i + 1) / unexported.length) * 100));
+        setExportProgress(Math.round(((i + 1) / toExport.length) * 100));
       }
 
       await ffmpeg.deleteFile(inputName);
@@ -938,7 +943,7 @@ const ClipperEditor = ({
         toastSuccess(`Exported ${results.length} clip${results.length !== 1 ? 's' : ''} to banks`);
       }
     }
-  }, [clips, sourceFile, sourceUrl, sourceName, videoName, bankLabels, buildSessionData, onSaveSession, toastSuccess, toastError, artistId, db, nicheId, projectId, exportDestinations]);
+  }, [clips, activeClipIdx, sourceFile, sourceUrl, sourceName, videoName, bankLabels, buildSessionData, onSaveSession, toastSuccess, toastError, artistId, db, nicheId, projectId, exportDestinations]);
 
   // ── Keyboard shortcuts (reads video.currentTime directly for accuracy) ──
   useEffect(() => {
@@ -993,7 +998,15 @@ const ClipperEditor = ({
     return map;
   }, [clips, bankLabels]);
 
-  const unexportedCount = useMemo(() => clips.filter(c => !c.exportedMediaId).length, [clips]);
+  // Selection-aware export: if a clip is selected, export only that one; otherwise all unexported
+  const clipsToExport = useMemo(() => {
+    if (activeClipIdx !== null && activeClipIdx >= 0 && activeClipIdx < clips.length) {
+      const selected = clips[activeClipIdx];
+      return selected && !selected.exportedMediaId ? [selected] : [];
+    }
+    return clips.filter(c => !c.exportedMediaId);
+  }, [clips, activeClipIdx]);
+  const unexportedCount = clipsToExport.length;
 
   // ── Unsaved changes guard (beforeunload + back button) ──
   const [savedClean, setSavedClean] = useState(false);
