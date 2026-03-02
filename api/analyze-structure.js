@@ -101,27 +101,35 @@ const SYSTEM_PROMPT = `You are an expert music structure analyst who labels song
 - Times are in seconds (decimal)
 - Return valid JSON only, no markdown fences`;
 
-function buildUserPrompt(transcript, words, totalDuration) {
+function buildUserPrompt(transcript, words, totalDuration, publishedLyrics) {
   const wordList = words.map(w =>
     `[${w.startTime.toFixed(2)}s] ${w.text}`
   ).join('\n');
 
-  return `Analyze this song's structure. Total duration: ${totalDuration.toFixed(1)}s
+  let prompt = `Analyze this song's structure. Total duration: ${totalDuration.toFixed(1)}s\n\n`;
 
-Full lyrics:
-"${transcript}"
+  if (publishedLyrics) {
+    prompt += `PUBLISHED LYRICS (use these section labels as ground truth — they are the correct, official labels):\n${publishedLyrics}\n\n`;
+    prompt += `TRANSCRIPTION WITH TIMESTAMPS (use these for accurate timing — match each section from the published lyrics to the closest timestamp):\n`;
+  } else {
+    prompt += `Transcribed lyrics:\n"${transcript}"\n\n`;
+  }
 
-Word timestamps:
-${wordList}
+  prompt += `Word timestamps:\n${wordList}\n\n`;
 
-First, mentally identify which lyrics repeat (those are choruses). Then label every section.
+  if (publishedLyrics) {
+    prompt += `Map the published lyrics section headers (like [Verse 1], [Chorus], etc.) onto the timestamps. Use the published section names exactly as they appear. If the published lyrics have no section headers, infer sections by comparing published lyrics to the timestamped words.\n\n`;
+  } else {
+    prompt += `First, mentally identify which lyrics repeat (those are choruses). Then label every section.\n\n`;
+  }
 
-Return JSON in this exact format:
-{"sections":[{"name":"Verse 1","type":"verse","startTime":0.0,"endTime":30.5,"lyricSnippet":"first few words here"},{"name":"Chorus 1","type":"chorus","startTime":30.5,"endTime":55.2,"lyricSnippet":"repeated lyrics here"}],"confidence":0.85}`;
+  prompt += `Return JSON in this exact format:\n{"sections":[{"name":"Verse 1","type":"verse","startTime":0.0,"endTime":30.5,"lyricSnippet":"first few words here"},{"name":"Chorus 1","type":"chorus","startTime":30.5,"endTime":55.2,"lyricSnippet":"repeated lyrics here"}],"confidence":0.85}`;
+
+  return prompt;
 }
 
-async function callClaude(transcript, words, totalDuration, apiKey) {
-  const userPrompt = buildUserPrompt(transcript, words, totalDuration);
+async function callClaude(transcript, words, totalDuration, apiKey, publishedLyrics) {
+  const userPrompt = buildUserPrompt(transcript, words, totalDuration, publishedLyrics);
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -186,7 +194,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { transcript, words, totalDuration } = req.body;
+    const { transcript, words, totalDuration, publishedLyrics } = req.body;
 
     if (!transcript || !words || !Array.isArray(words)) {
       return res.status(400).json({ error: 'Missing transcript or words array' });
@@ -200,11 +208,11 @@ export default async function handler(req, res) {
     // Call Claude — retry once on bad JSON
     let result;
     try {
-      result = await callClaude(transcript, words, totalDuration || 0, anthropicKey);
+      result = await callClaude(transcript, words, totalDuration || 0, anthropicKey, publishedLyrics || null);
     } catch (parseError) {
       // Retry with stricter prompt
       try {
-        result = await callClaude(transcript, words, totalDuration || 0, anthropicKey);
+        result = await callClaude(transcript, words, totalDuration || 0, anthropicKey, publishedLyrics || null);
       } catch (retryError) {
         return res.status(500).json({ error: 'Failed to parse song structure: ' + retryError.message });
       }

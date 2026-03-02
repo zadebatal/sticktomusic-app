@@ -33,6 +33,7 @@ import { addToLibraryAsync, addToLibrary, addToCollection, addToProjectPool, get
 import { transcribeAudio } from '../../services/whisperService';
 import { analyzeSongStructure } from '../../services/structureAnalysisService';
 import { extractAudioSnippet } from '../../utils/audioSnippet';
+import { recognizeSong, fetchSyncedLyrics } from '../../services/lyricsLookupService';
 // ── FFmpeg singleton (lazy-loaded) ──
 let ffmpegInstance = null;
 let ffmpegLoadPromise = null;
@@ -496,9 +497,26 @@ const ClipperEditor = ({
         return;
       }
 
-      // 4. Analyze structure via Claude
-      setDetectProgress('Analyzing song structure...');
-      const result = await analyzeSongStructure(transcription, capDuration, (msg) => setDetectProgress(msg));
+      // 4. Try to identify the song and fetch published lyrics for better section labels
+      let publishedLyrics = null;
+      try {
+        setDetectProgress('Identifying song...');
+        const recognition = await recognizeSong(audioSource);
+        if (recognition?.found && recognition.artist && recognition.title) {
+          setDetectProgress(`Found: ${recognition.artist} — ${recognition.title}. Fetching lyrics...`);
+          const lyricsResult = await fetchSyncedLyrics(recognition.artist, recognition.title);
+          if (lyricsResult?.plainLyrics) {
+            publishedLyrics = lyricsResult.plainLyrics;
+          }
+        }
+      } catch (e) {
+        // Non-fatal — continue without published lyrics
+        log.warn('Song recognition/lyrics lookup failed:', e.message);
+      }
+
+      // 5. Analyze structure via Claude (with published lyrics if available)
+      setDetectProgress(publishedLyrics ? 'Analyzing with published lyrics...' : 'Analyzing song structure...');
+      const result = await analyzeSongStructure(transcription, capDuration, (msg) => setDetectProgress(msg), publishedLyrics);
 
       if (!result.sections || result.sections.length === 0) {
         toastError('Could not identify song sections');
