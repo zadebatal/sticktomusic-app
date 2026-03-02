@@ -1168,6 +1168,30 @@ export const assignToMediaBank = (artistId, collectionId, mediaIds, bankId, db =
 };
 
 /**
+ * Move media IDs from one named bank to another (remove from source, add to target)
+ */
+export const moveMediaBetweenBanks = (artistId, collectionId, mediaIds, fromBankId, toBankId, db = null) => {
+  const ids = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection) return;
+  const migrated = migrateToMediaBanks(collection);
+  Object.assign(collection, migrated);
+  if (!Array.isArray(collection.mediaBanks)) return;
+  const fromBank = collection.mediaBanks.find(b => b.id === fromBankId);
+  const toBank = collection.mediaBanks.find(b => b.id === toBankId);
+  if (!fromBank || !toBank) return;
+  // Remove from source
+  fromBank.mediaIds = (fromBank.mediaIds || []).filter(id => !ids.includes(id));
+  // Add to target (dedupe)
+  toBank.mediaIds = [...new Set([...(toBank.mediaIds || []), ...ids])];
+  syncMediaBankIds(collection);
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+  if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
+};
+
+/**
  * Remove media IDs from a specific named media bank + sync niche.mediaIds
  */
 export const removeFromMediaBank = (artistId, collectionId, mediaIds, bankId, db = null, alsoRemoveFromNiche = false) => {
@@ -4888,6 +4912,7 @@ export default {
   renameMediaBank,
   assignToMediaBank,
   removeFromMediaBank,
+  moveMediaBetweenBanks,
 
   // Niche / Format System
   FORMAT_TEMPLATES,

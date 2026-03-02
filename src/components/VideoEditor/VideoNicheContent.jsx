@@ -27,10 +27,12 @@ import {
   removeMediaBank,
   renameMediaBank,
   removeFromMediaBank,
+  moveMediaBetweenBanks,
   getBankColor,
   MAX_MEDIA_BANKS,
 } from '../../services/libraryService';
 import { getLyrics } from '../../services/libraryService';
+import useMediaMultiSelect from './shared/useMediaMultiSelect';
 import useDragReorder from './shared/useDragReorder';
 import QuickTrimPopover from './shared/QuickTrimPopover';
 import LyricBankSection from './shared/LyricBankSection';
@@ -85,6 +87,130 @@ const VideoNicheContent = ({
   // Use external state if provided (lifted to parent), otherwise internal
   const selectedBankIds = externalSelectedBankIds !== undefined ? externalSelectedBankIds : null;
   const setSelectedBankIds = onSelectedMediaBankIdsChange || (() => {});
+
+  // Multi-select state for bank media (selection scoped to one bank at a time)
+  const [bankSelectedIds, setBankSelectedIds] = useState(new Set());
+  const [selectionBankId, setSelectionBankId] = useState(null);
+  const [bankRubberBand, setBankRubberBand] = useState(null);
+  const bankDragStartRef = useRef(null);
+  const bankDragPriorRef = useRef(new Set());
+  const bankGridRefs = useRef({});
+
+  const handleBankItemClick = useCallback((itemId, bankId, e) => {
+    // If clicking in a different bank, reset selection to this bank
+    if (selectionBankId !== bankId) {
+      setSelectionBankId(bankId);
+      setBankSelectedIds(new Set([itemId]));
+      return;
+    }
+    setBankSelectedIds(prev => {
+      const next = new Set(prev);
+      if (e?.shiftKey && prev.size > 0) {
+        // Shift-click range select within bank
+        const bankObj = mediaBanks.find(b => b.id === bankId);
+        const ids = (bankObj?.mediaIds || []).filter(id => library.some(l => l.id === id && l.type !== 'audio'));
+        const lastSelected = [...prev].pop();
+        const startIdx = ids.indexOf(lastSelected);
+        const endIdx = ids.indexOf(itemId);
+        if (startIdx >= 0 && endIdx >= 0) {
+          const [lo, hi] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+          for (let i = lo; i <= hi; i++) next.add(ids[i]);
+        }
+      } else if (e?.metaKey || e?.ctrlKey) {
+        if (next.has(itemId)) next.delete(itemId);
+        else next.add(itemId);
+      } else {
+        // Plain click — toggle if already sole selection, else select only this
+        if (next.size === 1 && next.has(itemId)) return new Set();
+        return new Set([itemId]);
+      }
+      return next;
+    });
+  }, [selectionBankId, mediaBanks, library]);
+
+  const clearBankSelection = useCallback(() => {
+    setBankSelectedIds(new Set());
+    setSelectionBankId(null);
+  }, []);
+
+  // Rubber-band handlers for bank grids
+  const handleBankGridMouseDown = useCallback((e, bankId) => {
+    if (e.button !== 0) return;
+    const gridEl = bankGridRefs.current[bankId];
+    if (!gridEl) return;
+    // Don't start rubber-band on buttons or already-selected items
+    if (e.target.closest('button')) return;
+    const mediaEl = e.target.closest('[data-media-id]');
+    if (mediaEl && bankSelectedIds.has(mediaEl.getAttribute('data-media-id')) && selectionBankId === bankId) return;
+    e.preventDefault();
+    const rect = gridEl.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top + gridEl.scrollTop;
+    bankDragStartRef.current = { x, y, bankId };
+    bankDragPriorRef.current = (e.shiftKey && selectionBankId === bankId) ? new Set(bankSelectedIds) : new Set();
+    setSelectionBankId(bankId);
+    if (!e.shiftKey) setBankSelectedIds(new Set());
+  }, [bankSelectedIds, selectionBankId]);
+
+  const handleBankGridMouseMove = useCallback((e) => {
+    if (!bankDragStartRef.current) return;
+    const { bankId } = bankDragStartRef.current;
+    const gridEl = bankGridRefs.current[bankId];
+    if (!gridEl) return;
+    const rect = gridEl.getBoundingClientRect();
+    const curX = e.clientX - rect.left;
+    const curY = e.clientY - rect.top + gridEl.scrollTop;
+    const startX = bankDragStartRef.current.x;
+    const startY = bankDragStartRef.current.y;
+    // Only start rubber-band if moved >4px
+    if (Math.abs(curX - startX) < 4 && Math.abs(curY - startY) < 4) return;
+    const scrollTop = gridEl.scrollTop;
+    setBankRubberBand({
+      bankId,
+      left: Math.min(startX, curX),
+      top: Math.min(startY, curY) - scrollTop,
+      width: Math.abs(curX - startX),
+      height: Math.abs(curY - startY),
+    });
+    // Hit-test
+    const minX = Math.min(startX, curX);
+    const maxX = Math.max(startX, curX);
+    const minY = Math.min(startY, curY);
+    const maxY = Math.max(startY, curY);
+    const els = gridEl.querySelectorAll('[data-media-id]');
+    const next = new Set(bankDragPriorRef.current);
+    els.forEach(el => {
+      const elLeft = el.offsetLeft;
+      const elTop = el.offsetTop;
+      const elRight = elLeft + el.offsetWidth;
+      const elBottom = elTop + el.offsetHeight;
+      if (elRight >= minX && elLeft <= maxX && elBottom >= minY && elTop <= maxY) {
+        next.add(el.getAttribute('data-media-id'));
+      }
+    });
+    setBankSelectedIds(next);
+  }, []);
+
+  const handleBankGridMouseUp = useCallback(() => {
+    bankDragStartRef.current = null;
+    setBankRubberBand(null);
+  }, []);
+
+  // Move selected media to another bank
+  const handleMoveToBank = useCallback((toBankId) => {
+    if (!niche || !selectionBankId || bankSelectedIds.size === 0) return;
+    moveMediaBetweenBanks(artistId, niche.id, [...bankSelectedIds], selectionBankId, toBankId, db);
+    clearBankSelection();
+    onRefreshCollections?.();
+  }, [niche, artistId, selectionBankId, bankSelectedIds, db, clearBankSelection, onRefreshCollections]);
+
+  // Delete selected from bank
+  const handleDeleteSelected = useCallback(() => {
+    if (!niche || !selectionBankId || bankSelectedIds.size === 0) return;
+    removeFromMediaBank(artistId, niche.id, [...bankSelectedIds], selectionBankId, db, true);
+    clearBankSelection();
+    onRefreshCollections?.();
+  }, [niche, artistId, selectionBankId, bankSelectedIds, db, clearBankSelection, onRefreshCollections]);
 
   // Audio preview playback
   const [playingAudioId, setPlayingAudioId] = useState(null);
@@ -625,15 +751,63 @@ const VideoNicheContent = ({
                         />
                       )}
                     </div>
+                    {/* Selection action bar */}
+                    {selectionBankId === bank.id && bankSelectedIds.size > 0 && (
+                      <div className="flex items-center gap-2 rounded-md bg-neutral-100 px-3 py-1.5">
+                        <span className="text-caption-bold font-caption-bold text-white">{bankSelectedIds.size} selected</span>
+                        <div className="flex-1" />
+                        {mediaBanks.length > 1 && mediaBanks.filter(b => b.id !== bank.id).map((targetBank, tIdx) => {
+                          const tColor = getBankColor(mediaBanks.indexOf(targetBank));
+                          return (
+                            <button key={targetBank.id}
+                              className="flex items-center gap-1 rounded px-2 py-0.5 text-caption font-caption bg-transparent border border-solid cursor-pointer hover:brightness-125 transition-colors"
+                              style={{ borderColor: tColor.primary, color: tColor.light }}
+                              onClick={() => handleMoveToBank(targetBank.id)}
+                            >
+                              <div className="h-2 w-2 rounded-full" style={{ backgroundColor: tColor.primary }} />
+                              Move to {targetBank.name}
+                            </button>
+                          );
+                        })}
+                        <button
+                          className="flex items-center gap-1 rounded px-2 py-0.5 text-caption font-caption bg-transparent border border-solid border-red-500/50 text-red-400 cursor-pointer hover:bg-red-500/10 transition-colors"
+                          onClick={handleDeleteSelected}
+                        >
+                          <FeatherX style={{ width: 10, height: 10 }} /> Remove
+                        </button>
+                        <button
+                          className="text-caption font-caption text-neutral-400 bg-transparent border-none cursor-pointer hover:text-white"
+                          onClick={clearBankSelection}
+                        >Cancel</button>
+                      </div>
+                    )}
                     {/* Bank media grid */}
                     {bankMedia.length > 0 ? (
-                      <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-200 bg-[#111118] p-2" style={{ maxHeight: 220 }}>
+                      <div
+                        className="relative w-full overflow-y-auto rounded-lg border border-solid border-neutral-200 bg-[#111118] p-2 select-none"
+                        style={{ maxHeight: 220 }}
+                        ref={el => { bankGridRefs.current[bank.id] = el; }}
+                        onMouseDown={e => handleBankGridMouseDown(e, bank.id)}
+                        onMouseMove={handleBankGridMouseMove}
+                        onMouseUp={handleBankGridMouseUp}
+                        onMouseLeave={handleBankGridMouseUp}
+                      >
+                        {/* Rubber-band overlay */}
+                        {bankRubberBand && bankRubberBand.bankId === bank.id && (
+                          <div className="absolute z-10 rounded border border-solid border-blue-400/60 bg-blue-400/15 pointer-events-none"
+                            style={{ left: bankRubberBand.left, top: bankRubberBand.top, width: bankRubberBand.width, height: bankRubberBand.height }}
+                          />
+                        )}
                         <div className="grid w-full grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-1.5">
-                          {bankMedia.map((item, idx) => (
+                          {bankMedia.map((item, idx) => {
+                            const isItemSelected = selectionBankId === bank.id && bankSelectedIds.has(item.id);
+                            return (
                             <div
                               key={item.id}
+                              data-media-id={item.id}
                               className="relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group"
-                              onClick={() => setLightboxItem(item)}
+                              style={isItemSelected ? { outline: '2px solid #60a5fa', outlineOffset: -1 } : undefined}
+                              onClick={(e) => { e.stopPropagation(); handleBankItemClick(item.id, bank.id, e); }}
                             >
                               {item.type === 'video' ? (
                                 <>
@@ -674,15 +848,23 @@ const VideoNicheContent = ({
                               <div className="absolute top-0.5 left-0.5 z-[3] rounded bg-black/60 px-1 py-px">
                                 <span className="text-[9px] font-mono text-white/70">{idx + 1}</span>
                               </div>
-                              <button
-                                className="absolute top-0.5 right-0.5 z-[4] flex h-4 w-4 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
-                                onClick={(e) => { e.stopPropagation(); handleRemoveFromBank(item.id, bank.id); }}
-                                title="Remove from bank"
-                              >
-                                <FeatherX className="text-white" style={{ width: 8, height: 8 }} />
-                              </button>
+                              {/* Selection checkmark */}
+                              {isItemSelected && (
+                                <div className="absolute top-0.5 right-0.5 z-[5] flex h-4 w-4 items-center justify-center rounded-full bg-blue-500">
+                                  <FeatherCheck className="text-white" style={{ width: 9, height: 9 }} />
+                                </div>
+                              )}
+                              {!isItemSelected && (
+                                <button
+                                  className="absolute top-0.5 right-0.5 z-[4] flex h-4 w-4 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
+                                  onClick={(e) => { e.stopPropagation(); handleRemoveFromBank(item.id, bank.id); }}
+                                  title="Remove from bank"
+                                >
+                                  <FeatherX className="text-white" style={{ width: 8, height: 8 }} />
+                                </button>
+                              )}
                             </div>
-                          ))}
+                          );})}
                           <div
                             className="flex flex-col items-center justify-center aspect-square rounded border border-dashed cursor-pointer hover:bg-opacity-10 transition-colors"
                             style={{ borderColor: color.border }}
