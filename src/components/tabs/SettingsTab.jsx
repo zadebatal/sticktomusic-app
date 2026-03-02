@@ -47,12 +47,14 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
   const [cancelMessage, setCancelMessage] = useState('');
   const [showPfpUpload, setShowPfpUpload] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
 
   // Conductor user management state
   const [inviteRole, setInviteRole] = useState('operator');
   const [editingUser, setEditingUser] = useState(null); // email of user being role-edited
   const [editRole, setEditRole] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(null); // email of user pending delete
+  const [loadingAction, setLoadingAction] = useState(null); // email of user action in progress
 
   // Cloud storage state
   const [driveSettings, setDriveSettings] = useState(null);
@@ -123,27 +125,35 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
 
   const canCancel = shouldShowPaymentUI(user) && user?.subscriptionId && user?.subscriptionStatus === 'active';
 
-  const handleCancelSubscription = async () => {
-    if (!window.confirm('Are you sure you want to cancel your subscription? Your access will continue until the end of the billing period.')) return;
-    setCancelLoading(true);
-    setCancelMessage('');
-    try {
-      const auth = getAuth();
-      const token = await auth.currentUser?.getIdToken();
-      const response = await fetch('/api/cancel-subscription', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      });
-      const data = await response.json();
-      if (data.success) {
-        setCancelMessage(data.message || 'Subscription cancelled.');
-      } else {
-        setCancelMessage(data.error || 'Failed to cancel.');
-      }
-    } catch (err) {
-      setCancelMessage('Failed to cancel subscription.');
-    }
-    setCancelLoading(false);
+  const handleCancelSubscription = () => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Cancel Subscription',
+      message: 'Are you sure you want to cancel your subscription? Your access will continue until the end of the billing period.',
+      confirmLabel: 'Cancel Subscription',
+      onConfirm: async () => {
+        setConfirmDialog({ isOpen: false });
+        setCancelLoading(true);
+        setCancelMessage('');
+        try {
+          const auth = getAuth();
+          const token = await auth.currentUser?.getIdToken();
+          const response = await fetch('/api/cancel-subscription', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          });
+          const data = await response.json();
+          if (data.success) {
+            setCancelMessage(data.message || 'Subscription cancelled.');
+          } else {
+            setCancelMessage(data.error || 'Failed to cancel.');
+          }
+        } catch (err) {
+          setCancelMessage('Failed to cancel subscription.');
+        }
+        setCancelLoading(false);
+      },
+    });
   };
 
   const handleInvite = async (e) => {
@@ -189,6 +199,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
   const isConductor = user?.role === 'conductor';
 
   const handleRoleChange = async (email, newRole) => {
+    setLoadingAction(email);
     try {
       await updateDoc(doc(db, 'allowedUsers', email), { role: newRole });
       toastSuccess(`Updated ${email} to ${newRole}`);
@@ -196,15 +207,29 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
     } catch (err) {
       toastError('Failed to update role: ' + (err?.message || String(err)));
     }
+    setLoadingAction(null);
   };
 
   const handleToggleStatus = async (email, currentStatus) => {
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-    try {
-      await updateDoc(doc(db, 'allowedUsers', email), { status: newStatus });
-      toastSuccess(`${email} is now ${newStatus}`);
-    } catch (err) {
-      toastError('Failed to update status');
+    const doToggle = async () => {
+      try {
+        await updateDoc(doc(db, 'allowedUsers', email), { status: newStatus });
+        toastSuccess(`${email} is now ${newStatus}`);
+      } catch (err) {
+        toastError('Failed to update status');
+      }
+    };
+    if (newStatus === 'inactive') {
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Deactivate User',
+        message: `Deactivate ${email}? They will lose access until reactivated.`,
+        confirmLabel: 'Deactivate',
+        onConfirm: () => { setConfirmDialog({ isOpen: false }); doToggle(); },
+      });
+    } else {
+      doToggle();
     }
   };
 
@@ -233,7 +258,14 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
       {/* ═══ PROFILE HERO ═══ */}
       <div className="mt-6 flex w-full items-center gap-6 rounded-xl border border-solid border-neutral-200 p-6"
         style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' }}>
-        <div className="relative cursor-pointer" onClick={() => setShowPfpUpload(true)}>
+        <div
+          className="relative cursor-pointer"
+          tabIndex={0}
+          role="button"
+          aria-label="Change profile picture"
+          onClick={() => setShowPfpUpload(true)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowPfpUpload(true); } }}
+        >
           {user?.photoURL ? (
             <img src={user.photoURL} alt="" className="h-20 w-20 rounded-full object-cover ring-2 ring-white/20" />
           ) : (
@@ -327,18 +359,25 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
                         <td className="py-3 pr-4 text-neutral-400">{u.email || '—'}</td>
                         <td className="py-3 pr-4">
                           {editingUser === u.email ? (
-                            <select
-                              value={editRole}
-                              onChange={(e) => setEditRole(e.target.value)}
-                              onBlur={() => { if (editRole !== u.role) handleRoleChange(u.email, editRole); else setEditingUser(null); }}
-                              autoFocus
-                              className="rounded border border-neutral-200 bg-neutral-50 px-2 py-1 text-sm text-white outline-none focus:border-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-500/50"
-                            >
-                              <option value="conductor">Conductor</option>
-                              <option value="operator">Operator</option>
-                              <option value="artist">Artist</option>
-                              <option value="collaborator">Collaborator</option>
-                            </select>
+                            <div className="flex items-center gap-1">
+                              <select
+                                value={editRole}
+                                onChange={(e) => setEditRole(e.target.value)}
+                                autoFocus
+                                className="rounded border border-neutral-200 bg-neutral-50 px-2 py-1 text-sm text-white outline-none focus:border-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-500/50"
+                              >
+                                <option value="conductor">Conductor</option>
+                                <option value="operator">Operator</option>
+                                <option value="artist">Artist</option>
+                                <option value="collaborator">Collaborator</option>
+                              </select>
+                              <Button variant="brand-primary" size="small" disabled={loadingAction === u.email || editRole === u.role} onClick={() => handleRoleChange(u.email, editRole)}>
+                                Save
+                              </Button>
+                              <Button variant="neutral-tertiary" size="small" onClick={() => setEditingUser(null)}>
+                                Cancel
+                              </Button>
+                            </div>
                           ) : (
                             <Badge variant={u.role === 'conductor' ? 'brand' : 'neutral'} className="capitalize">{u.role || 'operator'}</Badge>
                           )}
@@ -611,6 +650,16 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
         confirmVariant="destructive"
         onConfirm={() => { setShowLogoutConfirm(false); onLogout(); }}
         onCancel={() => setShowLogoutConfirm(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        confirmVariant="destructive"
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ isOpen: false })}
       />
     </div>
   );

@@ -211,16 +211,6 @@ const PhotoMontageEditor = ({
   // ── Beat detection ──
   const { beats, bpm, isAnalyzing: beatAnalyzing, analyzeAudio } = useBeatDetection();
 
-  // Audio trim boundaries for beat normalization
-  const audioStartTime = selectedAudio?.startTime || 0;
-  const audioEndTime = selectedAudio?.endTime || waveformDuration || audioDuration || selectedAudio?.duration || 0;
-
-  // Filter beats to trimmed range and normalize to local time
-  const filteredBeats = useMemo(() => {
-    if (!beats.length) return [];
-    return normalizeBeatsToTrimRange(beats, audioStartTime, audioEndTime);
-  }, [beats, audioStartTime, audioEndTime]);
-
   // ── Export state ──
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
@@ -322,6 +312,16 @@ const PhotoMontageEditor = ({
     clips: EMPTY_CLIPS,
     getClipUrl: NULL_URL
   });
+
+  // Audio trim boundaries for beat normalization (must be after useWaveform)
+  const audioStartTime = selectedAudio?.startTime || 0;
+  const audioEndTime = selectedAudio?.endTime || waveformDuration || audioDuration || selectedAudio?.duration || 0;
+
+  // Filter beats to trimmed range and normalize to local time
+  const filteredBeats = useMemo(() => {
+    if (!beats.length) return [];
+    return normalizeBeatsToTrimRange(beats, audioStartTime, audioEndTime);
+  }, [beats, audioStartTime, audioEndTime]);
 
   // ── Multi-video: switch, delete, generate ──
   const switchToVideo = useCallback((index) => {

@@ -607,6 +607,9 @@ const ProjectWorkspace = ({
           return [...smart, ...merged];
         });
         toastSuccess(`${uploadedItems.length} item${uploadedItems.length > 1 ? 's' : ''} uploaded`);
+        if (errors.length > 0) {
+          toastError(`${errors.length} file(s) failed to upload`);
+        }
       } else if (errors.length > 0) {
         toastError(`Upload failed: ${errors[0].error?.message || 'unknown error'}`);
       }

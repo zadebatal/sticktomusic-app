@@ -55,7 +55,7 @@ const SchedulingPage = ({
   onArtistChange,
   initialStatusFilter = null,
 }) => {
-  const { success: toastSuccess, error: toastError } = useToast();
+  const { success: toastSuccess, error: toastError, info: toastInfo } = useToast();
   const { theme } = useTheme();
   const { isMobile } = useIsMobile();
   const s = getS(theme);
@@ -79,11 +79,9 @@ const SchedulingPage = ({
   const [queuePaused, setQueuePaused] = useState(false);
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter || 'all');
   // Sync initialStatusFilter when navigating from dashboard
-  const prevFilterRef = useRef(initialStatusFilter);
-  if (initialStatusFilter && initialStatusFilter !== prevFilterRef.current) {
-    prevFilterRef.current = initialStatusFilter;
-    setStatusFilter(initialStatusFilter);
-  }
+  useEffect(() => {
+    if (initialStatusFilter) setStatusFilter(initialStatusFilter);
+  }, [initialStatusFilter]);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
   const [previewingPost, setPreviewingPost] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -889,7 +887,7 @@ const SchedulingPage = ({
       message: hasLateId
         ? `Remove "${post?.contentName || 'this post'}" from the queue AND from Late.co?`
         : `Remove "${post?.contentName || 'this post'}" from the queue?`,
-      variant: 'destructive',
+      confirmVariant: 'destructive',
       onConfirm: async () => {
         // Delete from Late first (if applicable)
         if (hasLateId && onDeleteLatePost) {
@@ -928,8 +926,9 @@ const SchedulingPage = ({
       message: lateCount > 0
         ? `Permanently remove ${selectedCount} post${selectedCount !== 1 ? 's' : ''} from the queue? (${lateCount} will also be removed from Late.co)`
         : `Permanently remove ${selectedCount} post${selectedCount !== 1 ? 's' : ''} from the queue?`,
-      variant: 'destructive',
+      confirmVariant: 'destructive',
       onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isLoading: true }));
         const ids = [...selectedPostIds];
         let lateDeleted = 0;
         for (const id of ids) {
@@ -1243,10 +1242,10 @@ const SchedulingPage = ({
       });
 
       if (wouldConflict) {
-        toastSuccess(`⚠️ ${existingPostsOnDate.length} posts already scheduled on these dates. Auto-adjusted start time to ${suggestedStart.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} to avoid conflicts.`);
+        toastError(`${existingPostsOnDate.length} posts already scheduled on these dates. Auto-adjusted start time to ${suggestedStart.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} to avoid conflicts.`);
         startTime = suggestedStart;
       } else {
-        toastSuccess(`ℹ️ ${existingPostsOnDate.length} posts already scheduled on these dates. Times will be interspersed.`);
+        toastInfo(`${existingPostsOnDate.length} posts already scheduled on these dates. Times will be interspersed.`);
       }
     }
 
@@ -2140,7 +2139,8 @@ const SchedulingPage = ({
         isOpen={confirmDialog.isOpen}
         title={confirmDialog.title}
         message={confirmDialog.message}
-        variant={confirmDialog.variant}
+        confirmVariant={confirmDialog.confirmVariant}
+        isLoading={confirmDialog.isLoading}
         onConfirm={confirmDialog.onConfirm}
         onCancel={() => setConfirmDialog({ isOpen: false })}
       />

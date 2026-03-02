@@ -13,7 +13,7 @@ import {
   FeatherCheck,
 } from '@subframe/core';
 import { removeFromLibraryAsync } from '../../services/libraryService';
-import { useToast } from '../ui';
+import { useToast, ConfirmDialog } from '../ui';
 import log from '../../utils/logger';
 
 const AllMediaContent = ({
@@ -29,6 +29,7 @@ const AllMediaContent = ({
   uploadProgress,
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
   const [mediaScope, setMediaScope] = useState('all');
   const [mediaSearch, setMediaSearch] = useState('');
   const [videoPreviewUrl, setVideoPreviewUrl] = useState(null);
@@ -108,32 +109,50 @@ const AllMediaContent = ({
   }, [isDragging]);
 
   // ── Delete handlers ──
-  const handleDelete = useCallback(async (item) => {
-    if (!window.confirm(`Delete "${item.name || 'this item'}"? This cannot be undone.`)) return;
-    try {
-      await removeFromLibraryAsync(db, artistId, item.id);
-      setSelected(prev => { const next = new Set(prev); next.delete(item.id); return next; });
-      toastSuccess('Media deleted');
-    } catch (err) {
-      log.error('[AllMedia] Delete failed:', err);
-      toastError('Failed to delete media');
-    }
+  const handleDelete = useCallback((item) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Media',
+      message: `Delete "${item.name || 'this item'}"? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await removeFromLibraryAsync(db, artistId, item.id);
+          setSelected(prev => { const next = new Set(prev); next.delete(item.id); return next; });
+          toastSuccess('Media deleted');
+        } catch (err) {
+          log.error('[AllMedia] Delete failed:', err);
+          toastError('Failed to delete media');
+        }
+        setConfirmDialog({ isOpen: false });
+      },
+    });
   }, [db, artistId, toastSuccess, toastError]);
 
-  const handleDeleteSelected = useCallback(async () => {
+  const handleDeleteSelected = useCallback(() => {
     if (selected.size === 0) return;
-    if (!window.confirm(`Delete ${selected.size} item${selected.size !== 1 ? 's' : ''}? This cannot be undone.`)) return;
-    let deleted = 0;
-    for (const id of selected) {
-      try {
-        await removeFromLibraryAsync(db, artistId, id);
-        deleted++;
-      } catch (err) {
-        log.error('[AllMedia] Delete failed:', id, err);
-      }
-    }
-    setSelected(new Set());
-    if (deleted > 0) toastSuccess(`Deleted ${deleted} item${deleted !== 1 ? 's' : ''}`);
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Selected',
+      message: `Delete ${selected.size} item${selected.size !== 1 ? 's' : ''}? This cannot be undone.`,
+      confirmLabel: 'Delete All',
+      isLoading: false,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isLoading: true }));
+        let deleted = 0;
+        for (const id of selected) {
+          try {
+            await removeFromLibraryAsync(db, artistId, id);
+            deleted++;
+          } catch (err) {
+            log.error('[AllMedia] Delete failed:', id, err);
+          }
+        }
+        setSelected(new Set());
+        if (deleted > 0) toastSuccess(`Deleted ${deleted} item${deleted !== 1 ? 's' : ''}`);
+        setConfirmDialog({ isOpen: false });
+      },
+    });
   }, [selected, db, artistId, toastSuccess]);
 
   // ── Data ──
@@ -159,6 +178,11 @@ const AllMediaContent = ({
   }, [scopedVideos, mediaSearch]);
 
   const scopedAudio = useMemo(() => scopedMedia.filter(m => m.type === 'audio'), [scopedMedia]);
+  const filteredAudio = useMemo(() => {
+    if (!mediaSearch.trim()) return scopedAudio;
+    const q = mediaSearch.toLowerCase();
+    return scopedAudio.filter(m => (m.name || '').toLowerCase().includes(q));
+  }, [scopedAudio, mediaSearch]);
 
   const formatDuration = (seconds) => {
     if (!Number.isFinite(seconds)) return '';
@@ -262,6 +286,9 @@ const AllMediaContent = ({
                   <div
                     key={item.id}
                     data-media-id={item.id}
+                    role="checkbox"
+                    aria-checked={isSelected}
+                    aria-label={item.name || 'Image'}
                     className={`relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group border-2 transition-colors ${
                       isSelected ? 'border-indigo-500' : 'border-transparent'
                     }`}
@@ -280,7 +307,7 @@ const AllMediaContent = ({
                       </div>
                     )}
                     <button
-                      className="absolute top-0.5 right-0.5 z-[4] flex h-6 w-6 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
+                      className="absolute top-0.5 right-0.5 z-[4] flex h-6 w-6 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
                       onClick={(e) => { e.stopPropagation(); handleDelete(item); }}
                       title="Delete"
                     >
@@ -308,6 +335,9 @@ const AllMediaContent = ({
                   <div
                     key={item.id}
                     data-media-id={item.id}
+                    role="checkbox"
+                    aria-checked={isSelected}
+                    aria-label={item.name || 'Video'}
                     className={`relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group border-2 transition-colors ${
                       isSelected ? 'border-indigo-500' : 'border-transparent'
                     }`}
@@ -320,7 +350,10 @@ const AllMediaContent = ({
                         <FeatherFilm className="text-neutral-600" style={{ width: 16, height: 16 }} />
                       </div>
                     )}
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
+                    <div
+                      className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-auto cursor-pointer"
+                      onClick={(e) => { e.stopPropagation(); setVideoPreviewUrl(item.url); }}
+                    >
                       <div className="flex h-6 w-6 items-center justify-center rounded-full bg-black/60 border border-white/20">
                         <FeatherPlay className="text-white" style={{ width: 8, height: 8 }} />
                       </div>
@@ -336,7 +369,7 @@ const AllMediaContent = ({
                       </div>
                     )}
                     <button
-                      className="absolute top-0.5 right-0.5 z-[4] flex h-6 w-6 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
+                      className="absolute top-0.5 right-0.5 z-[4] flex h-6 w-6 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
                       onClick={(e) => { e.stopPropagation(); handleDelete(item); }}
                       title="Delete"
                     >
@@ -350,15 +383,15 @@ const AllMediaContent = ({
         )}
 
         {/* Audio section */}
-        {scopedAudio.length > 0 && (
+        {filteredAudio.length > 0 && (
           <div className="flex w-full flex-col gap-2 mb-6">
             <div className="flex items-center gap-2">
               <FeatherMusic className="text-indigo-400" style={{ width: 14, height: 14 }} />
               <span className="text-body-bold font-body-bold text-white">Audio</span>
-              <Badge variant="neutral">{scopedAudio.length}</Badge>
+              <Badge variant="neutral">{filteredAudio.length}</Badge>
             </div>
             <div className="flex flex-col gap-1 rounded-lg border border-solid border-neutral-200 bg-[#111118] overflow-hidden">
-              {scopedAudio.map(audio => {
+              {filteredAudio.map(audio => {
                 const isSelected = selected.has(audio.id);
                 return (
                   <div
@@ -431,6 +464,17 @@ const AllMediaContent = ({
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        confirmVariant="destructive"
+        isLoading={confirmDialog.isLoading}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ isOpen: false })}
+      />
 
       {/* Video preview lightbox */}
       {videoPreviewUrl && (

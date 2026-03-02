@@ -17,6 +17,7 @@ const LyricBankSection = ({
   onApplyLyric,
   onDeleteLyric,
   hasAudio = true,
+  isTranscribing = false,
 }) => {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
@@ -105,9 +106,10 @@ const LyricBankSection = ({
         icon={<FeatherPlus />}
         onClick={() => onAddNew?.()}
         className="w-full"
-        disabled={!hasAudio}
+        disabled={!hasAudio || isTranscribing}
+        loading={isTranscribing}
       >
-        Add Lyrics
+        {isTranscribing ? 'Transcribing...' : 'Add Lyrics'}
       </Button>
       {!hasAudio && (
         <div className="text-[11px] text-neutral-500 text-center -mt-1">Upload audio first</div>

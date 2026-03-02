@@ -38,7 +38,7 @@ import {
 import UploadFinishedMediaModal from './UploadFinishedMediaModal';
 import * as SubframeCore from '@subframe/core';
 import { DropdownMenu } from '../../ui/components/DropdownMenu';
-import { useToast } from '../ui';
+import { useToast, ConfirmDialog } from '../ui';
 import useIsMobile from '../../hooks/useIsMobile';
 import log from '../../utils/logger';
 
@@ -87,6 +87,9 @@ const ProjectLanding = ({
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('14:00');
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
+  const [isCreating, setIsCreating] = useState(false);
+  const [isScheduling, setIsScheduling] = useState(false);
 
   // Subscribe to data
   useEffect(() => {
@@ -180,6 +183,14 @@ const ProjectLanding = ({
       .slice(0, 4);
   }, [scheduledPosts]);
 
+  // Escape-to-close preview modal
+  useEffect(() => {
+    if (!previewingDraft) return;
+    const handler = (e) => { if (e.key === 'Escape') setPreviewingDraft(null); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [previewingDraft]);
+
   // Single-project auto-open (skip if user already visited a project this session)
   useEffect(() => {
     const skipKey = `stm_skip_auto_open_${artistId}`;
@@ -192,6 +203,7 @@ const ProjectLanding = ({
   // Create project
   const handleCreateProject = useCallback(async () => {
     if (!newProjectName.trim()) return;
+    setIsCreating(true);
     try {
       // Clear deletion flag so migration doesn't block future auto-creation
       localStorage.removeItem(`stm_projects_deleted_${artistId}`);
@@ -208,6 +220,7 @@ const ProjectLanding = ({
     } catch (err) {
       toastError('Failed to create project');
     }
+    setIsCreating(false);
   }, [artistId, db, newProjectName, newProjectPage, onOpenProject, toastSuccess, toastError]);
 
   // Rename project
@@ -286,6 +299,7 @@ const ProjectLanding = ({
   // Quick-schedule a draft
   const handleQuickSchedule = useCallback(async () => {
     if (!previewingDraft || !scheduleDate || !scheduleTime || !db) return;
+    setIsScheduling(true);
     const scheduledTime = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
     try {
       await createScheduledPost(db, artistId, {
@@ -305,6 +319,7 @@ const ProjectLanding = ({
     } catch (err) {
       toastError('Failed to schedule');
     }
+    setIsScheduling(false);
   }, [previewingDraft, scheduleDate, scheduleTime, db, artistId, toastSuccess, toastError]);
 
   return (
@@ -431,9 +446,13 @@ const ProjectLanding = ({
                       </DropdownMenu.DropdownItem>
                       <DropdownMenu.DropdownItem icon={<FeatherTrash2 />} onClick={(e) => {
                         e.stopPropagation();
-                        if (window.confirm(`Delete "${project.name}"? Media will be kept.`)) {
-                          handleDeleteProject(project.id);
-                        }
+                        setConfirmDialog({
+                          isOpen: true,
+                          title: 'Delete Project',
+                          message: `Delete "${project.name}"? Media will be kept.`,
+                          confirmLabel: 'Delete',
+                          onConfirm: () => { setConfirmDialog({ isOpen: false }); handleDeleteProject(project.id); },
+                        });
                       }}>
                         Delete
                       </DropdownMenu.DropdownItem>
@@ -600,21 +619,28 @@ const ProjectLanding = ({
                   >
                     {/* Delete button */}
                     <button
-                      className="absolute top-1.5 right-1.5 z-10 p-1 rounded bg-black/60 text-neutral-400 hover:text-red-400 hover:bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute top-1.5 right-1.5 z-10 p-1 rounded bg-black/60 text-neutral-400 hover:text-red-400 hover:bg-black/80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                       aria-label="Delete draft"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (window.confirm('Delete this draft?')) {
-                          const deleteFn = isVideo
-                            ? softDeleteCreatedVideoAsync(db, artistId, draft.id)
-                            : deleteCreatedSlideshowAsync(db, artistId, draft.id);
-                          deleteFn.then(() => {
-                            toastSuccess('Draft deleted');
-                          }).catch(err => {
-                            log.error('Delete draft error:', err);
-                            toastError('Failed to delete draft');
-                          });
-                        }
+                        setConfirmDialog({
+                          isOpen: true,
+                          title: 'Delete Draft',
+                          message: 'Delete this draft?',
+                          confirmLabel: 'Delete',
+                          onConfirm: () => {
+                            setConfirmDialog({ isOpen: false });
+                            const deleteFn = isVideo
+                              ? softDeleteCreatedVideoAsync(db, artistId, draft.id)
+                              : deleteCreatedSlideshowAsync(db, artistId, draft.id);
+                            deleteFn.then(() => {
+                              toastSuccess('Draft deleted');
+                            }).catch(err => {
+                              log.error('Delete draft error:', err);
+                              toastError('Failed to delete draft');
+                            });
+                          },
+                        });
                       }}
                     >
                       <FeatherTrash2 style={{ width: 14, height: 14 }} />
@@ -725,8 +751,8 @@ const ProjectLanding = ({
                   onChange={e => setScheduleTime(e.target.value)}
                   className="rounded bg-neutral-100 border border-neutral-200 text-white text-sm px-2 py-1.5 outline-none focus:border-indigo-500"
                 />
-                <Button variant="brand-primary" size="small" icon={<FeatherSend />} disabled={!scheduleDate} onClick={handleQuickSchedule}>
-                  Confirm
+                <Button variant="brand-primary" size="small" icon={<FeatherSend />} disabled={!scheduleDate || isScheduling} loading={isScheduling} onClick={handleQuickSchedule}>
+                  {isScheduling ? 'Scheduling...' : 'Confirm'}
                 </Button>
               </div>
             )}
@@ -780,6 +806,16 @@ const ProjectLanding = ({
         />
       )}
 
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        confirmVariant="destructive"
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ isOpen: false })}
+      />
+
       {showCreateForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowCreateForm(false)}>
           <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-neutral-50 p-6" onClick={e => e.stopPropagation()}>
@@ -828,8 +864,8 @@ const ProjectLanding = ({
 
             <div className="flex items-center justify-end gap-3 mt-6">
               <Button variant="neutral-secondary" size="medium" onClick={() => setShowCreateForm(false)}>Cancel</Button>
-              <Button variant="brand-primary" size="medium" disabled={!newProjectName.trim()} onClick={handleCreateProject}>
-                Create Project
+              <Button variant="brand-primary" size="medium" disabled={!newProjectName.trim() || isCreating} loading={isCreating} onClick={handleCreateProject}>
+                {isCreating ? 'Creating...' : 'Create Project'}
               </Button>
             </div>
           </div>

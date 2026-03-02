@@ -50,6 +50,27 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
     [scheduledPosts, niche?.id]
   );
 
+  // Escape-to-close preview lightbox
+  useEffect(() => {
+    if (!previewPost) return;
+    const handler = (e) => { if (e.key === 'Escape') setPreviewPost(null); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [previewPost]);
+
+  // Click-outside to close audio picker
+  const audioPickerRef = useRef(null);
+  useEffect(() => {
+    if (!audioPickerOpen) return;
+    const handler = (e) => {
+      if (audioPickerRef.current && !audioPickerRef.current.contains(e.target)) {
+        setAudioPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [audioPickerOpen]);
+
   const handleSelectAudio = useCallback((audioId) => {
     if (!niche) return;
     updateNicheAudioId(artistId, niche.id, audioId, db);
@@ -85,9 +106,9 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
 
         {/* Drop zone */}
         <div
-          className="flex w-full max-w-md flex-col items-center gap-3 rounded-lg border-2 border-dashed border-neutral-200 bg-[#0a0a0f] px-6 py-6 cursor-pointer hover:border-neutral-500 transition-colors"
+          className={`flex w-full max-w-md flex-col items-center gap-3 rounded-lg border-2 border-dashed border-neutral-200 bg-[#0a0a0f] px-6 py-6 cursor-pointer hover:border-neutral-500 transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
           onClick={() => !uploading && fileInputRef.current?.click()}
-          onDrop={handleDrop}
+          onDrop={(e) => { if (!uploading) handleDrop(e); else e.preventDefault(); }}
           onDragOver={e => e.preventDefault()}
         >
           <FeatherUploadCloud className="text-neutral-500" style={{ width: 28, height: 28 }} />
@@ -149,12 +170,14 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
                 <input
                   className="w-full rounded-lg border border-neutral-200 bg-[#0a0a0f] px-3 py-2 text-sm text-white outline-none focus:border-neutral-500"
                   placeholder="Caption (optional)..."
+                  aria-label="Caption"
                   value={caption}
                   onChange={e => setCaption(e.target.value)}
                 />
                 <input
                   className="w-full rounded-lg border border-neutral-200 bg-[#0a0a0f] px-3 py-2 text-sm text-white outline-none focus:border-neutral-500"
                   placeholder="#hashtags (optional)"
+                  aria-label="Hashtags"
                   value={hashtags}
                   onChange={e => setHashtags(e.target.value)}
                 />
@@ -253,7 +276,7 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
       {/* Audio picker */}
       <div className="flex w-full flex-col gap-2 border-t border-solid border-neutral-200 px-4 sm:px-12 py-4">
         <span className="text-caption-bold font-caption-bold text-neutral-300">Audio</span>
-        <div className="relative max-w-sm">
+        <div className="relative max-w-sm" ref={audioPickerRef}>
           <button
             className="flex w-full items-center gap-2 rounded-md border border-solid border-neutral-200 bg-neutral-50 px-3 py-2 hover:bg-[#262626] transition"
             onClick={() => setAudioPickerOpen(!audioPickerOpen)}

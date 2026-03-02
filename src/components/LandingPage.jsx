@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
@@ -45,6 +45,14 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
     if (authMode === 'login') onLogin?.(email, password);
     else onSignup?.(email, password, name);
   };
+
+  // Escape-to-close auth modal
+  useEffect(() => {
+    if (!showAuth) return;
+    const handler = (e) => { if (e.key === 'Escape') setShowAuth(false); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [showAuth]);
 
   const handleForgotPassword = async () => {
     if (!email) {
@@ -252,23 +260,29 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
             </div>
 
             {/* Tabs */}
-            <div className="flex items-center rounded-lg border border-solid border-neutral-200 bg-black px-1 py-1 mb-6">
-              <div
-                className={`flex flex-1 h-9 items-center justify-center rounded-md cursor-pointer transition-colors ${authMode === 'login' ? 'bg-neutral-200' : ''}`}
+            <div className="flex items-center rounded-lg border border-solid border-neutral-200 bg-black px-1 py-1 mb-6" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={authMode === 'login'}
+                className={`flex flex-1 h-9 items-center justify-center rounded-md cursor-pointer transition-colors border-none bg-transparent ${authMode === 'login' ? 'bg-neutral-200' : ''}`}
                 onClick={() => { setAuthMode('login'); setResetMessage(null); }}
               >
                 <span className={`text-sm ${authMode === 'login' ? 'text-default-font font-semibold' : 'text-neutral-400'}`}>
                   Login
                 </span>
-              </div>
-              <div
-                className={`flex flex-1 h-9 items-center justify-center rounded-md cursor-pointer transition-colors ${authMode === 'signup' ? 'bg-neutral-200' : ''}`}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={authMode === 'signup'}
+                className={`flex flex-1 h-9 items-center justify-center rounded-md cursor-pointer transition-colors border-none bg-transparent ${authMode === 'signup' ? 'bg-neutral-200' : ''}`}
                 onClick={() => { setAuthMode('signup'); setResetMessage(null); }}
               >
                 <span className={`text-sm ${authMode === 'signup' ? 'text-default-font font-semibold' : 'text-neutral-400'}`}>
                   Sign Up
                 </span>
-              </div>
+              </button>
             </div>
 
             {authError && (
@@ -336,7 +350,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
                     </span>
                   </label>
                 )}
-                <Button className="w-full min-h-[44px]" variant="brand-primary" size="large" disabled={authLoading || (authMode === 'signup' && !agreedToTerms)} onClick={handleSubmit}>
+                <Button className="w-full min-h-[44px]" type="submit" variant="brand-primary" size="large" disabled={authLoading || (authMode === 'signup' && !agreedToTerms)}>
                   {authLoading ? (
                     <span className="flex items-center gap-2">
                       <FeatherLoader className="w-4 h-4 animate-spin" />
@@ -344,6 +358,9 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
                     </span>
                   ) : authMode === 'login' ? 'Log In' : 'Sign Up'}
                 </Button>
+                {authMode === 'signup' && !agreedToTerms && (
+                  <span className="text-xs text-neutral-400 text-center">Agree to Terms to continue</span>
+                )}
               </form>
 
               <div className="my-5 flex items-center gap-3">

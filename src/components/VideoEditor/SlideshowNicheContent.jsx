@@ -278,15 +278,18 @@ const SlideshowNicheContent = ({
                   <span className="text-caption font-caption text-neutral-400">Images{bankImages.length > 0 ? ` ${bankImages.length}` : ''}</span>
                   <div className="flex items-center gap-1">
                     <button
-                      className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
+                      className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-indigo-500/10 transition-colors"
+                      type="button"
                       onClick={() => onImportToBank?.(bankIdx)}
                     >Import</button>
                     <button
-                      className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
+                      className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-indigo-500/10 transition-colors"
+                      type="button"
                       onClick={() => onUploadToBank?.(bankIdx)}
                     >Upload</button>
                     <button
-                      className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
+                      className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-indigo-500/10 transition-colors"
+                      type="button"
                       onClick={() => onWebImportToBank?.(bankIdx)}
                     >Web</button>
                   </div>
@@ -301,7 +304,10 @@ const SlideshowNicheContent = ({
                         src={item.thumbnailUrl || item.url}
                         alt={item.name}
                         loading="lazy"
+                        tabIndex={0}
+                        role="button"
                         onClick={() => setLightboxItem(item)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLightboxItem(item); } }}
                       />
                     ))}
                     <div
@@ -371,15 +377,18 @@ const SlideshowNicheContent = ({
               <div className="flex items-center gap-1">
                 <span className="text-caption font-caption text-neutral-400 mr-1">{projectAudio.length}</span>
                 <button
-                  className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
+                  className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-indigo-500/10 transition-colors"
+                      type="button"
                   onClick={() => onImportAudio?.()}
                 >Import</button>
                 <button
-                  className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
+                  className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-indigo-500/10 transition-colors"
+                      type="button"
                   onClick={() => onUploadAudio?.()}
                 >Upload</button>
                 <button
-                  className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
+                  className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-indigo-500/10 transition-colors"
+                      type="button"
                   onClick={() => onWebImportAudio?.()}
                 >Web</button>
               </div>

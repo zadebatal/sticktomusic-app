@@ -298,6 +298,7 @@ const ContentLibrary = ({
       return cloudUrl; // Return URL for PostingModule
     } catch (err) {
       log.error('[ContentLibrary] Render failed:', err);
+      toastError('Render failed: ' + err.message);
       throw err; // Re-throw for PostingModule to handle
     } finally {
       setRenderingVideoId(null);
@@ -538,6 +539,8 @@ const ContentLibrary = ({
           ].map(tab => (
             <button
               key={tab.key}
+              role="tab"
+              aria-selected={draftTab === tab.key}
               onClick={() => { setDraftTab(tab.key); clearSelection(); }}
               className={`border-none cursor-pointer transition-all duration-150 px-5 py-2.5 text-[13px] font-semibold ${draftTab === tab.key ? 'bg-indigo-500/15 text-indigo-400 border-b-2 border-b-brand-600' : 'bg-transparent text-neutral-500 border-b-2 border-b-transparent'}`}
             >
@@ -573,7 +576,7 @@ const ContentLibrary = ({
             </label>
           )}
           {isDraftsView && projects.length > 0 && (
-            <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} className="px-3 py-2 bg-black border border-neutral-200 rounded-md text-neutral-800 text-[13px] cursor-pointer" style={{ colorScheme: 'dark' }}>
+            <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} className="px-3 py-2 bg-black border border-neutral-200 rounded-md text-white text-[13px] cursor-pointer" style={{ colorScheme: 'dark' }}>
               <option value="all">All projects</option>
               {projects.map(p => (
                 <option key={p.id} value={p.id}>{p.name}</option>
@@ -581,7 +584,7 @@ const ContentLibrary = ({
             </select>
           )}
           {isDraftsView && niches.length > 0 && (
-            <select value={nicheFilter} onChange={(e) => setNicheFilter(e.target.value)} className="px-3 py-2 bg-black border border-neutral-200 rounded-md text-neutral-800 text-[13px] cursor-pointer" style={{ colorScheme: 'dark' }}>
+            <select value={nicheFilter} onChange={(e) => setNicheFilter(e.target.value)} className="px-3 py-2 bg-black border border-neutral-200 rounded-md text-white text-[13px] cursor-pointer" style={{ colorScheme: 'dark' }}>
               <option value="all">All niches</option>
               {niches.map(n => (
                 <option key={n.id} value={n.id}>{n.name}</option>
@@ -624,17 +627,17 @@ const ContentLibrary = ({
       {draftTab === 'drafts' && <>
       {/* Trash Panel */}
       {showTrash && (
-        <div style={{ padding: '16px 24px', borderBottom: `1px solid ${theme.border.subtle}`, backgroundColor: `${theme.bg.elevated}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: theme.text.primary }}>
+        <div className="px-6 py-4 border-b border-neutral-200 bg-neutral-50">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="m-0 text-sm font-semibold text-white">
               Trash ({trashItems.length} {isSlideshow ? 'slideshow' : 'video'}{trashItems.length !== 1 ? 's' : ''})
             </h3>
             <IconButton size="small" icon={<FeatherX />} aria-label="Close trash" onClick={() => setShowTrash(false)} />
           </div>
           {trashItems.length === 0 ? (
-            <p style={{ color: theme.text.muted, fontSize: '12px', margin: 0 }}>Trash is empty</p>
+            <p className="text-neutral-500 text-xs m-0">Trash is empty</p>
           ) : (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            <div className="flex flex-wrap gap-2">
               {trashItems.map(item => {
                 const thumb = isSlideshow
                   ? (item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageA?.url || item.thumbnail)
@@ -644,28 +647,21 @@ const ContentLibrary = ({
                 return (
                   <div
                     key={item.id}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '8px',
-                      padding: '6px 10px',
-                      backgroundColor: 'rgba(239,68,68,0.08)',
-                      border: '1px solid rgba(239,68,68,0.2)',
-                      borderRadius: '8px', fontSize: '11px', color: theme.text.secondary,
-                      maxWidth: '280px'
-                    }}
+                    className="flex items-center gap-2 px-2.5 py-1.5 bg-red-500/[0.08] border border-red-500/20 rounded-lg text-[11px] text-neutral-400 max-w-[280px]"
                   >
                     {thumb && (
                       <img
                         src={thumb}
                         alt=""
-                        style={{ width: '32px', height: '40px', borderRadius: '4px', objectFit: 'cover', flexShrink: 0 }}
+                        className="w-8 h-10 rounded object-cover flex-shrink-0"
                       />
                     )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: '500', color: theme.text.primary }}>
+                    <div className="flex-1 min-w-0">
+                      <div className="overflow-hidden text-ellipsis whitespace-nowrap font-medium text-white">
                         {name}
                       </div>
                       {deletedDate && (
-                        <div style={{ fontSize: '10px', color: theme.text.muted }}>
+                        <div className="text-[10px] text-neutral-500">
                           Deleted {deletedDate.toLocaleDateString()}
                         </div>
                       )}
@@ -688,12 +684,7 @@ const ContentLibrary = ({
                         }
                       }}
                       disabled={restoringId === item.id}
-                      style={{
-                        background: 'none', border: `1px solid ${theme.accent.primary}`,
-                        color: theme.accent.primary, cursor: 'pointer',
-                        fontSize: '10px', fontWeight: '600', padding: '3px 8px',
-                        borderRadius: '4px', flexShrink: 0, opacity: restoringId === item.id ? 0.5 : 1
-                      }}
+                      className={`bg-transparent border border-indigo-500 text-indigo-400 cursor-pointer text-[10px] font-semibold px-2 py-0.5 rounded flex-shrink-0 ${restoringId === item.id ? 'opacity-50' : ''}`}
                     >
                       {restoringId === item.id ? '...' : 'Restore'}
                     </button>
@@ -708,11 +699,7 @@ const ContentLibrary = ({
                           toastError('Delete failed');
                         }
                       }}
-                      style={{
-                        background: 'none', border: 'none',
-                        color: '#ef4444', cursor: 'pointer',
-                        fontSize: '14px', padding: '2px 4px', flexShrink: 0
-                      }}
+                      className="bg-transparent border-none text-red-500 cursor-pointer text-sm px-1 py-0.5 flex-shrink-0"
                       title="Permanently delete"
                     >
                       ×

@@ -142,20 +142,19 @@ const AppShell = ({
               const isActive = activeTab === tab.id;
               const Icon = tab.Icon;
               return (
-                <div
+                <button
+                  type="button"
                   key={tab.id}
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none ${
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none border-none bg-transparent ${
                     isActive ? 'bg-neutral-100' : 'hover:bg-neutral-100'
                   }`}
-                  tabIndex={0}
-                  role="button"
                   onClick={() => setActiveTab(tab.id)}
                 >
                   <Icon className={`text-body font-body ${isActive ? 'text-white' : 'text-neutral-400'}`} />
                   <span className={`${isActive ? 'text-body-bold font-body-bold text-white' : 'text-body font-body text-neutral-400'}`}>
                     {tab.label}
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -202,7 +201,7 @@ const AppShell = ({
       )}
 
       {/* MAIN CONTENT */}
-      <div className="flex grow shrink-0 basis-0 flex-col items-start self-stretch bg-black overflow-auto" style={isMobile ? { paddingBottom: 64 } : undefined}>
+      <div className="flex grow shrink-0 basis-0 flex-col items-start self-stretch bg-black overflow-auto" style={isMobile ? { paddingBottom: 'calc(64px + env(safe-area-inset-bottom, 0px))' } : undefined}>
         {isLoading && (
           <div className="h-0.5 w-full flex-none bg-indigo-500 animate-pulse" />
         )}

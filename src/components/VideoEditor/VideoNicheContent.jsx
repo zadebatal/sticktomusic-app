@@ -39,7 +39,7 @@ import LyricBankSection from './shared/LyricBankSection';
 import AudioClipSelector from './AudioClipSelector';
 import WordTimeline from './WordTimeline';
 import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
-import { useToast } from '../ui';
+import { useToast, ConfirmDialog } from '../ui';
 
 const FORMAT_ICONS = {
   montage: FeatherFilm,
@@ -141,6 +141,7 @@ const VideoNicheContent = ({
   const [showBankPicker, setShowBankPicker] = useState(false);
   const [pendingTranscription, setPendingTranscription] = useState(null);
   const { analyze: analyzeAudio, isAnalyzing, progress: analyzeProgress } = useLyricAnalyzer();
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
 
   // WordTimeline playback state
   const wordTimelineAudioRef = useRef(null);
@@ -529,9 +530,18 @@ const VideoNicheContent = ({
 
   const handleDeleteSelected = useCallback(() => {
     if (!niche || !selectionBankId || bankSelectedIds.size === 0) return;
-    removeFromMediaBank(artistId, niche.id, [...bankSelectedIds], selectionBankId, db, true);
-    clearBankSelection();
-    onRefreshCollections?.();
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Remove from Bank',
+      message: `Remove ${bankSelectedIds.size} item${bankSelectedIds.size !== 1 ? 's' : ''} from this bank?`,
+      confirmLabel: 'Remove',
+      onConfirm: () => {
+        removeFromMediaBank(artistId, niche.id, [...bankSelectedIds], selectionBankId, db, true);
+        clearBankSelection();
+        onRefreshCollections?.();
+        setConfirmDialog({ isOpen: false });
+      },
+    });
   }, [niche, artistId, selectionBankId, bankSelectedIds, db, clearBankSelection, onRefreshCollections]);
 
   // Bank selection toggle
@@ -545,8 +555,11 @@ const VideoNicheContent = ({
   }, [mediaBanks]);
 
   // Add new media bank handler
+  const [bankNameError, setBankNameError] = useState('');
   const handleAddMediaBank = useCallback(() => {
-    if (!newBankName.trim() || !niche) return;
+    if (!newBankName.trim()) { setBankNameError('Bank name is required'); return; }
+    if (!niche) return;
+    setBankNameError('');
     addMediaBank(artistId, niche.id, newBankName.trim(), db);
     setNewBankName('');
     setShowNewBankInput(false);
@@ -563,16 +576,25 @@ const VideoNicheContent = ({
   }, [renameValue, artistId, niche, renamingBankId, db, onRefreshCollections]);
 
   // Delete media bank handler
-  const handleDeleteMediaBank = useCallback((bankId) => {
+  const handleDeleteMediaBank = useCallback((bankId, bankName) => {
     if (!niche) return;
-    removeMediaBank(artistId, niche.id, bankId, db);
-    setSelectedBankIds(prev => {
-      if (!prev) return prev;
-      const next = new Set(prev);
-      next.delete(bankId);
-      return next;
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Bank',
+      message: `Delete bank "${bankName || 'Untitled'}"? Media will be unlinked from this bank.`,
+      confirmLabel: 'Delete',
+      onConfirm: () => {
+        removeMediaBank(artistId, niche.id, bankId, db);
+        setSelectedBankIds(prev => {
+          if (!prev) return prev;
+          const next = new Set(prev);
+          next.delete(bankId);
+          return next;
+        });
+        onRefreshCollections?.();
+        setConfirmDialog({ isOpen: false });
+      },
     });
-    onRefreshCollections?.();
   }, [artistId, niche, db, onRefreshCollections]);
 
   // Remove item from bank + niche entirely in one atomic write
@@ -744,7 +766,7 @@ const VideoNicheContent = ({
                       {mediaBanks.length > 1 && (
                         <IconButton variant="neutral-tertiary" size="small"
                           icon={<FeatherX />} aria-label="Delete bank"
-                          onClick={() => handleDeleteMediaBank(bank.id)}
+                          onClick={() => handleDeleteMediaBank(bank.id, bank.name)}
                         />
                       )}
                     </div>
@@ -888,18 +910,21 @@ const VideoNicheContent = ({
               {mediaBanks.length < MAX_MEDIA_BANKS && (
                 <div className="flex items-center gap-2">
                   {showNewBankInput ? (
-                    <>
-                      <input
-                        className="flex-1 rounded-md border border-solid border-neutral-200 bg-black px-3 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500"
-                        placeholder="Bank name..."
-                        value={newBankName}
-                        onChange={e => setNewBankName(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') handleAddMediaBank(); if (e.key === 'Escape') { setShowNewBankInput(false); setNewBankName(''); } }}
-                        autoFocus
-                      />
-                      <Button variant="brand-primary" size="small" onClick={handleAddMediaBank} disabled={!newBankName.trim()}>Add</Button>
-                      <Button variant="neutral-tertiary" size="small" onClick={() => { setShowNewBankInput(false); setNewBankName(''); }}>Cancel</Button>
-                    </>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <input
+                          className={`flex-1 rounded-md border border-solid ${bankNameError ? 'border-red-500' : 'border-neutral-200'} bg-black px-3 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500`}
+                          placeholder="Bank name..."
+                          value={newBankName}
+                          onChange={e => { setNewBankName(e.target.value); if (bankNameError) setBankNameError(''); }}
+                          onKeyDown={e => { if (e.key === 'Enter') handleAddMediaBank(); if (e.key === 'Escape') { setShowNewBankInput(false); setNewBankName(''); setBankNameError(''); } }}
+                          autoFocus
+                        />
+                        <Button variant="brand-primary" size="small" onClick={handleAddMediaBank} disabled={!newBankName.trim()}>Add</Button>
+                        <Button variant="neutral-tertiary" size="small" onClick={() => { setShowNewBankInput(false); setNewBankName(''); setBankNameError(''); }}>Cancel</Button>
+                      </div>
+                      {bankNameError && <span className="text-[11px] text-red-400">{bankNameError}</span>}
+                    </div>
                   ) : (
                     <Button variant="neutral-tertiary" size="small" icon={<FeatherPlus />}
                       onClick={() => setShowNewBankInput(true)}>
@@ -1004,6 +1029,7 @@ const VideoNicheContent = ({
           <LyricBankSection
             lyrics={lyricsBank}
             hasAudio={projectAudio.length > 0}
+            isTranscribing={isAnalyzing}
             onAddNew={() => {
               if (projectAudio.length === 0) { toastError('Upload audio first'); return; }
               if (projectAudio.length === 1) {
@@ -1308,6 +1334,16 @@ const VideoNicheContent = ({
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        confirmVariant="destructive"
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ isOpen: false })}
+      />
     </div>
   );
 };
