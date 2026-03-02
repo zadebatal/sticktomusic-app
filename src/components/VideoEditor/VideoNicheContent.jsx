@@ -462,7 +462,12 @@ const VideoNicheContent = ({
     if (!gridEl) return;
     if (e.target.closest('button')) return;
     const mediaEl = e.target.closest('[data-media-id]');
+    // If clicking a media item with Cmd/Ctrl/Shift, let onClick handle it (don't start rubber-band)
+    if (mediaEl && (e.metaKey || e.ctrlKey || e.shiftKey)) return;
+    // If clicking an already-selected item, don't start rubber-band (allow drag)
     if (mediaEl && bankSelectedIds.has(mediaEl.getAttribute('data-media-id')) && selectionBankId === bankId) return;
+    // If clicking on a media item without modifier, let onClick handle selection (but still prep rubber-band)
+    if (mediaEl) return;
     e.preventDefault();
     const rect = gridEl.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -470,7 +475,7 @@ const VideoNicheContent = ({
     bankDragStartRef.current = { x, y, bankId };
     bankDragPriorRef.current = (e.shiftKey && selectionBankId === bankId) ? new Set(bankSelectedIds) : new Set();
     setSelectionBankId(bankId);
-    if (!e.shiftKey) setBankSelectedIds(new Set());
+    if (!e.shiftKey && !e.metaKey && !e.ctrlKey) setBankSelectedIds(new Set());
   }, [bankSelectedIds, selectionBankId]);
 
   const handleBankGridMouseMove = useCallback((e) => {
