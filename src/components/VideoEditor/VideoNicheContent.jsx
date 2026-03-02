@@ -324,9 +324,9 @@ const VideoNicheContent = ({
     // Select this audio as the niche audio
     if (niche) updateNicheAudioId(artistId, niche.id, audio.id, db);
     try {
-      const result = await analyzeAudio(src, audio.startTime || 0, audio.endTime || audio.duration || 30);
+      const result = await analyzeAudio(src);
       if (result?.words?.length > 0) {
-        const dur = result.duration || audio.endTime || audio.duration || 30;
+        const dur = result.duration || audio.duration || audio.endTime || 60;
         const legatoWords = postProcessWords(result.words, dur);
         setTranscribedWords(legatoWords);
         setTranscribedDuration(dur);

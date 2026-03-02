@@ -213,7 +213,7 @@ const PhotoMontageEditor = ({
 
   // Audio trim boundaries for beat normalization
   const audioStartTime = selectedAudio?.startTime || 0;
-  const audioEndTime = selectedAudio?.endTime || selectedAudio?.duration || 0;
+  const audioEndTime = selectedAudio?.endTime || audioDuration || selectedAudio?.duration || 0;
 
   // Filter beats to trimmed range and normalize to local time
   const filteredBeats = useMemo(() => {
@@ -488,7 +488,7 @@ const PhotoMontageEditor = ({
   // Effective audio duration (trimmed range or full)
   const effectiveAudioDuration = useMemo(() => {
     if (!selectedAudio) return 0;
-    return (selectedAudio.endTime || selectedAudio.duration || audioDuration) - (selectedAudio.startTime || 0);
+    return (selectedAudio.endTime || audioDuration || selectedAudio.duration || 0) - (selectedAudio.startTime || 0);
   }, [selectedAudio, audioDuration]);
 
   // ── Computed: photo durations (beat-synced or fixed), expanded to fill audio ──
@@ -875,7 +875,7 @@ const PhotoMontageEditor = ({
       setShowBeatSelector(false);
       return;
     }
-    const effectiveDur = (selectedAudio?.endTime || selectedAudio?.duration || audioDuration) - (selectedAudio?.startTime || 0);
+    const effectiveDur = (selectedAudio?.endTime || audioDuration || selectedAudio?.duration || 0) - (selectedAudio?.startTime || 0);
     setPhotos(prev => {
       const updated = [...prev];
       for (let i = 0; i < updated.length; i++) {
@@ -1694,7 +1694,7 @@ const PhotoMontageEditor = ({
               const playheadPercent = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
               const audioTrackH = hasAudioTrack ? Math.round(4 + 28 * externalAudioVolume) : 0;
               const trimmedDuration = selectedAudio
-                ? ((selectedAudio.endTime || selectedAudio.duration || audioDuration) - (selectedAudio.startTime || 0))
+                ? ((selectedAudio.endTime || audioDuration || selectedAudio.duration || 0) - (selectedAudio.startTime || 0))
                 : 0;
               const MIN_CELL_W = MIN_CELL_W_HOOK;
               const effectiveTimelinePx = totalDuration * effectivePxPerSecHook;
