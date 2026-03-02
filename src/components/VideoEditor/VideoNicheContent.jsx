@@ -123,6 +123,7 @@ const VideoNicheContent = ({
   }, [artistId]);
 
   // Audio tools
+  const [showAudioPicker, setShowAudioPicker] = useState(false);
   const [showAudioTrimmer, setShowAudioTrimmer] = useState(false);
   const [showWordTimeline, setShowWordTimeline] = useState(false);
   const [transcribedWords, setTranscribedWords] = useState([]);
@@ -302,6 +303,45 @@ const VideoNicheContent = ({
       }
     }
   }, [selectedAudio, analyzeAudio, toastSuccess, toastError]);
+
+  // Pick audio then auto-transcribe for "Add Lyrics"
+  const handlePickAudioAndTranscribe = useCallback(async (audio) => {
+    setShowAudioPicker(false);
+    if (!audio) return;
+    const validUrl = (u) => u && !u.startsWith('blob:');
+    const src = validUrl(audio.url) ? audio.url : validUrl(audio.localUrl) ? audio.localUrl : null;
+    if (!src) { toastError('Audio has no valid URL — please re-upload'); return; }
+    // Select this audio as the niche audio
+    if (niche) updateNicheAudioId(artistId, niche.id, audio.id, db);
+    try {
+      const result = await analyzeAudio(src, audio.startTime || 0, audio.endTime || audio.duration || 30);
+      if (result?.words?.length > 0) {
+        const dur = result.duration || audio.endTime || audio.duration || 30;
+        const legatoWords = postProcessWords(result.words, dur);
+        setTranscribedWords(legatoWords);
+        setTranscribedDuration(dur);
+        setWtCurrentTime(0);
+        setWtIsPlaying(false);
+        if (wordTimelineAudioRef.current) {
+          wordTimelineAudioRef.current.src = src;
+          wordTimelineAudioRef.current.currentTime = 0;
+        }
+        setShowWordTimeline(true);
+        toastSuccess(`Transcribed ${result.words.length} word${result.words.length !== 1 ? 's' : ''}`);
+        refineWordsWithEnergy(legatoWords, src, dur).then(refined => {
+          setTranscribedWords(refined);
+        });
+      } else {
+        toastError('No words transcribed');
+      }
+    } catch (err) {
+      if (err.message === 'API_KEY_REQUIRED') {
+        toastError('OpenAI API key required — set it in Settings');
+      } else {
+        toastError(`Transcription failed: ${err.message}`);
+      }
+    }
+  }, [artistId, niche, db, analyzeAudio, postProcessWords, refineWordsWithEnergy, toastSuccess, toastError]);
 
   // WordTimeline playback controls
   const handleWtPlayPause = useCallback(() => {
@@ -784,20 +824,13 @@ const VideoNicheContent = ({
             hasAudio={projectAudio.length > 0}
             onAddNew={() => {
               if (projectAudio.length === 0) { toastError('Upload audio first'); return; }
-              const audio = selectedAudio || projectAudio[0];
-              if (!audio) return;
-              const validUrl = (u) => u && !u.startsWith('blob:');
-              const src = validUrl(audio.url) ? audio.url : validUrl(audio.localUrl) ? audio.localUrl : null;
-              if (!src) { toastError('Audio has no valid URL — please re-upload'); return; }
-              analyzeAudio(src, audio.startTime || 0, audio.endTime || audio.duration || 30)
-                .then(result => {
-                  if (result?.words?.length > 0) {
-                    setTranscribedWords(result.words);
-                    setTranscribedDuration(audio.endTime || audio.duration || 30);
-                    setShowWordTimeline(true);
-                  }
-                })
-                .catch(() => toastError('Transcription failed'));
+              if (projectAudio.length === 1) {
+                // Only one audio — pick it automatically
+                handlePickAudioAndTranscribe(projectAudio[0]);
+              } else {
+                // Multiple audio — show picker
+                setShowAudioPicker(true);
+              }
             }}
             onApplyLyric={(lyric) => {
               if (lyric.words?.length > 0) {
@@ -927,6 +960,34 @@ const VideoNicheContent = ({
         )}
 
       </div>
+
+      {/* Audio Picker for Add Lyrics */}
+      {showAudioPicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowAudioPicker(false)}>
+          <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-[#111111] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200">
+              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Choose a Song to Transcribe</span>
+              <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close" onClick={() => setShowAudioPicker(false)} />
+            </div>
+            <div className="px-6 py-4 flex flex-col gap-2 max-h-[400px] overflow-y-auto">
+              {projectAudio.map(audio => {
+                const dur = audio.duration ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}` : '';
+                return (
+                  <button
+                    key={audio.id}
+                    className="flex w-full items-center gap-3 rounded-lg px-4 py-3 bg-neutral-50 hover:bg-neutral-100 border border-transparent hover:border-indigo-500 cursor-pointer transition-colors text-left"
+                    onClick={() => handlePickAudioAndTranscribe(audio)}
+                  >
+                    <FeatherMusic className="text-indigo-400 flex-none" style={{ width: 16, height: 16 }} />
+                    <span className="text-body font-body text-white truncate flex-1">{audio.name}</span>
+                    {dur && <span className="text-caption font-caption text-neutral-400 flex-none">{dur}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Audio Trimmer Modal */}
       {showAudioTrimmer && selectedAudio && (
