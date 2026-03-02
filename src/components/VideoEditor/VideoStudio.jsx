@@ -553,6 +553,7 @@ const VideoStudio = ({
     return {
       id: pipeline.id,
       name: pipeline.name,
+      projectId: pipeline.projectId || null,
       banks: pipeline.banks || [],
       videos: pipelineMedia
         .filter(v => v.type === MEDIA_TYPES.VIDEO)

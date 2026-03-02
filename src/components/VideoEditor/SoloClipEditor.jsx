@@ -287,6 +287,27 @@ const SoloClipEditor = ({
   const libraryAudio = useMemo(() => libraryMedia.filter(i => i.type === MEDIA_TYPES.AUDIO), [libraryMedia]);
   const libraryVideos = useMemo(() => libraryMedia.filter(i => i.type === MEDIA_TYPES.VIDEO), [libraryMedia]);
 
+  // ── Audio scope filter (Niche / Project / All) ──
+  const [audioScope, setAudioScope] = useState('niche');
+  const nicheAudio = useMemo(() => (category?.audio || []), [category?.audio]);
+  const projectAudio = useMemo(() => {
+    if (!category?.projectId) return [];
+    const projectRoot = collections.find(c => c.id === category.projectId && c.isProjectRoot);
+    if (!projectRoot?.mediaIds?.length) return [];
+    const ids = new Set(projectRoot.mediaIds);
+    return libraryMedia.filter(m => m.type === MEDIA_TYPES.AUDIO && ids.has(m.id));
+  }, [category?.projectId, collections, libraryMedia]);
+  const filteredAudio = useMemo(() => {
+    if (audioScope === 'niche' && nicheAudio.length > 0) return nicheAudio;
+    if (audioScope === 'project' && projectAudio.length > 0) return projectAudio;
+    return libraryAudio;
+  }, [audioScope, nicheAudio, projectAudio, libraryAudio]);
+  useEffect(() => {
+    if (nicheAudio.length > 0) setAudioScope('niche');
+    else if (projectAudio.length > 0) setAudioScope('project');
+    else setAudioScope('all');
+  }, [nicheAudio.length, projectAudio.length]);
+
   // ── Collection dropdown state ──
   const [selectedCollection, setSelectedCollection] = useState('all');
 
@@ -1771,16 +1792,26 @@ const SoloClipEditor = ({
                     <Button className="w-full" variant="neutral-secondary" size="small" icon={<FeatherUpload />} onClick={() => audioFileInputRef.current?.click()}>
                       {selectedAudio ? 'Change Audio' : 'Upload Audio'}
                     </Button>
-                    {libraryAudio.length > 0 && (
-                      <div className="flex flex-col gap-1 max-h-[120px] overflow-y-auto">
-                        <span className="text-caption font-caption text-neutral-400">Library Audio</span>
-                        {libraryAudio.map(audio => (
-                          <div key={audio.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-neutral-100 text-[12px] text-[#ffffffff]"
-                            onClick={() => { setAudioToTrim(audio); setShowAudioTrimmer(true); }}>
-                            <FeatherMusic className="w-3.5 h-3.5 opacity-60 flex-shrink-0" />
-                            <span className="truncate">{audio.name}</span>
-                          </div>
-                        ))}
+                    {filteredAudio.length > 0 && (
+                      <div className="flex flex-col gap-1">
+                        <select
+                          value={audioScope}
+                          onChange={(e) => setAudioScope(e.target.value)}
+                          className="w-full px-2 py-1 bg-black border border-neutral-200 rounded-md text-[11px] text-neutral-400 outline-none cursor-pointer"
+                        >
+                          {nicheAudio.length > 0 && <option value="niche">This Niche ({nicheAudio.length})</option>}
+                          {projectAudio.length > 0 && <option value="project">This Project ({projectAudio.length})</option>}
+                          <option value="all">All Audio ({libraryAudio.length})</option>
+                        </select>
+                        <div className="flex flex-col gap-0.5 max-h-[120px] overflow-y-auto">
+                          {filteredAudio.map(audio => (
+                            <div key={audio.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-neutral-100 text-[12px] text-[#ffffffff]"
+                              onClick={() => { setAudioToTrim(audio); setShowAudioTrimmer(true); }}>
+                              <FeatherMusic className="w-3.5 h-3.5 opacity-60 flex-shrink-0" />
+                              <span className="truncate">{audio.name}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
