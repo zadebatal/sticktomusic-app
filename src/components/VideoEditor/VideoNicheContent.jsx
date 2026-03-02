@@ -409,10 +409,11 @@ const VideoNicheContent = ({
     });
   }, [artistId, niche, db]);
 
-  // Remove item from a specific bank
+  // Remove item from a specific bank + remove from niche entirely
   const handleRemoveFromBank = useCallback((mediaId, bankId) => {
     if (!niche) return;
     removeFromMediaBank(artistId, niche.id, [mediaId], bankId, db);
+    removeFromCollection(artistId, niche.id, [mediaId], db);
   }, [artistId, niche, db]);
 
   // Filtered onMakeVideo — passes selected bank IDs
