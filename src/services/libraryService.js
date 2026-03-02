@@ -4024,7 +4024,12 @@ export const subscribeToCollections = (db, artistId, callback) => {
               videoTextBank1: (col.videoTextBank1?.length > 0 ? col.videoTextBank1 : localCol.videoTextBank1) || [],
               videoTextBank2: (col.videoTextBank2?.length > 0 ? col.videoTextBank2 : localCol.videoTextBank2) || [],
               textTemplates: (col.textTemplates?.length > 0 ? col.textTemplates : localCol.textTemplates) || [],
-              mediaIds: [...new Set([...(col.mediaIds || []), ...(localCol.mediaIds || [])])],
+              mediaIds: (() => {
+                let ids = [...new Set([...(col.mediaIds || []), ...(localCol.mediaIds || [])])];
+                const removed = recentCollectionRemovals.get(col.id)?.removedIds;
+                if (removed?.size > 0) ids = ids.filter(id => !removed.has(id));
+                return ids;
+              })(),
             };
           }
           return migrateCollectionBanks(col);
@@ -4060,11 +4065,16 @@ export const subscribeToCollections = (db, artistId, callback) => {
           allMerged = [...allMerged, ...lostCollections];
         }
 
-        // SAFETY GUARD: Never reduce a collection's mediaIds count during merge.
-        // If localStorage has more mediaIds than the merge result, keep the union.
+        // SAFETY GUARD: Never reduce a collection's mediaIds count during merge
+        // UNLESS the reduction is from an intentional removal (tracked in recentCollectionRemovals).
         for (const merged of allMerged) {
           const local = localCollections.find(lc => lc.id === merged.id);
           if (local && local.mediaIds?.length > 0 && (!merged.mediaIds || merged.mediaIds.length < local.mediaIds.length)) {
+            const removed = recentCollectionRemovals.get(merged.id)?.removedIds;
+            if (removed?.size > 0) {
+              // Intentional removal — don't re-add removed items
+              continue;
+            }
             const union = [...new Set([...(merged.mediaIds || []), ...local.mediaIds])];
             if (union.length > merged.mediaIds?.length) {
               log.warn('[Collections] Subscription merge would reduce mediaIds for',
