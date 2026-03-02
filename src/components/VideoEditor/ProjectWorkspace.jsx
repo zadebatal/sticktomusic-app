@@ -1569,7 +1569,7 @@ const ImportFromLibraryModal = ({ items: defaultItems, onImport: defaultOnImport
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={onClose}>
-      <div className="w-full max-w-2xl rounded-xl border border-neutral-200 bg-[#111111] overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-5xl mx-4 rounded-xl border border-neutral-200 bg-[#111111] overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex flex-col border-b border-neutral-200">
           <div className="flex items-center justify-between px-6 py-4">
             <div className="flex flex-col gap-1">
@@ -1662,59 +1662,65 @@ const ImportFromLibraryModal = ({ items: defaultItems, onImport: defaultOnImport
             </div>
           ) : (
             <>
-              {images.length > 0 && (
+              {videos.length > 0 && (
                 <>
-                  <span className="text-body-bold font-body-bold text-neutral-300 mb-3 block">Images ({images.length})</span>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-6">
-                    {images.map(item => (
+                  <span className="text-body-bold font-body-bold text-neutral-300 mb-3 block">Videos ({videos.length})</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 mb-6">
+                    {videos.map(item => (
                       <div key={item.id}
                         data-media-id={item.id}
-                        className={`relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-colors ${
+                        className={`relative flex flex-col rounded-lg overflow-hidden cursor-pointer border-2 transition-colors ${
                           selected.has(item.id) ? 'border-indigo-500' : 'border-transparent hover:border-neutral-600'
                         }`}
                         onClick={() => { if (!isDragging) toggle(item.id); }}
                       >
-                        <img src={getImgSrc(item)} alt={item.name} className="h-full w-full object-cover" loading="lazy" draggable={false} />
-                        {selected.has(item.id) && (
-                          <div className="absolute inset-0 bg-indigo-500/30 flex items-center justify-center">
-                            <FeatherCheck className="text-white" style={{ width: 20, height: 20 }} />
+                        <div className="relative aspect-video">
+                          {item.thumbnailUrl ? (
+                            <img src={item.thumbnailUrl} alt={item.name} className="h-full w-full object-cover" loading="lazy" draggable={false} />
+                          ) : (
+                            <div className="h-full w-full bg-neutral-100 flex items-center justify-center">
+                              <FeatherFilm className="text-neutral-500" style={{ width: 24, height: 24 }} />
+                            </div>
+                          )}
+                          <div className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5">
+                            <FeatherPlay className="text-white" style={{ width: 10, height: 10 }} />
+                            {item.duration && (
+                              <span className="text-[10px] text-white">{Math.floor(item.duration / 60)}:{String(Math.floor(item.duration % 60)).padStart(2, '0')}</span>
+                            )}
                           </div>
-                        )}
+                          {selected.has(item.id) && (
+                            <div className="absolute inset-0 bg-indigo-500/30 flex items-center justify-center">
+                              <FeatherCheck className="text-white" style={{ width: 20, height: 20 }} />
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-neutral-300 truncate px-1.5 py-1">{item.name}</span>
                       </div>
                     ))}
                   </div>
                 </>
               )}
-              {videos.length > 0 && (
+              {images.length > 0 && (
                 <>
-                  <span className="text-body-bold font-body-bold text-neutral-300 mb-3 block">Videos ({videos.length})</span>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-6">
-                    {videos.map(item => (
+                  <span className="text-body-bold font-body-bold text-neutral-300 mb-3 block">Images ({images.length})</span>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3 mb-6">
+                    {images.map(item => (
                       <div key={item.id}
                         data-media-id={item.id}
-                        className={`relative aspect-video rounded-lg overflow-hidden cursor-pointer border-2 transition-colors ${
+                        className={`relative flex flex-col rounded-lg overflow-hidden cursor-pointer border-2 transition-colors ${
                           selected.has(item.id) ? 'border-indigo-500' : 'border-transparent hover:border-neutral-600'
                         }`}
                         onClick={() => { if (!isDragging) toggle(item.id); }}
                       >
-                        {item.thumbnailUrl ? (
-                          <img src={item.thumbnailUrl} alt={item.name} className="h-full w-full object-cover" loading="lazy" draggable={false} />
-                        ) : (
-                          <div className="h-full w-full bg-neutral-100 flex items-center justify-center">
-                            <FeatherFilm className="text-neutral-500" style={{ width: 24, height: 24 }} />
-                          </div>
-                        )}
-                        <div className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5">
-                          <FeatherPlay className="text-white" style={{ width: 10, height: 10 }} />
-                          {item.duration && (
-                            <span className="text-[10px] text-white">{Math.floor(item.duration / 60)}:{String(Math.floor(item.duration % 60)).padStart(2, '0')}</span>
+                        <div className="relative aspect-square">
+                          <img src={getImgSrc(item)} alt={item.name} className="h-full w-full object-cover" loading="lazy" draggable={false} />
+                          {selected.has(item.id) && (
+                            <div className="absolute inset-0 bg-indigo-500/30 flex items-center justify-center">
+                              <FeatherCheck className="text-white" style={{ width: 20, height: 20 }} />
+                            </div>
                           )}
                         </div>
-                        {selected.has(item.id) && (
-                          <div className="absolute inset-0 bg-indigo-500/30 flex items-center justify-center">
-                            <FeatherCheck className="text-white" style={{ width: 20, height: 20 }} />
-                          </div>
-                        )}
+                        <span className="text-[11px] text-neutral-300 truncate px-1.5 py-1">{item.name}</span>
                       </div>
                     ))}
                   </div>

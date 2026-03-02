@@ -17,6 +17,7 @@ import {
   getPipelineBankLabel,
   deleteClipperSession,
   removeFromCollection,
+  updateLibraryItemAsync,
 } from '../../services/libraryService';
 
 const formatTimePrecise = (seconds) => {
@@ -47,6 +48,7 @@ const ClipperNicheContent = ({
   const activeFormat = niche?.formats?.find(f => f.id === niche.activeFormatId) || niche?.formats?.[0];
   const [collapsedBanks, setCollapsedBanks] = useState({});
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [renamingClipId, setRenamingClipId] = useState(null);
 
   // Clipper sessions stored on the niche (replaces draft-based sessions)
   const clipperSessions = useMemo(() =>
@@ -237,7 +239,32 @@ const ClipperNicheContent = ({
 
                         {/* Clip info */}
                         <div className="flex flex-col gap-0 flex-1 min-w-0">
-                          <span className="text-sm text-white truncate">{clip.name}</span>
+                          {renamingClipId === clip.id ? (
+                            <input
+                              autoFocus
+                              className="bg-transparent text-sm text-white outline-none w-full border-b border-indigo-500 pb-0.5"
+                              defaultValue={clip.name}
+                              onBlur={(e) => {
+                                const newName = e.target.value.trim();
+                                if (newName && newName !== clip.name) {
+                                  updateLibraryItemAsync(db, artistId, clip.id, { name: newName });
+                                }
+                                setRenamingClipId(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') e.target.blur();
+                                if (e.key === 'Escape') setRenamingClipId(null);
+                              }}
+                            />
+                          ) : (
+                            <span
+                              className="text-sm text-white truncate cursor-pointer hover:text-indigo-300 transition-colors"
+                              onDoubleClick={() => setRenamingClipId(clip.id)}
+                              title="Double-click to rename"
+                            >
+                              {clip.name}
+                            </span>
+                          )}
                           <div className="flex items-center gap-2">
                             <span className="text-[11px] text-neutral-500">
                               {formatTimePrecise(clip.sourceStart)} → {formatTimePrecise(clip.sourceEnd)}

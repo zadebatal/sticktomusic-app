@@ -1664,6 +1664,8 @@ export const getPipelineBankLabel = (pipeline, index) => {
   if (activeFormat?.slideLabels && index < activeFormat.slideLabels.length) {
     return activeFormat.slideLabels[index];
   }
+  // Video formats (clipper, multi_clip, etc.) use "Bucket N" not "Slide N"
+  if (activeFormat?.type === 'video') return `Bucket ${index + 1}`;
   return getBankLabel(index);
 };
 
