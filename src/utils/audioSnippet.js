@@ -63,9 +63,14 @@ function audioBufferToWav(buffer) {
  * @param {File|Blob|string} source - Audio file, blob, or HTTPS URL
  * @param {number} startSec - Start time in seconds
  * @param {number} endSec - End time in seconds
+ * @param {Object} options - Optional settings
+ * @param {boolean} options.mono - Downmix to mono (default: false)
+ * @param {number} options.targetSampleRate - Resample to this rate (default: keep original)
  * @returns {Promise<File>} Trimmed WAV file
  */
-export async function extractAudioSnippet(source, startSec, endSec) {
+export async function extractAudioSnippet(source, startSec, endSec, options = {}) {
+  const { mono = false, targetSampleRate = null } = options;
+
   // Fetch audio data
   let arrayBuffer;
   if (source instanceof File || source instanceof Blob) {
@@ -81,8 +86,11 @@ export async function extractAudioSnippet(source, startSec, endSec) {
     throw new Error('Invalid audio source');
   }
 
-  // Decode audio
-  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  // Decode audio — use target sample rate if provided (browser resamples automatically)
+  const decodeRate = targetSampleRate || undefined;
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)(
+    decodeRate ? { sampleRate: decodeRate } : undefined
+  );
   const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
   // Clamp to actual duration
@@ -94,19 +102,29 @@ export async function extractAudioSnippet(source, startSec, endSec) {
   const startSample = Math.floor(actualStart * sampleRate);
   const endSample = Math.floor(actualEnd * sampleRate);
   const duration = Math.max(endSample - startSample, 1);
+  const outChannels = mono ? 1 : audioBuffer.numberOfChannels;
 
   // Create trimmed buffer
-  const trimmedBuffer = audioContext.createBuffer(
-    audioBuffer.numberOfChannels,
-    duration,
-    sampleRate
-  );
+  const trimmedBuffer = audioContext.createBuffer(outChannels, duration, sampleRate);
 
-  for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
-    const sourceData = audioBuffer.getChannelData(channel);
-    const destData = trimmedBuffer.getChannelData(channel);
+  if (mono && audioBuffer.numberOfChannels > 1) {
+    // Downmix to mono by averaging all channels
+    const destData = trimmedBuffer.getChannelData(0);
+    const numCh = audioBuffer.numberOfChannels;
     for (let i = 0; i < duration; i++) {
-      destData[i] = sourceData[startSample + i];
+      let sum = 0;
+      for (let ch = 0; ch < numCh; ch++) {
+        sum += audioBuffer.getChannelData(ch)[startSample + i];
+      }
+      destData[i] = sum / numCh;
+    }
+  } else {
+    for (let channel = 0; channel < outChannels; channel++) {
+      const sourceData = audioBuffer.getChannelData(channel);
+      const destData = trimmedBuffer.getChannelData(channel);
+      for (let i = 0; i < duration; i++) {
+        destData[i] = sourceData[startSample + i];
+      }
     }
   }
 

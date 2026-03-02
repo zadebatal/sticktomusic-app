@@ -479,10 +479,10 @@ const ClipperEditor = ({
     setDetectedSections(null);
     setSelectedSections({});
     try {
-      // 1. Extract audio (cap at 600s)
+      // 1. Extract audio (cap at 600s, mono 16kHz to stay under Whisper 25MB limit)
       const audioSource = sourceFile || sourceUrl;
       const capDuration = Math.min(duration || 600, 600);
-      const audioFile = await extractAudioSnippet(audioSource, 0, capDuration);
+      const audioFile = await extractAudioSnippet(audioSource, 0, capDuration, { mono: true, targetSampleRate: 16000 });
 
       // 2. Transcribe via Whisper
       setDetectProgress('Transcribing lyrics...');
