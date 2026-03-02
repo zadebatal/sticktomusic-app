@@ -329,20 +329,35 @@ const ClipperEditor = ({
   }, [isPlaying]);
 
   // ── Playback controls ──
+  // Guard against "play() interrupted by pause()" race condition.
+  // Always use safePlay/safePause instead of calling video.play()/pause() directly.
+  const playPromiseRef = useRef(null);
+  const safePlay = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const p = video.play();
+    playPromiseRef.current = p;
+    if (p) p.catch(() => { playPromiseRef.current = null; setIsPlaying(false); });
+    setIsPlaying(true);
+  }, []);
+  const safePause = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const pending = playPromiseRef.current;
+    if (pending) {
+      pending.then(() => { video.pause(); }).catch(() => {});
+      playPromiseRef.current = null;
+    } else {
+      video.pause();
+    }
+    setIsPlaying(false);
+  }, []);
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) {
-      video.play().catch(err => {
-        log.error('[Clipper] Play failed:', err.message);
-        setIsPlaying(false);
-      });
-      setIsPlaying(true);
-    } else {
-      video.pause();
-      setIsPlaying(false);
-    }
-  }, []);
+    if (video.paused) safePlay();
+    else safePause();
+  }, [safePlay, safePause]);
 
   const toggleMute = useCallback(() => {
     const video = videoRef.current;
@@ -491,7 +506,7 @@ const ClipperEditor = ({
     };
     const handleUp = () => {
       setPlayheadDragging(false);
-      if (wasPlayingRef.current) { videoRef.current?.play()?.catch(() => {}); setIsPlaying(true); }
+      if (wasPlayingRef.current) { safePlay(); }
     };
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
@@ -1421,7 +1436,7 @@ const ClipperEditor = ({
                             e.stopPropagation();
                             document.body.style.userSelect = 'none';
                             const wasPlaying = isPlaying;
-                            if (isPlaying) { videoRef.current?.pause(); setIsPlaying(false); }
+                            if (isPlaying) { safePause(); }
                             const handleDragMove = (moveE) => {
                               const container = timelineRef.current;
                               if (!container) return;
@@ -1436,7 +1451,7 @@ const ClipperEditor = ({
                               window.removeEventListener('mousemove', handleDragMove);
                               window.removeEventListener('mouseup', handleDragEnd);
                               window.removeEventListener('pointercancel', handleDragEnd);
-                              if (wasPlaying) { videoRef.current?.play()?.catch(() => {}); setIsPlaying(true); }
+                              if (wasPlaying) { safePlay(); }
                             };
                             window.addEventListener('mousemove', handleDragMove);
                             window.addEventListener('mouseup', handleDragEnd);
