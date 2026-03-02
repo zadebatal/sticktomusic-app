@@ -469,11 +469,11 @@ const ContentLibrary = ({
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Header */}
-      <div className={`flex items-center justify-between px-6 py-5 border-b border-neutral-800 ${isDraftsView && !isMobile ? '!grid !grid-cols-[1fr_auto_1fr] !items-center' : ''} ${isMobile ? '!flex-col !items-stretch !gap-3 !p-4' : ''}`}>
+      <div className={`flex items-center justify-between px-6 py-5 border-b border-neutral-200 ${isDraftsView && !isMobile ? '!grid !grid-cols-[1fr_auto_1fr] !items-center' : ''} ${isMobile ? '!flex-col !items-stretch !gap-3 !p-4' : ''}`}>
         <div className="flex items-center gap-4">
           <IconButton size="small" icon={<FeatherArrowLeft />} aria-label="Back" onClick={() => { setPreviewingVideo(null); setPreviewingSlideshow(null); onBack?.(); }} />
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-neutral-800 rounded-lg flex items-center justify-center text-base font-semibold text-neutral-400">{category?.name?.charAt(0).toUpperCase()}</div>
+            <div className="w-10 h-10 bg-neutral-100 rounded-lg flex items-center justify-center text-base font-semibold text-neutral-400">{category?.name?.charAt(0).toUpperCase()}</div>
             <div>
               <h1 className="text-lg font-semibold text-white m-0">{category?.name}</h1>
               <p className="text-[13px] text-neutral-500 m-0">
@@ -530,7 +530,7 @@ const ContentLibrary = ({
 
       {/* Drafts / Scheduled / Posted tabs */}
       {isDraftsView && (
-        <div className="flex items-center border-b border-neutral-800">
+        <div className="flex items-center border-b border-neutral-200">
           {[
             { key: 'drafts', label: 'Drafts', count: filteredItems.length },
             { key: 'scheduled', label: 'Scheduled', count: filteredScheduledItems.length },
@@ -549,7 +549,7 @@ const ContentLibrary = ({
 
       {/* Filters — show on all tabs */}
       {isDraftsView && (
-        <div className={`flex items-center justify-between px-6 py-3 border-b border-neutral-800 ${isMobile ? '!flex-col !items-stretch !gap-2 !px-4' : ''}`}>
+        <div className={`flex items-center justify-between px-6 py-3 border-b border-neutral-200 ${isMobile ? '!flex-col !items-stretch !gap-2 !px-4' : ''}`}>
           {draftTab === 'drafts' ? (
             <ToggleGroup value={dateRange} onValueChange={(val) => val && setDateRange(val)}>
               <ToggleGroup.Item value="all">All time</ToggleGroup.Item>
@@ -1517,7 +1517,7 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
         {isRendering && (
           <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white">
             <div className="text-xs mb-2">Rendering...</div>
-            <div className="w-4/5 h-1 bg-neutral-700 rounded-sm">
+            <div className="w-4/5 h-1 bg-neutral-200 rounded-sm">
               <div className="h-full bg-violet-500 rounded-sm transition-all duration-300" style={{ width: `${renderProgress}%` }} />
             </div>
             <div className="text-[11px] mt-1">{renderProgress}%</div>
@@ -1654,7 +1654,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
   return (
     <div
       className={`relative rounded-lg overflow-hidden border border-solid transition-colors ${
-        isSelected ? 'border-brand-600 shadow-[0_0_0_2px_rgba(99,102,241,0.3)]' : 'border-neutral-800 hover:border-neutral-600'
+        isSelected ? 'border-brand-600 shadow-[0_0_0_2px_rgba(99,102,241,0.3)]' : 'border-neutral-200 hover:border-neutral-600'
       } bg-[#1a1a1a]`}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
@@ -1673,7 +1673,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
               const thumb = getSlideThumb(slide);
               const visibleOverlays = (slide?.textOverlays || []).filter(o => o.text);
               return (
-                <div key={idx} className="flex-1 min-w-0 overflow-hidden relative bg-neutral-800">
+                <div key={idx} className="flex-1 min-w-0 overflow-hidden relative bg-neutral-100">
                   {thumb ? (
                     <ThumbImg src={thumb} alt="" className="w-full h-full object-cover" />
                   ) : (
@@ -1707,7 +1707,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
               );
             })}
             {slideCount > 5 && (
-              <div className="flex-1 min-w-0 flex items-center justify-center bg-neutral-800">
+              <div className="flex-1 min-w-0 flex items-center justify-center bg-neutral-100">
                 <span className="text-neutral-400 text-[11px] font-semibold">+{slideCount - 5}</span>
               </div>
             )}

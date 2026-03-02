@@ -572,7 +572,7 @@ export default function TermsPage() {
         </ul>
 
         {/* Closing */}
-        <div className="border-t border-neutral-800 mt-12 pt-8">
+        <div className="border-t border-neutral-200 mt-12 pt-8">
           <p className="text-neutral-500 text-sm leading-relaxed">
             These Terms of Service constitute the entire agreement between you
             and StickToMusic regarding your use of the Service and supersede any

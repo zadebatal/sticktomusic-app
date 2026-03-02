@@ -1691,7 +1691,7 @@ const MultiClipEditor = ({
                 <input
                   type="number" min={1} max={50} value={generateCount}
                   onChange={(e) => setGenerateCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
-                  className="w-16 px-2 py-1.5 rounded-md border border-neutral-700 bg-[#1a1a1aff] text-[#ffffffff] text-[12px] text-center outline-none"
+                  className="w-16 px-2 py-1.5 rounded-md border border-neutral-200 bg-[#1a1a1aff] text-[#ffffffff] text-[12px] text-center outline-none"
                 />
               </div>
 
@@ -1756,7 +1756,7 @@ const MultiClipEditor = ({
                       <select
                         value={selectedCollection}
                         onChange={(e) => setSelectedCollection(e.target.value)}
-                        className="w-full px-3 py-2 bg-[#0a0a0aff] border border-neutral-800 rounded-lg text-[#ffffffff] text-[13px] outline-none cursor-pointer mb-2.5"
+                        className="w-full px-3 py-2 bg-[#0a0a0aff] border border-neutral-200 rounded-lg text-[#ffffffff] text-[13px] outline-none cursor-pointer mb-2.5"
                       >
                         <option value="category">Selected Clips</option>
                         <option value="all">All Videos (Library)</option>
@@ -1866,11 +1866,11 @@ const MultiClipEditor = ({
                             <div style={{ marginBottom: '12px' }}>
                               <div style={{ fontSize: '12px', fontWeight: 600, color: '#6366f1', marginBottom: '6px' }}>Text Bank A</div>
                               <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                                <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-800 bg-[#0a0a0aff] text-[#ffffffff] text-[12px] outline-none min-h-[44px]" />
+                                <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-200 bg-[#0a0a0aff] text-[#ffffffff] text-[12px] outline-none min-h-[44px]" />
                                 <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} aria-label="Add to Text Bank A" onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} />
                               </div>
                               {bankA.map((text, idx) => (
-                                <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-400 min-h-[36px]">
+                                <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-100/50 mb-1 text-neutral-400 min-h-[36px]">
                                   <span style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }} onClick={() => addTextOverlay(text)}>
                                     {text}
                                   </span>
@@ -1883,11 +1883,11 @@ const MultiClipEditor = ({
                             <div>
                               <div style={{ fontSize: '12px', fontWeight: 600, color: '#f59e0b', marginBottom: '6px' }}>Text Bank B</div>
                               <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                                <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-800 bg-[#0a0a0aff] text-[#ffffffff] text-[12px] outline-none min-h-[44px]" />
+                                <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-200 bg-[#0a0a0aff] text-[#ffffffff] text-[12px] outline-none min-h-[44px]" />
                                 <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} aria-label="Add to Text Bank B" onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} />
                               </div>
                               {bankB.map((text, idx) => (
-                                <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-400 min-h-[36px]">
+                                <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-100/50 mb-1 text-neutral-400 min-h-[36px]">
                                   <span style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }} onClick={() => addTextOverlay(text)}>
                                     {text}
                                   </span>
@@ -1921,7 +1921,7 @@ const MultiClipEditor = ({
                           <div
                             key={overlay.id}
                             onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
-                            className={`mx-0 mb-1.5 p-2.5 rounded-lg cursor-pointer transition-all ${isSelected ? 'bg-brand-600/10 border border-brand-600/30' : 'bg-neutral-800/50 border border-neutral-800'}`}
+                            className={`mx-0 mb-1.5 p-2.5 rounded-lg cursor-pointer transition-all ${isSelected ? 'bg-brand-600/10 border border-brand-600/30' : 'bg-neutral-100/50 border border-neutral-200'}`}
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                               <span style={{ fontSize: '11px', color: theme.text.secondary, fontWeight: 500 }}>
@@ -1946,14 +1946,14 @@ const MultiClipEditor = ({
                             )}
 
                             {isSelected && (
-                              <div className="mt-2 flex flex-col gap-1.5 pt-2 border-t border-neutral-800">
+                              <div className="mt-2 flex flex-col gap-1.5 pt-2 border-t border-neutral-200">
                                 {/* Font Family */}
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="text-[10px] text-neutral-400 min-w-[34px]">Font</span>
                                   <select
                                     value={overlay.style.fontFamily}
                                     onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, fontFamily: e.target.value } })}
-                                    className="flex-1 px-1.5 py-0.5 rounded border border-neutral-800 bg-[#1a1a1aff] text-[#ffffffff] text-[11px] min-h-[44px]"
+                                    className="flex-1 px-1.5 py-0.5 rounded border border-neutral-200 bg-[#1a1a1aff] text-[#ffffffff] text-[11px] min-h-[44px]"
                                   >
                                     <option value="Inter, sans-serif">Sans</option>
                                     <option value="'Playfair Display', serif">Serif</option>
@@ -1966,12 +1966,12 @@ const MultiClipEditor = ({
                                   <span className="text-[10px] text-neutral-400 min-w-[34px]">Size</span>
                                   <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                                     <button
-                                      className="px-2 py-0.5 rounded border border-neutral-800 bg-neutral-800/50 text-[#ffffffff] text-[11px] cursor-pointer min-w-[44px] min-h-[44px]"
+                                      className="px-2 py-0.5 rounded border border-neutral-200 bg-neutral-100/50 text-[#ffffffff] text-[11px] cursor-pointer min-w-[44px] min-h-[44px]"
                                       onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.max(16, overlay.style.fontSize - 4) } }); }}
                                     >A-</button>
                                     <span style={{ fontSize: '11px', color: theme.text.primary, minWidth: '26px', textAlign: 'center' }}>{overlay.style.fontSize}</span>
                                     <button
-                                      className="px-2 py-0.5 rounded border border-neutral-800 bg-neutral-800/50 text-[#ffffffff] text-[11px] cursor-pointer min-w-[44px] min-h-[44px]"
+                                      className="px-2 py-0.5 rounded border border-neutral-200 bg-neutral-100/50 text-[#ffffffff] text-[11px] cursor-pointer min-w-[44px] min-h-[44px]"
                                       onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.min(120, overlay.style.fontSize + 4) } }); }}
                                     >A+</button>
                                   </div>
@@ -1983,11 +1983,11 @@ const MultiClipEditor = ({
                                     type="color"
                                     value={overlay.style.color}
                                     onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, color: e.target.value } })}
-                                    className="w-11 h-11 rounded border border-neutral-800 cursor-pointer bg-transparent p-0"
+                                    className="w-11 h-11 rounded border border-neutral-200 cursor-pointer bg-transparent p-0"
                                   />
                                   <span className="text-[10px] text-neutral-400 min-w-[34px] ml-2">Outline</span>
                                   <button
-                                    className={`px-2 py-0.5 rounded border text-[10px] cursor-pointer transition-all min-w-[44px] min-h-[44px] ${overlay.style.outline ? 'bg-brand-600/20 border-brand-600 text-brand-400' : 'border-neutral-800 bg-transparent text-neutral-400'}`}
+                                    className={`px-2 py-0.5 rounded border text-[10px] cursor-pointer transition-all min-w-[44px] min-h-[44px] ${overlay.style.outline ? 'bg-brand-600/20 border-brand-600 text-brand-400' : 'border-neutral-200 bg-transparent text-neutral-400'}`}
                                     onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, outline: !overlay.style.outline } }); }}
                                   >{overlay.style.outline ? 'On' : 'Off'}</button>
                                 </div>
@@ -1996,20 +1996,20 @@ const MultiClipEditor = ({
                                   <span className="text-[10px] text-neutral-400 min-w-[34px]">Scope</span>
                                   <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
                                     <button
-                                      className={`px-2 py-0.5 rounded border text-[10px] cursor-pointer transition-all min-h-[44px] px-2.5 py-1.5 ${overlay.scope === 'full' ? 'bg-brand-600/20 border-brand-600 text-brand-400' : 'border-neutral-800 bg-transparent text-neutral-400'}`}
+                                      className={`px-2 py-0.5 rounded border text-[10px] cursor-pointer transition-all min-h-[44px] px-2.5 py-1.5 ${overlay.scope === 'full' ? 'bg-brand-600/20 border-brand-600 text-brand-400' : 'border-neutral-200 bg-transparent text-neutral-400'}`}
                                       onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { scope: 'full' }); }}
                                     >Full Video</button>
                                     {clips.map((_, i) => (
                                       <button
                                         key={i}
-                                        className={`px-2 py-0.5 rounded border text-[10px] cursor-pointer transition-all min-h-[44px] px-2.5 py-1.5 ${overlay.scope === i ? 'bg-brand-600/20 border-brand-600 text-brand-400' : 'border-neutral-800 bg-transparent text-neutral-400'}`}
+                                        className={`px-2 py-0.5 rounded border text-[10px] cursor-pointer transition-all min-h-[44px] px-2.5 py-1.5 ${overlay.scope === i ? 'bg-brand-600/20 border-brand-600 text-brand-400' : 'border-neutral-200 bg-transparent text-neutral-400'}`}
                                         onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { scope: i }); }}
                                       >Clip {i + 1}</button>
                                     ))}
                                   </div>
                                 </div>
                                 {/* Save to Bank */}
-                                <div className="flex items-center gap-1.5 flex-wrap border-t border-neutral-800 pt-1.5 mt-0.5">
+                                <div className="flex items-center gap-1.5 flex-wrap border-t border-neutral-200 pt-1.5 mt-0.5">
                                   <span style={{ fontSize: '10px', color: theme.text.secondary }}>Save to:</span>
                                   <button
                                     className="px-2 py-0.5 rounded border border-[#6366f1]/30 bg-transparent text-[#818cf8] text-[10px] cursor-pointer transition-all min-h-[44px] px-2.5 py-1.5"
@@ -2056,7 +2056,7 @@ const MultiClipEditor = ({
             return downsample(data, maxBars);
           });
           return (
-          <div className="flex w-full flex-col border-t border-neutral-800 bg-[#1a1a1aff] px-4 py-3 flex-shrink-0">
+          <div className="flex w-full flex-col border-t border-neutral-200 bg-[#1a1a1aff] px-4 py-3 flex-shrink-0">
             {/* Timeline header */}
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -2070,7 +2070,7 @@ const MultiClipEditor = ({
                 <span className="text-[10px] text-neutral-500">Max</span>
                 <input type="number" min={1} max={300} step={1} value={userMaxDuration}
                   onChange={(e) => setUserMaxDuration(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-14 px-1.5 py-0.5 rounded border border-neutral-800 bg-black text-[#ffffffff] text-[11px] text-center outline-none"
+                  className="w-14 px-1.5 py-0.5 rounded border border-neutral-200 bg-black text-[#ffffffff] text-[11px] text-center outline-none"
                   title="Max timeline duration (seconds)"
                 />
                 <span className="text-[10px] text-neutral-500">s</span>
@@ -2086,7 +2086,7 @@ const MultiClipEditor = ({
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[12px] whitespace-nowrap flex-shrink-0 cursor-pointer transition-colors ${
                       idx === activeVideoIndex
                         ? 'border-brand-600 bg-brand-600/15 text-brand-600 font-semibold'
-                        : 'border-neutral-700 bg-[#1a1a1aff] text-neutral-400 hover:border-neutral-600'
+                        : 'border-neutral-200 bg-[#1a1a1aff] text-neutral-400 hover:border-neutral-600'
                     }`}
                   >
                     {video.isTemplate ? 'Template' : (
@@ -2184,7 +2184,7 @@ const MultiClipEditor = ({
               </div>
 
               {/* Single scrollable column */}
-              <div className="flex-1 rounded-md border border-neutral-800 bg-black overflow-x-auto" ref={timelineRef}>
+              <div className="flex-1 rounded-md border border-neutral-200 bg-black overflow-x-auto" ref={timelineRef}>
                 <div style={{ position: 'relative', minWidth: '100%', width: `${timelinePx}px` }}>
                   {/* Playhead line — spans all tracks */}
                   {timelineDuration > 0 && (
@@ -2472,7 +2472,7 @@ const MultiClipEditor = ({
 
           {/* ── RIGHT SIDEBAR ── */}
           {!isMobile && (
-            <div className="flex w-96 flex-none flex-col border-l border-neutral-800 bg-[#1a1a1aff] overflow-auto">
+            <div className="flex w-96 flex-none flex-col border-l border-neutral-200 bg-[#1a1a1aff] overflow-auto">
 
               {renderCollapsibleSection('audio', 'Audio', (
                 <div className="flex flex-col gap-3">
@@ -2504,7 +2504,7 @@ const MultiClipEditor = ({
                     <div className="flex flex-col gap-1 max-h-[120px] overflow-y-auto">
                       <span className="text-caption font-caption text-neutral-400">Library Audio</span>
                       {libraryAudio.map(audio => (
-                        <div key={audio.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-neutral-800 text-[12px] text-[#ffffffff]"
+                        <div key={audio.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-neutral-100 text-[12px] text-[#ffffffff]"
                           onClick={() => { setAudioToTrim(audio); setShowAudioTrimmer(true); }}>
                           <FeatherMusic className="w-3.5 h-3.5 opacity-60 flex-shrink-0" />
                           <span className="truncate">{audio.name}</span>
@@ -2519,7 +2519,7 @@ const MultiClipEditor = ({
                 <div className="flex flex-col gap-3">
                   {/* Collection dropdown */}
                   <select value={selectedCollection} onChange={(e) => setSelectedCollection(e.target.value)}
-                    className="w-full px-3 py-2 bg-black border border-neutral-800 rounded-lg text-[#ffffffff] text-[13px] outline-none cursor-pointer">
+                    className="w-full px-3 py-2 bg-black border border-neutral-200 rounded-lg text-[#ffffffff] text-[13px] outline-none cursor-pointer">
                     <option value="category">Selected Clips</option>
                     <option value="all">All Videos (Library)</option>
                     {collections.filter(c => !category?.projectId || c.projectId === category.projectId).map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
@@ -2599,7 +2599,7 @@ const MultiClipEditor = ({
                     </div>
                   </div>
                   {/* Clip ordering */}
-                  <div className="border-t border-neutral-800 pt-3">
+                  <div className="border-t border-neutral-200 pt-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-caption font-caption text-neutral-400">Timeline ({clips.length} clip{clips.length !== 1 ? 's' : ''})</span>
                       <div className="flex items-center gap-1">
@@ -2612,14 +2612,14 @@ const MultiClipEditor = ({
                       {isAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)` : 'No beats detected'}
                     </Badge>
                     {clips.length === 0 ? (
-                      <div className="text-[11px] text-neutral-600 text-center py-3 bg-neutral-800/30 rounded-md">No clips added yet</div>
+                      <div className="text-[11px] text-neutral-600 text-center py-3 bg-neutral-100/30 rounded-md">No clips added yet</div>
                     ) : (
                       <div className="flex flex-col gap-1">
                         {clips.map((clip, idx) => (
-                          <div key={idx} className={`flex items-center gap-2 p-1.5 rounded-md cursor-pointer ${activeClipIndex === idx ? 'bg-brand-600/10 border border-brand-600/30' : 'bg-neutral-800/30 border border-transparent'}`}
+                          <div key={idx} className={`flex items-center gap-2 p-1.5 rounded-md cursor-pointer ${activeClipIndex === idx ? 'bg-brand-600/10 border border-brand-600/30' : 'bg-neutral-100/30 border border-transparent'}`}
                             onClick={() => setActiveClipIndex(idx)}>
                             <span className="text-[10px] text-neutral-500 w-4">{idx + 1}.</span>
-                            {(clip.thumbnailUrl || clip.thumbnail) ? <img src={clip.thumbnailUrl || clip.thumbnail} alt="" className="w-7 h-7 rounded object-cover" /> : <div className="w-7 h-7 rounded bg-neutral-800 flex items-center justify-center text-[10px]">&#127916;</div>}
+                            {(clip.thumbnailUrl || clip.thumbnail) ? <img src={clip.thumbnailUrl || clip.thumbnail} alt="" className="w-7 h-7 rounded object-cover" /> : <div className="w-7 h-7 rounded bg-neutral-100 flex items-center justify-center text-[10px]">&#127916;</div>}
                             <div className="flex-1 min-w-0">
                               <div className="text-[11px] text-[#ffffffff] truncate">{clip.name || 'Clip'}</div>
                               <div className="text-[9px] text-neutral-500">{formatTime(getClipDuration(clip.id || clip.sourceId))}</div>
@@ -2648,11 +2648,11 @@ const MultiClipEditor = ({
                           <div className="flex gap-1.5 mb-2">
                             <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)}
                               onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
-                              placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
+                              placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-200 bg-black text-[#ffffffff] text-[12px] outline-none" />
                             <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} aria-label="Add to Text Bank A" onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} />
                           </div>
                           {bankA.map((text, idx) => (
-                            <div key={idx} className="flex items-center px-2 py-1 rounded-md bg-neutral-800/50 mb-1">
+                            <div key={idx} className="flex items-center px-2 py-1 rounded-md bg-neutral-100/50 mb-1">
                               <span className="flex-1 text-[12px] text-neutral-300 cursor-pointer" onClick={() => addTextOverlay(text)}>{text}</span>
                               <button onClick={() => handleRemoveFromVideoTextBank(1, idx)} className="bg-transparent border-none text-neutral-600 cursor-pointer text-[14px] px-1">&#215;</button>
                             </div>
@@ -2664,11 +2664,11 @@ const MultiClipEditor = ({
                           <div className="flex gap-1.5 mb-2">
                             <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)}
                               onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
-                              placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
+                              placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-200 bg-black text-[#ffffffff] text-[12px] outline-none" />
                             <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} aria-label="Add to Text Bank B" onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} />
                           </div>
                           {bankB.map((text, idx) => (
-                            <div key={idx} className="flex items-center px-2 py-1 rounded-md bg-neutral-800/50 mb-1">
+                            <div key={idx} className="flex items-center px-2 py-1 rounded-md bg-neutral-100/50 mb-1">
                               <span className="flex-1 text-[12px] text-neutral-300 cursor-pointer" onClick={() => addTextOverlay(text)}>{text}</span>
                               <button onClick={() => handleRemoveFromVideoTextBank(2, idx)} className="bg-transparent border-none text-neutral-600 cursor-pointer text-[14px] px-1">&#215;</button>
                             </div>
@@ -2708,7 +2708,7 @@ const MultiClipEditor = ({
                       {selOverlay && (
                         <input value={selOverlay.text}
                           onChange={(e) => updateTextOverlay(selOverlay.id, { text: e.target.value })}
-                          className="w-full px-3 py-2 rounded-md border border-neutral-800 bg-black text-white text-sm" />
+                          className="w-full px-3 py-2 rounded-md border border-neutral-200 bg-black text-white text-sm" />
                       )}
 
                       {/* Font Family */}
@@ -2810,14 +2810,14 @@ const MultiClipEditor = ({
                       </div>
 
                       {/* Text Overlays list */}
-                      <div className="pt-2 border-t border-neutral-800">
+                      <div className="pt-2 border-t border-neutral-200">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-[13px] text-neutral-500">Text Overlays</span>
                         </div>
                         {textOverlays.length > 0 ? (
                           <div className="flex flex-col gap-1.5">
                             {textOverlays.map(overlay => (
-                              <div key={overlay.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${editingTextId === overlay.id ? 'bg-brand-600/20 border border-brand-600' : 'border border-neutral-800 hover:bg-neutral-800'}`}
+                              <div key={overlay.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${editingTextId === overlay.id ? 'bg-brand-600/20 border border-brand-600' : 'border border-neutral-200 hover:bg-neutral-100'}`}
                                 onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}>
                                 <span className="text-body font-body text-[#ffffffff] text-[12px] truncate flex-1">{overlay.text}</span>
                                 <IconButton size="small" variant="destructive-tertiary" icon={<FeatherTrash2 className="w-3 h-3" />} onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} aria-label="Remove" />
@@ -2830,9 +2830,9 @@ const MultiClipEditor = ({
                       </div>
 
                       {/* Crop */}
-                      <div className="flex items-center gap-2 pt-2 border-t border-neutral-800">
+                      <div className="flex items-center gap-2 pt-2 border-t border-neutral-200">
                         <span className="text-caption font-caption text-neutral-400">Crop</span>
-                        <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} className="flex-1 px-2 py-1.5 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[12px] outline-none">
+                        <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} className="flex-1 px-2 py-1.5 bg-neutral-100 border border-neutral-200 rounded-md text-[#ffffffff] text-[12px] outline-none">
                           <option value="9:16">9:16 (Full)</option>
                           <option value="4:3">4:3 (Crop)</option>
                           <option value="1:1">1:1 (Crop)</option>
@@ -2842,7 +2842,7 @@ const MultiClipEditor = ({
                         <div className="flex flex-col gap-1">
                           <span className="text-caption font-caption text-neutral-400">Apply Preset</span>
                           <select value={selectedPreset?.id || ''} onChange={(e) => { const preset = presets.find(p => p.id === e.target.value); if (preset) handleApplyPreset(preset); }}
-                            className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[13px] outline-none">
+                            className="w-full px-3 py-2 bg-neutral-100 border border-neutral-200 rounded-md text-[#ffffffff] text-[13px] outline-none">
                             <option value="">Choose a preset...</option>
                             {presets.map(preset => (<option key={preset.id} value={preset.id}>{preset.name}</option>))}
                           </select>
@@ -2968,7 +2968,7 @@ const MultiClipEditor = ({
         {/* ── Close Confirmation ── */}
         {showCloseConfirm && (
           <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-[100]">
-            <div className="bg-[#171717] rounded-xl p-6 max-w-[360px] w-full border border-neutral-800">
+            <div className="bg-[#171717] rounded-xl p-6 max-w-[360px] w-full border border-neutral-200">
               <h3 className="text-[16px] font-semibold mb-2" style={{ color: theme.text.primary }}>Close editor?</h3>
               <p className="text-[13px] mb-4" style={{ color: theme.text.secondary }}>
                 You have unsaved work. Are you sure you want to close?

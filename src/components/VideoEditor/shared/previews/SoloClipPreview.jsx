@@ -155,7 +155,7 @@ const SoloClipPreview = ({
       {/* Visual area */}
       <div
         ref={containerRef}
-        className="relative w-full overflow-hidden rounded-xl border border-solid border-neutral-700 bg-[#0a0a0f]"
+        className="relative w-full overflow-hidden rounded-xl border border-solid border-neutral-200 bg-[#0a0a0f]"
         style={{ aspectRatio: ASPECT_CSS[aspectRatio] || '9/16' }}
         onClick={() => setTextSelected(false)}
       >

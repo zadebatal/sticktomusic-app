@@ -123,9 +123,9 @@ const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose })
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={onClose}>
-      <div className="flex w-full max-w-4xl flex-col rounded-xl border border-neutral-800 bg-[#111111] overflow-hidden max-h-[85vh]" onClick={e => e.stopPropagation()}>
+      <div className="flex w-full max-w-4xl flex-col rounded-xl border border-neutral-200 bg-[#111111] overflow-hidden max-h-[85vh]" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 flex-none">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 flex-none">
           <div className="flex items-center gap-3">
             <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Distribute Lyrics</span>
             <Badge variant="neutral">{lines.length} lines</Badge>
@@ -136,9 +136,9 @@ const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose })
         {/* Body — two columns */}
         <div className="flex items-stretch flex-1 min-h-0 overflow-hidden">
           {/* Left — Editable text + parsed lines */}
-          <div className="flex flex-1 flex-col gap-3 border-r border-neutral-800 p-4 overflow-hidden">
+          <div className="flex flex-1 flex-col gap-3 border-r border-neutral-200 p-4 overflow-hidden">
             <textarea
-              className="w-full rounded-lg border border-solid border-neutral-800 bg-black px-3 py-2 text-body font-body text-white outline-none placeholder-neutral-500 resize-none flex-none"
+              className="w-full rounded-lg border border-solid border-neutral-200 bg-black px-3 py-2 text-body font-body text-white outline-none placeholder-neutral-500 resize-none flex-none"
               style={{ height: 100 }}
               placeholder="Paste or edit lyrics..."
               value={editedText}
@@ -169,8 +169,8 @@ const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose })
                       isSelected
                         ? 'bg-indigo-500/20 border border-indigo-500'
                         : isAssigned
-                          ? 'bg-neutral-800/50 border border-transparent'
-                          : 'bg-black border border-transparent hover:bg-neutral-900'
+                          ? 'bg-neutral-100/50 border border-transparent'
+                          : 'bg-black border border-transparent hover:bg-neutral-50'
                     }`}
                     onClick={(e) => handleLineClick(idx, e)}
                   >
@@ -198,7 +198,7 @@ const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose })
               const color = getBankColor(bankIdx).primary;
               const assignedIdxs = assignments[bankIdx] || [];
               return (
-                <div key={bankIdx} className="flex flex-col gap-1 rounded-lg border border-solid border-neutral-800 overflow-hidden">
+                <div key={bankIdx} className="flex flex-col gap-1 rounded-lg border border-solid border-neutral-200 overflow-hidden">
                   <div
                     className="flex items-center justify-between px-3 py-2 cursor-pointer hover:opacity-90 transition-opacity"
                     style={{ backgroundColor: color }}
@@ -232,7 +232,7 @@ const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose })
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-neutral-800 px-6 py-4 flex-none">
+        <div className="flex items-center justify-between border-t border-neutral-200 px-6 py-4 flex-none">
           <Button variant="neutral-secondary" size="medium" icon={<FeatherZap />} onClick={handleAutoDistribute}>
             Auto-distribute
           </Button>

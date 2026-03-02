@@ -15,7 +15,7 @@ const useCollapsibleSections = (initialSections = {}) => {
   }, []);
 
   const renderCollapsibleSection = (key, title, content) => (
-    <div className="w-full border-t border-neutral-800">
+    <div className="w-full border-t border-neutral-200">
       <button
         onClick={() => toggleSection(key)}
         className="w-full flex items-center justify-between px-4 py-3 bg-transparent border-none text-white text-heading-3 font-heading-3 cursor-pointer"

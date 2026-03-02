@@ -194,7 +194,7 @@ const PreviewTransport = ({
                     item.thumbnailUrl ? (
                       <img src={item.thumbnailUrl} alt="" className="w-full h-full object-cover" draggable={false} />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-neutral-800">
+                      <div className="w-full h-full flex items-center justify-center bg-neutral-100">
                         <FeatherFilm className="text-neutral-600" style={{ width: 8, height: 8 }} />
                       </div>
                     )
@@ -224,7 +224,7 @@ const PreviewTransport = ({
             const leftPct = (track.start / totalDuration) * 100;
             const widthPct = ((track.end - track.start) / totalDuration) * 100;
             return (
-              <div key={track.id} className="relative w-full h-4 rounded-sm bg-neutral-900 overflow-visible select-none">
+              <div key={track.id} className="relative w-full h-4 rounded-sm bg-neutral-50 overflow-visible select-none">
                 {/* Colored bar */}
                 <div
                   className="absolute top-0 bottom-0 rounded-sm flex items-center overflow-hidden"
@@ -295,7 +295,7 @@ const PreviewTransport = ({
 
         <div
           ref={progressBarRef}
-          className={`flex-1 h-1 rounded-full bg-neutral-800 overflow-hidden ${onScrub ? 'cursor-pointer' : ''}`}
+          className={`flex-1 h-1 rounded-full bg-neutral-100 overflow-hidden ${onScrub ? 'cursor-pointer' : ''}`}
           onPointerDown={handleProgressBarPointerDown}
         >
           <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${progress * 100}%`, transition: 'none' }} />
@@ -303,7 +303,7 @@ const PreviewTransport = ({
 
         {showReroll && onReroll && (
           <button
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 cursor-pointer transition-colors"
             onClick={onReroll}
             aria-label="Reroll current clip"
             title="Swap current clip"

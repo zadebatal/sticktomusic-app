@@ -63,7 +63,7 @@ const MediaCard = ({ item, pipelineColor, playingAudioId, onToggleAudio, playing
         className={`flex w-full items-center gap-2 rounded-md border border-solid px-3 py-1.5 cursor-pointer transition-colors ${
           isPlaying
             ? 'border-[#f59e0b]/40 bg-[#f59e0b]/5'
-            : 'border-neutral-800 bg-[#1a1a1a] hover:border-neutral-600'
+            : 'border-neutral-200 bg-[#1a1a1a] hover:border-neutral-600'
         }`}
         onClick={() => onToggleAudio?.(item)}
       >
@@ -89,7 +89,7 @@ const MediaCard = ({ item, pipelineColor, playingAudioId, onToggleAudio, playing
   if (isVideo) {
     return (
       <div
-        className="rounded-lg border border-solid border-neutral-800 bg-[#1a1a1a] overflow-hidden hover:border-neutral-600 cursor-pointer transition-colors"
+        className="rounded-lg border border-solid border-neutral-200 bg-[#1a1a1a] overflow-hidden hover:border-neutral-600 cursor-pointer transition-colors"
         onClick={() => onToggleVideo?.(item)}
       >
         <div className="w-full relative bg-[#171717]" style={{ paddingTop: '177.78%' }}>
@@ -141,7 +141,7 @@ const MediaCard = ({ item, pipelineColor, playingAudioId, onToggleAudio, playing
   // Default: Image — always use full-res url (old thumbnails are 50px micro-thumbs)
   return (
     <div
-      className="rounded-lg border border-solid border-neutral-800 bg-[#1a1a1a] overflow-hidden hover:border-neutral-600 cursor-pointer transition-colors"
+      className="rounded-lg border border-solid border-neutral-200 bg-[#1a1a1a] overflow-hidden hover:border-neutral-600 cursor-pointer transition-colors"
       onClick={() => onViewImage?.(item)}
     >
       <div className="w-full relative bg-[#171717]" style={{ paddingTop: '177.78%' }}>
@@ -173,7 +173,7 @@ const DraftCard = ({ draft, type }) => {
     : draft.thumbnailUrl || draft.url;
 
   return (
-    <div className="flex w-full flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1a] overflow-hidden hover:border-neutral-600 cursor-pointer transition-colors">
+    <div className="flex w-full flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1a] overflow-hidden hover:border-neutral-600 cursor-pointer transition-colors">
       <div className="w-full aspect-[9/16] bg-[#171717] relative">
         {thumbSrc ? (
           <img className="w-full h-full object-cover" src={thumbSrc} alt={draft.name} loading="lazy" />
@@ -521,7 +521,7 @@ const StudioLibrary = ({ db, artistId }) => {
       />
 
       {/* ═══ HORIZONTAL TOP NAV BAR ═══ */}
-      <div className="flex w-full flex-none items-center gap-2 border-b border-solid border-neutral-800 px-6 py-3">
+      <div className="flex w-full flex-none items-center gap-2 border-b border-solid border-neutral-200 px-6 py-3">
         {/* Album pills: All Media */}
         <button
           className={`flex items-center gap-1.5 rounded-full border border-solid px-2.5 py-1 text-caption font-caption transition-colors ${
@@ -680,7 +680,7 @@ const StudioLibrary = ({ db, artistId }) => {
           </div>
 
           {/* Type filter tabs */}
-          <div className="flex w-full items-end border-b border-solid border-neutral-800">
+          <div className="flex w-full items-end border-b border-solid border-neutral-200">
             <div className="flex items-start">
               {typeTabs.map(tab => {
                 const isActive = !showDrafts && activeTypeTab === tab.value;

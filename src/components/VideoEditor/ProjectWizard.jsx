@@ -225,7 +225,7 @@ const ProjectWizard = ({
   return (
     <div className="flex w-full h-full flex-col items-center bg-black overflow-y-auto">
       {/* Top bar */}
-      <div className="flex w-full flex-none items-center justify-between border-b border-solid border-neutral-800 px-4 sm:px-6 py-4">
+      <div className="flex w-full flex-none items-center justify-between border-b border-solid border-neutral-200 px-4 sm:px-6 py-4">
         <div className="flex items-center gap-3 min-w-0">
           <IconButton
             variant="neutral-tertiary"
@@ -298,7 +298,7 @@ const ProjectWizard = ({
       {/* Cancel confirmation dialog */}
       {showCancelConfirm && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80" onClick={() => setShowCancelConfirm(false)}>
-          <div className="w-full max-w-sm rounded-xl border border-neutral-800 bg-[#111111] p-6" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-sm rounded-xl border border-neutral-200 bg-[#111111] p-6" onClick={e => e.stopPropagation()}>
             <span className="text-heading-3 font-heading-3 text-[#ffffffff] block mb-2">Cancel project creation?</span>
             <span className="text-body font-body text-neutral-400 block mb-6">
               The project and its niches will be deleted. Any uploaded media will remain in your library.

@@ -85,7 +85,7 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
 
         {/* Drop zone */}
         <div
-          className="flex w-full max-w-md flex-col items-center gap-3 rounded-lg border-2 border-dashed border-neutral-700 bg-[#0a0a0f] px-6 py-6 cursor-pointer hover:border-neutral-500 transition-colors"
+          className="flex w-full max-w-md flex-col items-center gap-3 rounded-lg border-2 border-dashed border-neutral-200 bg-[#0a0a0f] px-6 py-6 cursor-pointer hover:border-neutral-500 transition-colors"
           onClick={() => !uploading && fileInputRef.current?.click()}
           onDrop={handleDrop}
           onDragOver={e => e.preventDefault()}
@@ -107,7 +107,7 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
         {files.length > 0 && (
           <div className="flex w-full max-w-md flex-col gap-2">
             {files.map((entry, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1a] px-3 py-2">
+              <div key={i} className="flex items-center gap-3 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1a] px-3 py-2">
                 <div className="w-10 h-10 flex-none rounded bg-[#0a0a0f] overflow-hidden flex items-center justify-center">
                   {entry.type === 'image' ? (
                     <img src={entry.localPreview} alt="" className="w-full h-full object-cover" />
@@ -130,7 +130,7 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
                     <span className="text-[11px] text-neutral-500">{formatSize(entry.file.size)}</span>
                   </div>
                   {entry.status === 'uploading' && (
-                    <div className="w-full h-1 rounded-full bg-neutral-800 mt-1">
+                    <div className="w-full h-1 rounded-full bg-neutral-100 mt-1">
                       <div className="h-full rounded-full bg-cyan-500 transition-all" style={{ width: `${entry.progress}%` }} />
                     </div>
                   )}
@@ -147,13 +147,13 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
             {!uploading && (
               <div className="flex flex-col gap-2 mt-2">
                 <input
-                  className="w-full rounded-lg border border-neutral-700 bg-[#0a0a0f] px-3 py-2 text-sm text-white outline-none focus:border-neutral-500"
+                  className="w-full rounded-lg border border-neutral-200 bg-[#0a0a0f] px-3 py-2 text-sm text-white outline-none focus:border-neutral-500"
                   placeholder="Caption (optional)..."
                   value={caption}
                   onChange={e => setCaption(e.target.value)}
                 />
                 <input
-                  className="w-full rounded-lg border border-neutral-700 bg-[#0a0a0f] px-3 py-2 text-sm text-white outline-none focus:border-neutral-500"
+                  className="w-full rounded-lg border border-neutral-200 bg-[#0a0a0f] px-3 py-2 text-sm text-white outline-none focus:border-neutral-500"
                   placeholder="#hashtags (optional)"
                   value={hashtags}
                   onChange={e => setHashtags(e.target.value)}
@@ -189,7 +189,7 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
             {nicheUploads.map(post => (
               <div
                 key={post.id}
-                className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
+                className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
                 onClick={() => setPreviewPost(post)}
               >
                 {post.thumbnail ? (
@@ -242,11 +242,11 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
       )}
 
       {/* Audio picker */}
-      <div className="flex w-full flex-col gap-2 border-t border-solid border-neutral-800 px-4 sm:px-12 py-4">
+      <div className="flex w-full flex-col gap-2 border-t border-solid border-neutral-200 px-4 sm:px-12 py-4">
         <span className="text-caption-bold font-caption-bold text-neutral-300">Audio</span>
         <div className="relative max-w-sm">
           <button
-            className="flex w-full items-center gap-2 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2 hover:bg-[#262626] transition"
+            className="flex w-full items-center gap-2 rounded-md border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-2 hover:bg-[#262626] transition"
             onClick={() => setAudioPickerOpen(!audioPickerOpen)}
           >
             <FeatherMusic className="text-indigo-400 flex-none" style={{ width: 14, height: 14 }} />
@@ -259,7 +259,7 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
             />
           </button>
           {audioPickerOpen && (
-            <div className="absolute top-full left-0 right-0 mt-1 flex flex-col gap-0.5 px-2 py-2 bg-[#111111] border border-neutral-700 rounded-lg max-h-48 overflow-y-auto shadow-xl z-20">
+            <div className="absolute top-full left-0 right-0 mt-1 flex flex-col gap-0.5 px-2 py-2 bg-[#111111] border border-neutral-200 rounded-lg max-h-48 overflow-y-auto shadow-xl z-20">
               {projectAudio.length === 0 && (
                 <span className="text-caption font-caption text-neutral-500 px-2 py-1">No audio uploaded</span>
               )}
@@ -269,7 +269,7 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
                   <button
                     key={audio.id}
                     className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition ${
-                      isActive ? 'bg-indigo-600' : 'hover:bg-neutral-800'
+                      isActive ? 'bg-indigo-600' : 'hover:bg-neutral-100'
                     }`}
                     onClick={() => handleSelectAudio(audio.id)}
                   >

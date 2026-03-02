@@ -241,7 +241,7 @@ const MontagePreview = ({
       {/* Visual area */}
       <div
         ref={containerRef}
-        className="relative w-full overflow-hidden rounded-xl border border-solid border-neutral-700 bg-[#0a0a0f]"
+        className="relative w-full overflow-hidden rounded-xl border border-solid border-neutral-200 bg-[#0a0a0f]"
         style={{ aspectRatio: ASPECT_CSS[aspectRatio] || '9/16' }}
         onClick={() => setTextSelected(false)}
       >
@@ -349,7 +349,7 @@ const MontagePreview = ({
         <div className="flex items-center justify-center gap-3 mt-1">
           {audioUrl && (
             <button
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 cursor-pointer transition-colors"
               onClick={handleCutByBeat}
             >
               <span className="text-caption font-caption text-neutral-300">Cut by beat</span>
@@ -365,7 +365,7 @@ const MontagePreview = ({
           )}
           {(textBankA.length > 0 || textBankB.length > 0 || onCutByWord) && (
             <button
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 cursor-pointer transition-colors"
               onClick={handleCutByWord}
             >
               <span className="text-caption font-caption text-neutral-300">Cut by word</span>

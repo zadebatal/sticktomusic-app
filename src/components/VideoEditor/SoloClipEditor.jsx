@@ -1269,7 +1269,7 @@ const SoloClipEditor = ({
               {/* Video Preview */}
               <div
                 ref={previewRef}
-                className="flex items-center justify-center rounded-lg bg-[#1a1a1aff] border border-neutral-800 relative overflow-hidden"
+                className="flex items-center justify-center rounded-lg bg-[#1a1a1aff] border border-neutral-200 relative overflow-hidden"
                 style={{ aspectRatio: '9/16', height: '50vh' }}
                 onPointerDown={(e) => { if (e.target === e.currentTarget || e.target.tagName === 'VIDEO') setEditingTextId(null); }}
               >
@@ -1328,7 +1328,7 @@ const SoloClipEditor = ({
                 <input
                   type="number" min={1} max={50} value={generateCount}
                   onChange={(e) => setGenerateCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
-                  className="w-16 px-2 py-1.5 rounded-md border border-neutral-700 bg-[#1a1a1aff] text-[#ffffffff] text-[12px] text-center outline-none"
+                  className="w-16 px-2 py-1.5 rounded-md border border-neutral-200 bg-[#1a1a1aff] text-[#ffffffff] text-[12px] text-center outline-none"
                 />
               </div>
 
@@ -1336,7 +1336,7 @@ const SoloClipEditor = ({
 
             {/* ── MOBILE TOOL TOOLBAR ── */}
             {isMobile && (
-              <div className="flex justify-around items-center border-t border-b border-neutral-800 bg-[#0a0a0aff] flex-shrink-0 py-1">
+              <div className="flex justify-around items-center border-t border-b border-neutral-200 bg-[#0a0a0aff] flex-shrink-0 py-1">
                 {[
                   { id: 'clips', label: 'Clips', icon: '\uD83C\uDFAC' },
                   { id: 'text', label: 'Text', icon: '\uD83D\uDCDD' }
@@ -1355,11 +1355,11 @@ const SoloClipEditor = ({
 
             {/* ── MOBILE TOOL PANEL ── */}
             {isMobile && mobileToolTab && (
-              <div className="flex-1 overflow-auto bg-[#1a1a1aff] border-t border-neutral-800 min-h-0">
+              <div className="flex-1 overflow-auto bg-[#1a1a1aff] border-t border-neutral-200 min-h-0">
                 {mobileToolTab === 'clips' && (
                   <div className="p-3">
                     <select value={selectedCollection} onChange={(e) => setSelectedCollection(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#0a0a0aff] border border-neutral-800 rounded-lg text-[#ffffffff] text-[13px] outline-none cursor-pointer mb-2 min-h-[44px]">
+                      className="w-full px-3 py-2 bg-[#0a0a0aff] border border-neutral-200 rounded-lg text-[#ffffffff] text-[13px] outline-none cursor-pointer mb-2 min-h-[44px]">
                       <option value="category">Selected Clips</option>
                       <option value="all">All Videos (Library)</option>
                       {collections.filter(c => !category?.projectId || c.projectId === category.projectId).map(col => (<option key={col.id} value={col.id}>{col.name}</option>))}
@@ -1382,7 +1382,7 @@ const SoloClipEditor = ({
                   <div className="p-3">
                     {textOverlays.map((overlay, idx) => (
                       <div key={overlay.id} onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
-                        className={`mb-1.5 p-2.5 rounded-lg cursor-pointer ${editingTextId === overlay.id ? 'bg-brand-600/10 border border-brand-600/30' : 'bg-neutral-800/50 border border-neutral-800'}`}>
+                        className={`mb-1.5 p-2.5 rounded-lg cursor-pointer ${editingTextId === overlay.id ? 'bg-brand-600/10 border border-brand-600/30' : 'bg-neutral-100/50 border border-neutral-200'}`}>
                         <div className="flex justify-between items-center mb-1">
                           <span className="text-[11px] text-neutral-400">Overlay {idx + 1}</span>
                           <IconButton icon={<FeatherX />} aria-label="Remove overlay" onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} />
@@ -1415,7 +1415,7 @@ const SoloClipEditor = ({
                 return downsample(sourceData, maxBars);
               })() : [];
               return (
-              <div className="flex w-full flex-col border-t border-neutral-800 bg-[#1a1a1aff] px-4 py-3 flex-shrink-0">
+              <div className="flex w-full flex-col border-t border-neutral-200 bg-[#1a1a1aff] px-4 py-3 flex-shrink-0">
                 {/* Timeline header */}
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -1430,7 +1430,7 @@ const SoloClipEditor = ({
                     <span className="text-[10px] text-neutral-500">Max</span>
                     <input type="number" min={1} max={300} step={1} value={userMaxDuration}
                       onChange={(e) => setUserMaxDuration(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-14 px-1.5 py-0.5 rounded border border-neutral-800 bg-black text-[#ffffffff] text-[11px] text-center outline-none"
+                      className="w-14 px-1.5 py-0.5 rounded border border-neutral-200 bg-black text-[#ffffffff] text-[11px] text-center outline-none"
                       title="Max timeline duration (seconds)"
                       disabled={!!(selectedAudio && !selectedAudio.isSourceVideo)}
                     />
@@ -1447,7 +1447,7 @@ const SoloClipEditor = ({
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[12px] whitespace-nowrap flex-shrink-0 cursor-pointer transition-colors ${
                           idx === activeVideoIndex
                             ? 'border-brand-600 bg-brand-600/15 text-brand-600 font-semibold'
-                            : 'border-neutral-700 bg-[#1a1a1aff] text-neutral-400 hover:border-neutral-600'
+                            : 'border-neutral-200 bg-[#1a1a1aff] text-neutral-400 hover:border-neutral-600'
                         }`}
                       >
                         {video.isTemplate ? 'Template' : (
@@ -1545,7 +1545,7 @@ const SoloClipEditor = ({
                   </div>
 
                   {/* Single scrollable column */}
-                  <div className="flex-1 rounded-md border border-neutral-800 bg-black overflow-x-auto" ref={timelineRef}>
+                  <div className="flex-1 rounded-md border border-neutral-200 bg-black overflow-x-auto" ref={timelineRef}>
                     <div style={{ position: 'relative', minWidth: '100%', width: `${timelinePx}px` }}>
                       {/* Playhead line — spans all tracks */}
                       {timelineDuration > 0 && (
@@ -1744,7 +1744,7 @@ const SoloClipEditor = ({
 
           {/* RIGHT: Sidebar */}
           {!isMobile && (
-            <div className="flex w-96 flex-none flex-col items-start self-stretch border-l border-neutral-800 bg-[#1a1a1aff] overflow-auto">
+            <div className="flex w-96 flex-none flex-col items-start self-stretch border-l border-neutral-200 bg-[#1a1a1aff] overflow-auto">
               <div className="flex w-full flex-col items-start">
                 {renderCollapsibleSection('audio', 'Audio', (
                   <div className="flex flex-col gap-3">
@@ -1775,7 +1775,7 @@ const SoloClipEditor = ({
                       <div className="flex flex-col gap-1 max-h-[120px] overflow-y-auto">
                         <span className="text-caption font-caption text-neutral-400">Library Audio</span>
                         {libraryAudio.map(audio => (
-                          <div key={audio.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-neutral-800 text-[12px] text-[#ffffffff]"
+                          <div key={audio.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-neutral-100 text-[12px] text-[#ffffffff]"
                             onClick={() => { setAudioToTrim(audio); setShowAudioTrimmer(true); }}>
                             <FeatherMusic className="w-3.5 h-3.5 opacity-60 flex-shrink-0" />
                             <span className="truncate">{audio.name}</span>
@@ -1789,7 +1789,7 @@ const SoloClipEditor = ({
                 {renderCollapsibleSection('clips', 'Clips', (
                   <div className="flex flex-col gap-3">
                     <select value={selectedCollection} onChange={(e) => setSelectedCollection(e.target.value)}
-                      className="w-full px-3 py-2 bg-black border border-neutral-800 rounded-md text-[#ffffffff] text-[13px] outline-none cursor-pointer">
+                      className="w-full px-3 py-2 bg-black border border-neutral-200 rounded-md text-[#ffffffff] text-[13px] outline-none cursor-pointer">
                       <option value="category">Selected Clips</option>
                       <option value="all">All Videos (Library)</option>
                       {collections.filter(c => !category?.projectId || c.projectId === category.projectId).map(col => (<option key={col.id} value={col.id}>{col.name}</option>))}
@@ -1873,11 +1873,11 @@ const SoloClipEditor = ({
                       <div className="flex gap-1.5 mb-2">
                         <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
-                          placeholder="Add text..." className="flex-1 px-2.5 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
+                          placeholder="Add text..." className="flex-1 px-2.5 py-1.5 rounded-md border border-neutral-200 bg-black text-[#ffffffff] text-[12px] outline-none" />
                         <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} aria-label="Add to Text Bank A" onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} />
                       </div>
                       {videoTextBank1.map((text, idx) => (
-                        <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-300">
+                        <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-100/50 mb-1 text-neutral-300">
                           <span className="flex-1 text-[12px] cursor-pointer" onClick={() => addTextOverlay(text)}>{text}</span>
                           <button onClick={() => handleRemoveFromVideoTextBank(1, idx)} className="bg-transparent border-none text-neutral-500 text-[14px] cursor-pointer px-1">×</button>
                         </div>
@@ -1889,11 +1889,11 @@ const SoloClipEditor = ({
                       <div className="flex gap-1.5 mb-2">
                         <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
-                          placeholder="Add text..." className="flex-1 px-2.5 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
+                          placeholder="Add text..." className="flex-1 px-2.5 py-1.5 rounded-md border border-neutral-200 bg-black text-[#ffffffff] text-[12px] outline-none" />
                         <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} aria-label="Add to Text Bank B" onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} />
                       </div>
                       {videoTextBank2.map((text, idx) => (
-                        <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-300">
+                        <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-100/50 mb-1 text-neutral-300">
                           <span className="flex-1 text-[12px] cursor-pointer" onClick={() => addTextOverlay(text)}>{text}</span>
                           <button onClick={() => handleRemoveFromVideoTextBank(2, idx)} className="bg-transparent border-none text-neutral-500 text-[14px] cursor-pointer px-1">×</button>
                         </div>
@@ -1930,7 +1930,7 @@ const SoloClipEditor = ({
                       {selOverlay && (
                         <input value={selOverlay.text}
                           onChange={(e) => updateTextOverlay(selOverlay.id, { text: e.target.value })}
-                          className="w-full px-3 py-2 rounded-md border border-neutral-800 bg-black text-white text-sm" />
+                          className="w-full px-3 py-2 rounded-md border border-neutral-200 bg-black text-white text-sm" />
                       )}
 
                       {/* Font Family */}
@@ -2032,14 +2032,14 @@ const SoloClipEditor = ({
                       </div>
 
                       {/* Text Overlays list */}
-                      <div className="pt-2 border-t border-neutral-800">
+                      <div className="pt-2 border-t border-neutral-200">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-[13px] text-neutral-500">Text Overlays</span>
                         </div>
                         {textOverlays.length > 0 ? (
                           <div className="flex flex-col gap-1.5">
                             {textOverlays.map(overlay => (
-                              <div key={overlay.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${editingTextId === overlay.id ? 'bg-brand-600/20 border border-brand-600' : 'border border-neutral-800 hover:bg-neutral-800'}`}
+                              <div key={overlay.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${editingTextId === overlay.id ? 'bg-brand-600/20 border border-brand-600' : 'border border-neutral-200 hover:bg-neutral-100'}`}
                                 onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}>
                                 <span className="text-body font-body text-[#ffffffff] text-[12px] truncate flex-1">{overlay.text}</span>
                                 <IconButton size="small" variant="destructive-tertiary" icon={<FeatherTrash2 className="w-3 h-3" />} onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} aria-label="Remove" />
@@ -2052,9 +2052,9 @@ const SoloClipEditor = ({
                       </div>
 
                       {/* Crop */}
-                      <div className="flex items-center gap-2 pt-2 border-t border-neutral-800">
+                      <div className="flex items-center gap-2 pt-2 border-t border-neutral-200">
                         <span className="text-caption font-caption text-neutral-400">Crop</span>
-                        <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} className="flex-1 px-2 py-1.5 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[12px] outline-none">
+                        <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} className="flex-1 px-2 py-1.5 bg-neutral-100 border border-neutral-200 rounded-md text-[#ffffffff] text-[12px] outline-none">
                           <option value="9:16">9:16 (Full)</option>
                           <option value="4:3">4:3 (Crop)</option>
                           <option value="1:1">1:1 (Crop)</option>
@@ -2064,7 +2064,7 @@ const SoloClipEditor = ({
                         <div className="flex flex-col gap-1">
                           <span className="text-caption font-caption text-neutral-400">Apply Preset</span>
                           <select value={selectedPreset?.id || ''} onChange={(e) => { const preset = presets.find(p => p.id === e.target.value); if (preset) handleApplyPreset(preset); }}
-                            className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[13px] outline-none">
+                            className="w-full px-3 py-2 bg-neutral-100 border border-neutral-200 rounded-md text-[#ffffffff] text-[13px] outline-none">
                             <option value="">Choose a preset...</option>
                             {presets.map(preset => (<option key={preset.id} value={preset.id}>{preset.name}</option>))}
                           </select>
@@ -2195,7 +2195,7 @@ const SoloClipEditor = ({
         {/* ── Close Confirmation ── */}
         {showCloseConfirm && (
           <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-[100]">
-            <div className="bg-[#171717] rounded-xl p-6 max-w-[360px] w-full border border-neutral-800">
+            <div className="bg-[#171717] rounded-xl p-6 max-w-[360px] w-full border border-neutral-200">
               <h3 className="text-[16px] font-semibold mb-2" style={{ color: theme.text.primary }}>Close editor?</h3>
               <p className="text-[13px] mb-4" style={{ color: theme.text.secondary }}>
                 You have unsaved work. Are you sure you want to close?

@@ -64,11 +64,11 @@ const KeyboardShortcutsOverlay = ({ open, onClose }) => {
       }}
     >
       <div
-        className="relative w-full max-w-md rounded-xl bg-[#111118] border border-neutral-800 shadow-2xl overflow-hidden"
+        className="relative w-full max-w-md rounded-xl bg-[#111118] border border-neutral-200 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-800">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200">
           <h2 className="text-base font-semibold text-white">Keyboard Shortcuts</h2>
           <IconButton
             variant="neutral-tertiary"

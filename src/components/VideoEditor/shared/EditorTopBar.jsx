@@ -31,7 +31,7 @@ const EditorTopBar = ({
 
   return (
     <>
-      <div className="flex w-full items-center justify-between border-b border-neutral-800 bg-black px-6 py-4">
+      <div className="flex w-full items-center justify-between border-b border-neutral-200 bg-black px-6 py-4">
         <div className="flex items-center gap-4">
           <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherArrowLeft />} aria-label="Back" onClick={onBack} />
           {!isMobile && (

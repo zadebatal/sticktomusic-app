@@ -171,7 +171,7 @@ const ArtistsManagement = ({
                 <div
                   key={artist.id}
                   className={`flex grow shrink-0 basis-0 flex-col items-start gap-6 rounded-lg border border-solid px-6 py-6 bg-[#1a1a1aff] cursor-pointer transition-colors ${
-                    isSelected ? 'border-brand-600' : 'border-neutral-800 hover:border-neutral-700'
+                    isSelected ? 'border-brand-600' : 'border-neutral-200 hover:border-neutral-200'
                   }`}
                   onClick={() => onArtistChange?.(artist.id)}
                 >

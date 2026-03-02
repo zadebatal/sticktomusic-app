@@ -300,13 +300,13 @@ const AllMediaView = ({ artistId, onBack }) => {
       </div>
       <div className="flex flex-col gap-2 w-full overflow-y-auto" style={{ maxHeight: 'calc(100vh - 180px)' }}>
         {items.length === 0 && (
-          <div className="flex items-center justify-center rounded-lg border border-dashed border-neutral-700 bg-[#1a1a1aff] px-4 py-8">
+          <div className="flex items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-[#1a1a1aff] px-4 py-8">
             <span className="text-caption font-caption text-neutral-500">No {title.toLowerCase()}</span>
           </div>
         )}
         {type === 'audio' ? (
           items.map(item => (
-            <div key={item.id} className="flex items-center gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2.5">
+            <div key={item.id} className="flex items-center gap-3 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-2.5">
               <div className="flex h-9 w-9 flex-none items-center justify-center rounded-md bg-indigo-500/10">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
               </div>
@@ -319,7 +319,7 @@ const AllMediaView = ({ artistId, onBack }) => {
         ) : (
           <div className="grid grid-cols-3 gap-2 w-full">
             {items.map(item => (
-              <div key={item.id} className="flex flex-col rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] overflow-hidden">
+              <div key={item.id} className="flex flex-col rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] overflow-hidden">
                 <div className="w-full aspect-square bg-[#171717] relative">
                   <img src={getThumb(item)} alt="" className="w-full h-full object-cover" loading="lazy" />
                   {type === 'video' && item.duration && (

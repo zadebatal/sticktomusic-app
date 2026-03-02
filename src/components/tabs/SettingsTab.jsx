@@ -231,7 +231,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
       <span className="text-heading-1 font-heading-1 text-[#ffffffff]">Settings</span>
 
       {/* ═══ PROFILE HERO ═══ */}
-      <div className="mt-6 flex w-full items-center gap-6 rounded-xl border border-solid border-neutral-800 p-6"
+      <div className="mt-6 flex w-full items-center gap-6 rounded-xl border border-solid border-neutral-200 p-6"
         style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' }}>
         <div className="relative cursor-pointer" onClick={() => setShowPfpUpload(true)}>
           {user?.photoURL ? (
@@ -260,7 +260,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
 
         {/* ── TEAM ── */}
         {isConductor ? (
-          <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-800 bg-[#111118] p-6 col-span-2">
+          <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-[#111118] p-6 col-span-2">
             <div className="flex w-full items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600/20">
                 <FeatherUsers style={{ width: 18, height: 18, color: '#818cf8' }} />
@@ -282,7 +282,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
               <select
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value)}
-                className="rounded-lg border border-neutral-700 bg-[#1a1a1e] px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+                className="rounded-lg border border-neutral-200 bg-[#1a1a1e] px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
               >
                 <option value="operator">Operator</option>
                 <option value="artist">Artist</option>
@@ -308,7 +308,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
             <div className="w-full overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-neutral-800 text-left text-neutral-400">
+                  <tr className="border-b border-neutral-200 text-left text-neutral-400">
                     <th className="py-2 pr-4 font-medium">Name</th>
                     <th className="py-2 pr-4 font-medium">Email</th>
                     <th className="py-2 pr-4 font-medium">Role</th>
@@ -322,7 +322,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
                     const isMe = u.email?.toLowerCase() === user?.email?.toLowerCase();
                     const linkedName = getLinkedArtistName(u);
                     return (
-                      <tr key={u.email || u.id} className="border-b border-neutral-800/50">
+                      <tr key={u.email || u.id} className="border-b border-neutral-200/50">
                         <td className="py-3 pr-4 text-white">{u.name || u.email?.split('@')[0] || '—'}</td>
                         <td className="py-3 pr-4 text-neutral-400">{u.email || '—'}</td>
                         <td className="py-3 pr-4">
@@ -332,7 +332,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
                               onChange={(e) => setEditRole(e.target.value)}
                               onBlur={() => { if (editRole !== u.role) handleRoleChange(u.email, editRole); else setEditingUser(null); }}
                               autoFocus
-                              className="rounded border border-neutral-700 bg-[#1a1a1e] px-2 py-1 text-sm text-white outline-none focus:border-indigo-500"
+                              className="rounded border border-neutral-200 bg-[#1a1a1e] px-2 py-1 text-sm text-white outline-none focus:border-indigo-500"
                             >
                               <option value="conductor">Conductor</option>
                               <option value="operator">Operator</option>
@@ -395,7 +395,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
             </div>
           </div>
         ) : user?.role !== 'collaborator' ? (
-          <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-800 bg-[#111118] p-6">
+          <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-[#111118] p-6">
             <div className="flex w-full items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600/20">
                 <FeatherUsers style={{ width: 18, height: 18, color: '#818cf8' }} />
@@ -433,7 +433,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
         ) : null}
 
         {/* ── CLOUD STORAGE ── */}
-        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-800 bg-[#111118] p-6">
+        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-[#111118] p-6">
           <div className="flex w-full items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-600/20">
               <FeatherCloud style={{ width: 18, height: 18, color: '#06b6d4' }} />
@@ -495,7 +495,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
         </div>
 
         {/* ── STORAGE USAGE ── */}
-        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-800 bg-[#111118] p-6">
+        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-[#111118] p-6">
           <div className="flex w-full items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-600/20">
               <FeatherHardDrive style={{ width: 18, height: 18, color: '#8b5cf6' }} />
@@ -522,7 +522,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
                 </span>
 
                 {!isUnlimited && (
-                  <div className="w-full h-2 rounded-full bg-neutral-800 overflow-hidden">
+                  <div className="w-full h-2 rounded-full bg-neutral-100 overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-300"
                       style={{
@@ -544,7 +544,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
         </div>
 
         {/* ── SUBSCRIPTION / ACCOUNT ── */}
-        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-800 bg-[#111118] p-6">
+        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-[#111118] p-6">
           <div className="flex w-full items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-600/20">
               <FeatherCreditCard style={{ width: 18, height: 18, color: '#f59e0b' }} />
@@ -583,7 +583,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
             </>
           )}
 
-          <div className="w-full border-t border-neutral-800 mt-auto" />
+          <div className="w-full border-t border-neutral-200 mt-auto" />
           <Button
             variant="destructive-secondary"
             size="medium"

@@ -697,10 +697,10 @@ const ClipperEditor = ({
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* ── Left panel: Video + Timeline ── */}
-        <div className={`flex flex-col flex-1 min-w-0 bg-black ${isMobile ? '' : 'border-r border-neutral-800'}`}>
+        <div className={`flex flex-col flex-1 min-w-0 bg-black ${isMobile ? '' : 'border-r border-neutral-200'}`}>
           {!hasSource ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 px-8">
-              <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-neutral-800/50 border border-neutral-700">
+              <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-neutral-100/50 border border-neutral-200">
                 <FeatherScissors className="text-neutral-500" style={{ width: 32, height: 32 }} />
               </div>
               <span className="text-heading-3 font-heading-3 text-white">Select a source video</span>
@@ -716,7 +716,7 @@ const ClipperEditor = ({
                     {availableSourceVideos.map(v => (
                       <div
                         key={v.id}
-                        className="relative group rounded-lg overflow-hidden bg-neutral-800 aspect-video cursor-pointer border border-neutral-700 hover:border-indigo-500/50 transition-colors"
+                        className="relative group rounded-lg overflow-hidden bg-neutral-100 aspect-video cursor-pointer border border-neutral-200 hover:border-indigo-500/50 transition-colors"
                         onClick={() => {
                           setSourceUrl(v.url);
                           setSourceName(v.name);
@@ -763,7 +763,7 @@ const ClipperEditor = ({
               </div>
 
               {/* Timeline section */}
-              <div className="flex flex-col gap-2 px-4 pb-3 border-t border-neutral-800 pt-3">
+              <div className="flex flex-col gap-2 px-4 pb-3 border-t border-neutral-200 pt-3">
                 {/* Header row */}
                 <div className="flex w-full items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -775,7 +775,7 @@ const ClipperEditor = ({
                     <div className="flex items-center gap-1.5">
                       <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getBankColor(activeBankIndex).primary }} />
                       <select
-                        className="bg-neutral-800 text-caption font-caption text-neutral-300 border border-neutral-700 rounded px-2 py-1 cursor-pointer outline-none"
+                        className="bg-neutral-100 text-caption font-caption text-neutral-300 border border-neutral-200 rounded px-2 py-1 cursor-pointer outline-none"
                         value={activeBankIndex}
                         onChange={e => setActiveBankIndex(Number(e.target.value))}
                       >
@@ -823,7 +823,7 @@ const ClipperEditor = ({
                     }}
                   >
                     {/* Clips track */}
-                    <div className="h-10 rounded-md border border-neutral-800 bg-neutral-900/40 relative overflow-hidden" data-seekable="true">
+                    <div className="h-10 rounded-md border border-neutral-200 bg-neutral-50/40 relative overflow-hidden" data-seekable="true">
                       {clips.map((clip, i) => {
                         const startPct = duration > 0 ? (clip.start / duration) * 100 : 0;
                         const widthPct = duration > 0 ? ((clip.end - clip.start) / duration) * 100 : 0;
@@ -897,7 +897,7 @@ const ClipperEditor = ({
                     </div>
 
                     {/* Source track */}
-                    <div className="h-7 rounded-md border border-neutral-800 bg-neutral-900/30 relative overflow-hidden" data-seekable="true">
+                    <div className="h-7 rounded-md border border-neutral-200 bg-neutral-50/30 relative overflow-hidden" data-seekable="true">
                       <div
                         style={{
                           position: 'absolute', left: 0, top: 0, right: 0, bottom: 0,
@@ -984,7 +984,7 @@ const ClipperEditor = ({
         {!isMobile && (
           <div className="flex flex-col w-[300px] bg-[#0a0a0f] overflow-y-auto">
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-200">
               <div className="flex items-center gap-2">
                 <span className="text-body-bold font-body-bold text-white">Clips</span>
                 <Badge variant="neutral">{clips.length}</Badge>
@@ -998,8 +998,8 @@ const ClipperEditor = ({
 
             {/* Source info + niche video switcher */}
             {hasSource && (
-              <div className="flex flex-col border-b border-neutral-800">
-                <div className="flex items-center gap-2 px-4 py-2 bg-neutral-900/50">
+              <div className="flex flex-col border-b border-neutral-200">
+                <div className="flex items-center gap-2 px-4 py-2 bg-neutral-50/50">
                   <FeatherPlay className="text-neutral-500 flex-none" style={{ width: 12, height: 12 }} />
                   <span className="text-caption font-caption text-neutral-400 truncate">{sourceName}</span>
                   <span className="text-caption font-caption text-neutral-600 flex-none">{formatTime(duration)}</span>
@@ -1012,7 +1012,7 @@ const ClipperEditor = ({
                         <div
                           key={v.id}
                           className={`relative flex-none w-14 h-10 rounded overflow-hidden cursor-pointer border transition-colors ${
-                            isActive ? 'border-indigo-500' : 'border-neutral-700 hover:border-neutral-500'
+                            isActive ? 'border-indigo-500' : 'border-neutral-200 hover:border-neutral-500'
                           }`}
                           title={v.name}
                           onClick={() => {
@@ -1027,7 +1027,7 @@ const ClipperEditor = ({
                           {v.thumbnailUrl ? (
                             <img src={v.thumbnailUrl} alt={v.name} className="w-full h-full object-cover" />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-neutral-800">
+                            <div className="w-full h-full flex items-center justify-center bg-neutral-100">
                               <FeatherPlay className="text-neutral-600" style={{ width: 10, height: 10 }} />
                             </div>
                           )}
@@ -1057,7 +1057,7 @@ const ClipperEditor = ({
                     <div key={bIdx} className="flex flex-col">
                       {/* Bank header */}
                       <div
-                        className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-neutral-800/50 border-b border-neutral-800/50"
+                        className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-neutral-100/50 border-b border-neutral-200/50"
                         onClick={() => toggleBankCollapse(bIdx)}
                       >
                         {isCollapsed
@@ -1094,7 +1094,7 @@ const ClipperEditor = ({
                                 className={`flex items-center gap-2 rounded-lg px-3 py-2 cursor-pointer transition-colors ${
                                   isActive
                                     ? 'border border-solid'
-                                    : 'bg-neutral-800/40 border border-transparent hover:bg-neutral-800/70'
+                                    : 'bg-neutral-100/40 border border-transparent hover:bg-neutral-100/70'
                                 }`}
                                 style={isActive ? { backgroundColor: `${bankColor.primary}66`, borderColor: bankColor.primary } : {}}
                                 onClick={() => { setActiveClipIdx(clip._idx); jumpToClip(clip); }}
@@ -1122,7 +1122,7 @@ const ClipperEditor = ({
                                 <div className="flex items-center gap-1">
                                   {bankLabels.length > 1 && (
                                     <select
-                                      className="bg-neutral-800 text-[10px] text-neutral-400 border border-neutral-700 rounded px-1 py-0.5 cursor-pointer outline-none w-14"
+                                      className="bg-neutral-100 text-[10px] text-neutral-400 border border-neutral-200 rounded px-1 py-0.5 cursor-pointer outline-none w-14"
                                       value={clip.bankIndex}
                                       onChange={(e) => { e.stopPropagation(); moveClipToBank(clip._idx, Number(e.target.value)); }}
                                       onClick={(e) => e.stopPropagation()}
@@ -1160,14 +1160,14 @@ const ClipperEditor = ({
 
             {/* Export section */}
             {clips.length > 0 && (
-              <div className="flex flex-col gap-2 mt-auto p-4 border-t border-neutral-800">
+              <div className="flex flex-col gap-2 mt-auto p-4 border-t border-neutral-200">
                 {exporting && (
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center justify-between">
                       <span className="text-caption font-caption text-neutral-400">Exporting {exportedCount}/{unexportedCount}...</span>
                       <span className="text-caption font-caption text-neutral-500">{exportProgress}%</span>
                     </div>
-                    <div className="w-full h-1.5 rounded-full bg-neutral-800">
+                    <div className="w-full h-1.5 rounded-full bg-neutral-100">
                       <div className="h-full rounded-full bg-indigo-500" style={{ width: `${exportProgress}%` }} />
                     </div>
                   </div>
@@ -1176,7 +1176,7 @@ const ClipperEditor = ({
                 <div className="relative">
                   <span className="text-caption font-caption text-neutral-500 mb-1 block">Destination</span>
                   <button
-                    className="flex w-full items-center gap-2 rounded-md border border-solid border-neutral-700 bg-[#1a1a1aff] px-3 py-2 hover:bg-[#262626] transition text-left"
+                    className="flex w-full items-center gap-2 rounded-md border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-2 hover:bg-[#262626] transition text-left"
                     onClick={() => setDestPickerOpen(!destPickerOpen)}
                   >
                     <span className="text-caption font-caption text-white truncate grow">
@@ -1191,7 +1191,7 @@ const ClipperEditor = ({
                     />
                   </button>
                   {destPickerOpen && (
-                    <div className="absolute bottom-full left-0 right-0 mb-1 flex flex-col gap-0.5 px-2 py-2 bg-[#111111] border border-neutral-700 rounded-lg max-h-48 overflow-y-auto shadow-xl z-20">
+                    <div className="absolute bottom-full left-0 right-0 mb-1 flex flex-col gap-0.5 px-2 py-2 bg-[#111111] border border-neutral-200 rounded-lg max-h-48 overflow-y-auto shadow-xl z-20">
                       {[
                         { value: 'current-niche', label: `Current Niche${category?.name ? ` — ${category.name}` : ''}` },
                         { value: 'project-pool', label: 'Project Pool Only' },
@@ -1201,7 +1201,7 @@ const ClipperEditor = ({
                         <button
                           key={opt.value}
                           className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition ${
-                            exportDestination === opt.value ? 'bg-indigo-600' : 'hover:bg-neutral-800'
+                            exportDestination === opt.value ? 'bg-indigo-600' : 'hover:bg-neutral-100'
                           }`}
                           onClick={() => { setExportDestination(opt.value); setDestPickerOpen(false); }}
                         >
@@ -1240,11 +1240,11 @@ const ClipperEditor = ({
 
       {/* Mobile clip list */}
       {isMobile && hasSource && clips.length > 0 && (
-        <div className="flex flex-col gap-1 px-3 py-2 border-t border-neutral-800 bg-[#0a0a0f] max-h-[200px] overflow-y-auto">
+        <div className="flex flex-col gap-1 px-3 py-2 border-t border-neutral-200 bg-[#0a0a0f] max-h-[200px] overflow-y-auto">
           {clips.map((clip, i) => {
             const isExported = !!clip.exportedMediaId;
             return (
-              <div key={clip.id} className="flex items-center gap-2 rounded-lg px-3 py-2 bg-neutral-800/50">
+              <div key={clip.id} className="flex items-center gap-2 rounded-lg px-3 py-2 bg-neutral-100/50">
                 <div className="w-2 h-2 rounded-full flex-none" style={{ backgroundColor: getBankColor(typeof clip.bankIndex === 'number' ? clip.bankIndex : 0).primary }} />
                 {isExported && <FeatherCheck className="text-green-400 flex-none" style={{ width: 10, height: 10 }} />}
                 <span className="text-sm text-white flex-1 truncate">{clip.name}</span>

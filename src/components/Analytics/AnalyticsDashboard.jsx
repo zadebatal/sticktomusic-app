@@ -228,19 +228,19 @@ const AnalyticsDashboard = ({
 
             {/* Song Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+              <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-5 py-4">
                 <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatNumber(songData.totalViews)}</span>
                 <span className="text-caption font-caption text-neutral-400">Total Views</span>
               </div>
-              <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+              <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-5 py-4">
                 <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatNumber(songData.totalLikes)}</span>
                 <span className="text-caption font-caption text-neutral-400">Total Likes</span>
               </div>
-              <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+              <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-5 py-4">
                 <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatNumber(songData.avgViewsPerVideo)}</span>
                 <span className="text-caption font-caption text-neutral-400">Avg Views/Video</span>
               </div>
-              <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+              <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-5 py-4">
                 <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatPercent(songData.avgEngagement)}</span>
                 <span className="text-caption font-caption text-neutral-400">Avg Engagement</span>
               </div>
@@ -264,7 +264,7 @@ const AnalyticsDashboard = ({
             <div className="mt-8">
               <h3 className="text-heading-2 font-heading-2 text-[#ffffffff] mb-4">Videos Using This Song</h3>
               <div className="flex flex-col overflow-x-auto">
-                <div className="flex p-3 border-b border-neutral-800 text-[12px] font-semibold uppercase text-neutral-400">
+                <div className="flex p-3 border-b border-neutral-200 text-[12px] font-semibold uppercase text-neutral-400">
                   <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Video</span>
                   <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Category</span>
                   <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Handle</span>
@@ -272,7 +272,7 @@ const AnalyticsDashboard = ({
                   <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Engagement</span>
                 </div>
                 {songData.videos.sort((a, b) => b.views - a.views).map(video => (
-                  <div key={video.videoId} className="flex items-center p-3 border-b border-neutral-800 text-[13px] hover:bg-[#1a1a1aff] transition-colors">
+                  <div key={video.videoId} className="flex items-center p-3 border-b border-neutral-200 text-[13px] hover:bg-[#1a1a1aff] transition-colors">
                     <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{video.videoName}</span>
                     <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{video.categoryName}</span>
                     <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{video.handle}</span>
@@ -306,7 +306,7 @@ const AnalyticsDashboard = ({
   if (!lateConnected) {
     return (
       <div className="flex items-center justify-center min-h-[400px] p-8">
-        <div className="flex flex-col items-center gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-12 text-center max-w-[420px]">
+        <div className="flex flex-col items-center gap-4 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] p-12 text-center max-w-[420px]">
           <FeatherBarChart className="text-neutral-400" style={{ width: 48, height: 48 }} />
           <span className="text-heading-3 font-heading-3 text-[#ffffffff]">
             Connect Late to View Analytics
@@ -322,7 +322,7 @@ const AnalyticsDashboard = ({
   return (
     <div className={`px-12 py-8 bg-black min-h-screen text-white ${isMobile ? '!px-4' : ''}`}>
       {/* Header */}
-      <div className={`flex w-full items-center justify-between border-b border-solid border-neutral-800 pb-6 mb-6 ${isMobile ? 'flex-col items-start gap-3' : ''}`}>
+      <div className={`flex w-full items-center justify-between border-b border-solid border-neutral-200 pb-6 mb-6 ${isMobile ? 'flex-col items-start gap-3' : ''}`}>
         <div className="flex items-center gap-4">
           <span className={`text-heading-1 font-heading-1 text-[#ffffffff] ${isMobile ? 'text-[22px]' : ''}`}>Analytics</span>
 
@@ -330,7 +330,7 @@ const AnalyticsDashboard = ({
           {artists.length > 1 && (
             <SubframeCore.DropdownMenu.Root>
               <SubframeCore.DropdownMenu.Trigger asChild>
-                <div className="flex items-center gap-2 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2 cursor-pointer hover:bg-[#262626]">
+                <div className="flex items-center gap-2 rounded-md border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-2 cursor-pointer hover:bg-[#262626]">
                   {artists.find(a => a.id === currentArtistId)?.photoURL ? (
                     <img src={artists.find(a => a.id === currentArtistId).photoURL} alt="" className="h-6 w-6 rounded-full object-cover" referrerPolicy="no-referrer" />
                   ) : (
@@ -415,25 +415,25 @@ const AnalyticsDashboard = ({
 
           {/* Overview Stats Cards */}
           <div className={`grid gap-4 mb-6 ${isMobile ? 'grid-cols-2 gap-3' : 'grid-cols-4'}`}>
-            <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+            <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-5 py-4">
               <FeatherEye className="text-neutral-400" style={{ width: 20, height: 20 }} />
               <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatNumber(totalStats?.totalViews)}</span>
               <span className="text-caption font-caption text-neutral-400">Total Views</span>
               <span className="text-caption font-caption text-[#22c55e]">+12% this week</span>
             </div>
-            <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+            <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-5 py-4">
               <FeatherHeart className="text-neutral-400" style={{ width: 20, height: 20 }} />
               <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatNumber(totalStats?.totalLikes)}</span>
               <span className="text-caption font-caption text-neutral-400">Total Likes</span>
               <span className="text-caption font-caption text-[#22c55e]">+8% this week</span>
             </div>
-            <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+            <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-5 py-4">
               <FeatherMessageCircle className="text-neutral-400" style={{ width: 20, height: 20 }} />
               <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatNumber(totalStats?.totalComments)}</span>
               <span className="text-caption font-caption text-neutral-400">Total Comments</span>
               <span className="text-caption font-caption text-[#22c55e]">+3% this week</span>
             </div>
-            <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+            <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-5 py-4">
               <FeatherTrendingUp className="text-neutral-400" style={{ width: 20, height: 20 }} />
               <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatPercent(totalStats?.avgEngagement)}</span>
               <span className="text-caption font-caption text-neutral-400">Avg Engagement</span>
@@ -446,7 +446,7 @@ const AnalyticsDashboard = ({
             {/* Left Column */}
             <div className="flex flex-col gap-6">
               {/* Performance Chart */}
-              <div className="rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-5">
+              <div className="rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] p-5">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-heading-2 font-heading-2 text-[#ffffffff]">📈 Performance Over Time</h3>
                   <ToggleGroup value={chartPeriod} onValueChange={(v) => v && setChartPeriod(v)}>
@@ -483,7 +483,7 @@ const AnalyticsDashboard = ({
               </div>
 
               {/* Category Performance */}
-              <div className="rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-5">
+              <div className="rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] p-5">
                 <h3 className="text-heading-2 font-heading-2 text-[#ffffffff] mb-4">📁 Category Performance</h3>
                 <div className="flex flex-col gap-3">
                   {categoryPerformance.map((cat, i) => {
@@ -492,7 +492,7 @@ const AnalyticsDashboard = ({
                     return (
                       <div key={cat.categoryId} className="flex items-center gap-3">
                         <span className="w-[100px] text-[13px] text-white whitespace-nowrap overflow-hidden text-ellipsis">{cat.categoryName}</span>
-                        <div className="flex-1 h-2 bg-neutral-800 rounded overflow-hidden">
+                        <div className="flex-1 h-2 bg-neutral-100 rounded overflow-hidden">
                           <div
                             className="h-full rounded transition-all duration-300"
                             style={{
@@ -512,16 +512,16 @@ const AnalyticsDashboard = ({
             {/* Right Column */}
             <div className="flex flex-col gap-6">
               {/* Top Songs */}
-              <div className="rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-5">
+              <div className="rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] p-5">
                 <h3 className="text-heading-2 font-heading-2 text-[#ffffffff] mb-4">🎵 Top Performing Songs</h3>
                 <div className="flex flex-col gap-2">
                   {songPerformance.slice(0, 5).map((song, i) => (
                     <div
                       key={song.audioId}
-                      className="flex items-center gap-3 p-3 rounded-lg cursor-pointer border-b border-neutral-800 hover:bg-[#1a1a1aff] transition-colors"
+                      className="flex items-center gap-3 p-3 rounded-lg cursor-pointer border-b border-neutral-200 hover:bg-[#1a1a1aff] transition-colors"
                       onClick={() => setSelectedSong(song.audioId)}
                     >
-                      <span className="w-6 h-6 rounded-full bg-neutral-800 flex items-center justify-center text-xs font-semibold text-neutral-500">{i + 1}</span>
+                      <span className="w-6 h-6 rounded-full bg-neutral-100 flex items-center justify-center text-xs font-semibold text-neutral-500">{i + 1}</span>
                       <div className="flex-1 min-w-0">
                         <span className="block text-[13px] font-medium text-white whitespace-nowrap overflow-hidden text-ellipsis">{song.audioName}</span>
                         <span className="text-[11px] text-neutral-400">
@@ -546,7 +546,7 @@ const AnalyticsDashboard = ({
               </div>
 
               {/* Account Comparison */}
-              <div className="rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-5">
+              <div className="rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] p-5">
                 <h3 className="text-heading-2 font-heading-2 text-[#ffffffff] mb-4">👤 Account Performance</h3>
                 <div className="flex flex-col gap-3">
                   {accountPerformance.slice(0, 4).map((acc, i) => {
@@ -558,7 +558,7 @@ const AnalyticsDashboard = ({
                           <span className="block text-[13px] font-medium text-white">{acc.handle}</span>
                           <span className="text-[11px] text-neutral-400 capitalize">{acc.platform}</span>
                         </div>
-                        <div className="flex-1 h-2 bg-neutral-800 rounded overflow-hidden">
+                        <div className="flex-1 h-2 bg-neutral-100 rounded overflow-hidden">
                           <div
                             className="h-full bg-cyan-500 rounded"
                             style={{ width: `${width}%` }}
@@ -577,10 +577,10 @@ const AnalyticsDashboard = ({
           <TimelineOverlayChart artistId={currentArtistId} days={30} />
 
           {/* Top Videos Table */}
-          <div className="rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-5">
+          <div className="rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] p-5">
             <h3 className="text-heading-2 font-heading-2 text-[#ffffffff] mb-4">🔥 Top Performing Videos</h3>
             <div className="flex flex-col overflow-x-auto">
-              <div className="flex p-3 border-b border-neutral-800 text-[12px] font-semibold uppercase text-neutral-400 min-w-[600px]">
+              <div className="flex p-3 border-b border-neutral-200 text-[12px] font-semibold uppercase text-neutral-400 min-w-[600px]">
                 <span className="flex-[2] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Video</span>
                 <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Song</span>
                 <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Category</span>
@@ -589,9 +589,9 @@ const AnalyticsDashboard = ({
                 <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Engagement</span>
               </div>
               {topVideos.slice(0, 8).map((video, i) => (
-                <div key={video.videoId} className="flex items-center p-3 border-b border-neutral-800 text-[13px] text-white hover:bg-[#1a1a1aff] transition-colors min-w-[600px]">
+                <div key={video.videoId} className="flex items-center p-3 border-b border-neutral-200 text-[13px] text-white hover:bg-[#1a1a1aff] transition-colors min-w-[600px]">
                   <span className="flex-[2] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
-                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-neutral-800 text-[11px] mr-2 text-neutral-500">{i + 1}</span>
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-neutral-100 text-[11px] mr-2 text-neutral-500">{i + 1}</span>
                     {video.videoName}
                   </span>
                   <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
@@ -631,7 +631,7 @@ const AnalyticsDashboard = ({
               return (
                 <div
                   key={song.audioId}
-                  className="rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-5 cursor-pointer hover:border-neutral-700 transition-colors"
+                  className="rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] p-5 cursor-pointer hover:border-neutral-300 transition-colors"
                   onClick={() => setSelectedSong(song.audioId)}
                 >
                   <div className="flex justify-between items-center mb-3">
@@ -680,7 +680,7 @@ const AnalyticsDashboard = ({
       {hasRealData && activeTab === 'videos' && (
         <div className="py-4">
           <div className="flex flex-col overflow-x-auto">
-            <div className="flex p-3 border-b border-neutral-800 text-[12px] font-semibold uppercase text-neutral-400 min-w-[900px]">
+            <div className="flex p-3 border-b border-neutral-200 text-[12px] font-semibold uppercase text-neutral-400 min-w-[900px]">
               <span className="w-[40px] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">#</span>
               <span className="flex-[2] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Video</span>
               <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Song</span>
@@ -696,7 +696,7 @@ const AnalyticsDashboard = ({
               // Find attribution data for this video
               const attr = videoAttributions.find(v => v.videoId === video.videoId) || video;
               return (
-                <div key={video.videoId} className="flex items-center p-3 border-b border-neutral-800 text-[13px] text-white hover:bg-[#1a1a1aff] transition-colors min-w-[900px]">
+                <div key={video.videoId} className="flex items-center p-3 border-b border-neutral-200 text-[13px] text-white hover:bg-[#1a1a1aff] transition-colors min-w-[900px]">
                   <span className="w-[40px] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{i + 1}</span>
                   <span className="flex-[2] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-medium">
                     {video.videoName}

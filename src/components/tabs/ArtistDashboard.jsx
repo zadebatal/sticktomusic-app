@@ -350,7 +350,7 @@ const ArtistDashboard = ({
 
       {/* Quick Action Cards */}
       <div className="w-full items-start gap-6 grid grid-cols-1 sm:grid-cols-2">
-        <div className="flex grow shrink-0 basis-0 flex-col items-center gap-6 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-8 py-8">
+        <div className="flex grow shrink-0 basis-0 flex-col items-center gap-6 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-8 py-8">
           <IconWithBackground variant="neutral" size="x-large" icon={<FeatherVideo />} />
           <div className="flex w-full flex-col items-center gap-2">
             <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Go to Studio</span>
@@ -360,7 +360,7 @@ const ArtistDashboard = ({
             Open Studio
           </Button>
         </div>
-        <div className="flex grow shrink-0 basis-0 flex-col items-center gap-6 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-8 py-8">
+        <div className="flex grow shrink-0 basis-0 flex-col items-center gap-6 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-8 py-8">
           <IconWithBackground variant="neutral" size="x-large" icon={<FeatherCalendar />} />
           <div className="flex w-full flex-col items-center gap-2">
             <span className="text-heading-2 font-heading-2 text-[#ffffffff]">View Schedule</span>
@@ -396,7 +396,7 @@ const ArtistDashboard = ({
               const badgeLabel = status === 'posted' ? 'Posted' : status === 'scheduled' ? 'Scheduled' : 'Draft';
               const timeAgo = item.createdAt ? getTimeAgo(new Date(item.createdAt)) : '';
               return (
-                <div key={item.id || i} className="flex grow shrink-0 basis-0 flex-col items-start overflow-hidden rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] cursor-pointer hover:border-neutral-600 transition-colors" onClick={() => setPreviewingItem(item)}>
+                <div key={item.id || i} className="flex grow shrink-0 basis-0 flex-col items-start overflow-hidden rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] cursor-pointer hover:border-neutral-300 transition-colors" onClick={() => setPreviewingItem(item)}>
                   {thumb ? (
                     <div className="w-full aspect-[9/16] relative overflow-hidden bg-[#171717]" style={{ containerType: 'inline-size' }}>
                       <img className="w-full h-full object-cover" src={thumb} alt="" loading="lazy" />
@@ -466,14 +466,14 @@ const ArtistDashboard = ({
 
       {/* Social Sets Usage Bar */}
       {socialSetsAllowed > 0 && (
-        <div className="flex w-full flex-col items-start gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5">
+        <div className="flex w-full flex-col items-start gap-3 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-6 py-5">
           <div className="flex w-full items-center justify-between">
             <span className="text-body-bold font-body-bold text-[#ffffffff]">Social Set Usage</span>
             <span className="text-caption font-caption text-neutral-400">
               {socialSetsUsed} of {socialSetsAllowed} used
             </span>
           </div>
-          <div className="h-2.5 w-full rounded-full overflow-hidden bg-neutral-800">
+          <div className="h-2.5 w-full rounded-full overflow-hidden bg-neutral-100">
             <div
               className="h-full rounded-full transition-all"
               style={{
@@ -493,7 +493,7 @@ const ArtistDashboard = ({
       {/* Connected Accounts + Upcoming Posts — 2 col */}
       <div className="w-full items-start gap-6 grid grid-cols-1 lg:grid-cols-2">
         {/* Connected Accounts */}
-        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5">
+        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-6 py-5">
           <div className="flex w-full items-center justify-between">
             <span className="text-body-bold font-body-bold text-[#ffffffff]">Connected Accounts</span>
             <div className="flex items-center gap-2">
@@ -517,12 +517,12 @@ const ArtistDashboard = ({
                 placeholder="@handle"
                 value={newHandle}
                 onChange={(e) => setNewHandle(e.target.value)}
-                className="text-caption font-caption flex-1 min-w-[120px] rounded-md border border-solid border-neutral-800 bg-black px-3 py-1.5 text-[#ffffffff] outline-none"
+                className="text-caption font-caption flex-1 min-w-[120px] rounded-md border border-solid border-neutral-200 bg-black px-3 py-1.5 text-[#ffffffff] outline-none"
               />
               <select
                 value={newPlatform}
                 onChange={(e) => setNewPlatform(e.target.value)}
-                className="text-caption font-caption rounded-md border border-solid border-neutral-800 bg-black px-3 py-1.5 text-[#ffffffff] outline-none"
+                className="text-caption font-caption rounded-md border border-solid border-neutral-200 bg-black px-3 py-1.5 text-[#ffffffff] outline-none"
               >
                 <option value="tiktok">TikTok</option>
                 <option value="instagram">Instagram</option>
@@ -590,7 +590,7 @@ const ArtistDashboard = ({
                   {group.profilePic ? (
                     <img src={group.profilePic} alt="" className="w-9 h-9 rounded-full object-cover flex-none" />
                   ) : (
-                    <div className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-neutral-800 text-caption font-caption text-neutral-400 font-bold">
+                    <div className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-neutral-100 text-caption font-caption text-neutral-400 font-bold">
                       {group.displayName?.[0]?.toUpperCase() || '?'}
                     </div>
                   )}
@@ -700,7 +700,7 @@ const ArtistDashboard = ({
         </div>
 
         {/* Upcoming Posts */}
-        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff]">
+        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff]">
           <div className="flex w-full items-center justify-between px-6 pt-5">
             <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Upcoming Posts</span>
             {upcomingPosts.length > 0 && (
@@ -718,7 +718,7 @@ const ArtistDashboard = ({
                 const postThumb = post.thumbnail || post.thumbnailUrl || post.mediaUrl || firstSlide?.backgroundImage || firstSlide?.imageA?.url || null;
                 const overlays = (firstSlide?.textOverlays || []).filter(o => o.text);
                 return (
-                  <div key={post.id || i} className={`flex w-full items-center gap-4 px-6 py-4 cursor-pointer hover:bg-neutral-800/30 transition-colors ${i < Math.min(upcomingPosts.length, 5) - 1 ? 'border-b border-solid border-neutral-800' : ''}`} onClick={() => {
+                  <div key={post.id || i} className={`flex w-full items-center gap-4 px-6 py-4 cursor-pointer hover:bg-neutral-100/30 transition-colors ${i < Math.min(upcomingPosts.length, 5) - 1 ? 'border-b border-solid border-neutral-200' : ''}`} onClick={() => {
                     if (post.editorState?.slides?.length) {
                       setPreviewingItem({ ...post, slides: post.editorState.slides, name: post.contentName, _type: 'slideshow' });
                     } else {
@@ -726,7 +726,7 @@ const ArtistDashboard = ({
                     }
                   }}>
                     {postThumb ? (
-                      <div className="h-16 w-16 flex-none rounded-md overflow-hidden relative bg-neutral-800">
+                      <div className="h-16 w-16 flex-none rounded-md overflow-hidden relative bg-neutral-100">
                         <img className="w-full h-full object-cover" src={postThumb} alt="" loading="lazy" />
                         {overlays.map((overlay, oi) => (
                           <div key={oi} className="absolute text-center pointer-events-none" style={{
@@ -752,7 +752,7 @@ const ArtistDashboard = ({
                         ))}
                       </div>
                     ) : (
-                      <div className="flex h-16 w-16 flex-none items-center justify-center rounded-md bg-neutral-800">
+                      <div className="flex h-16 w-16 flex-none items-center justify-center rounded-md bg-neutral-100">
                         <FeatherCalendar className="text-neutral-500" />
                       </div>
                     )}
@@ -810,7 +810,7 @@ const ArtistDashboard = ({
             </Button>
           )}
         </div>
-        <div className="flex w-full flex-col items-start rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff]">
+        <div className="flex w-full flex-col items-start rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff]">
           {postedPosts.length > 0 ? (
             postedPosts.slice(0, 5).map((post, i) => {
               const date = (post.postedAt || post.scheduledTime) ? new Date(post.postedAt || post.scheduledTime) : null;
@@ -819,7 +819,7 @@ const ArtistDashboard = ({
               const postThumb = post.thumbnail || post.thumbnailUrl || post.mediaUrl || firstSlide?.backgroundImage || firstSlide?.imageA?.url || null;
               const overlays = (firstSlide?.textOverlays || []).filter(o => o.text);
               return (
-                <div key={post.id || i} className={`flex w-full items-center gap-4 px-6 py-4 cursor-pointer hover:bg-neutral-800/30 transition-colors ${i < Math.min(postedPosts.length, 5) - 1 ? 'border-b border-solid border-neutral-800' : ''}`} onClick={() => {
+                <div key={post.id || i} className={`flex w-full items-center gap-4 px-6 py-4 cursor-pointer hover:bg-neutral-100/30 transition-colors ${i < Math.min(postedPosts.length, 5) - 1 ? 'border-b border-solid border-neutral-200' : ''}`} onClick={() => {
                     if (post.editorState?.slides?.length) {
                       setPreviewingItem({ ...post, slides: post.editorState.slides, name: post.contentName, _type: 'slideshow' });
                     } else {
@@ -827,7 +827,7 @@ const ArtistDashboard = ({
                     }
                   }}>
                   {postThumb ? (
-                    <div className="h-16 w-16 flex-none rounded-md overflow-hidden relative bg-neutral-800">
+                    <div className="h-16 w-16 flex-none rounded-md overflow-hidden relative bg-neutral-100">
                       <img className="w-full h-full object-cover" src={postThumb} alt="" loading="lazy" />
                       {overlays.map((overlay, oi) => (
                         <div key={oi} className="absolute text-center pointer-events-none" style={{
@@ -853,7 +853,7 @@ const ArtistDashboard = ({
                       ))}
                     </div>
                   ) : (
-                    <div className="flex h-16 w-16 flex-none items-center justify-center rounded-md bg-neutral-800">
+                    <div className="flex h-16 w-16 flex-none items-center justify-center rounded-md bg-neutral-100">
                       <FeatherSend className="text-neutral-500" />
                     </div>
                   )}
@@ -919,7 +919,7 @@ const ArtistDashboard = ({
             </div>
           )}
           {postedPosts.length > 5 && (
-            <div className="flex w-full items-center justify-center px-6 pb-4 border-t border-solid border-neutral-800 cursor-pointer hover:bg-neutral-800/30" onClick={() => onNavigate?.('schedule')}>
+            <div className="flex w-full items-center justify-center px-6 pb-4 border-t border-solid border-neutral-200 cursor-pointer hover:bg-neutral-100/30" onClick={() => onNavigate?.('schedule')}>
               <span className="text-caption font-caption text-neutral-400 pt-3">
                 +{postedPosts.length - 5} more posted
               </span>
@@ -943,7 +943,7 @@ const ArtistDashboard = ({
               return (
                 <div
                   key={project.id}
-                  className="flex flex-col items-start gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5 cursor-pointer hover:border-neutral-600 transition-colors"
+                  className="flex flex-col items-start gap-4 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-6 py-5 cursor-pointer hover:border-neutral-300 transition-colors"
                   onClick={() => onNavigate?.('studio')}
                 >
                   <div className="flex w-full items-center gap-3">
@@ -981,7 +981,7 @@ const ArtistDashboard = ({
 
       {/* Operator Contact Card */}
       {user?.ownerOperatorId && (
-        <div className="flex w-full flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5">
+        <div className="flex w-full flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-6 py-5">
           <span className="text-body-bold font-body-bold text-[#ffffffff]">Your Operator</span>
           <span className="text-body font-body text-neutral-400">
             Contact your operator for content uploads, schedule changes, or account management.

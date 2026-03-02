@@ -324,14 +324,14 @@ const ProjectLanding = ({
       {/* Stat cards */}
       <div className="flex w-full items-center gap-4 mt-6">
         <div
-          className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4 cursor-pointer hover:border-neutral-600 transition-colors"
+          className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-5 py-4 cursor-pointer hover:border-neutral-600 transition-colors"
           onClick={() => onViewContent?.({ type: 'slideshows' })}
         >
           <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{totalDrafts}</span>
           <span className="text-caption font-caption text-neutral-400">Drafts</span>
         </div>
         <div
-          className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4 cursor-pointer hover:border-neutral-600 transition-colors"
+          className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-5 py-4 cursor-pointer hover:border-neutral-600 transition-colors"
           onClick={() => onViewAllMedia?.()}
         >
           <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{library.length}</span>
@@ -364,7 +364,7 @@ const ProjectLanding = ({
           return (
             <div
               key={project.id}
-              className="flex flex-col items-start gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5 cursor-pointer hover:border-neutral-600 transition-colors"
+              className="flex flex-col items-start gap-4 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-6 py-5 cursor-pointer hover:border-neutral-600 transition-colors"
               onClick={() => !isRenaming && onOpenProject(project.id)}
             >
               <div className="flex w-full items-center gap-3">
@@ -466,7 +466,7 @@ const ProjectLanding = ({
               return (
                 <div
                   key={post.id}
-                  className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
+                  className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
                   onClick={() => setPreviewingDraft({
                     ...post,
                     name: post.contentName,
@@ -578,7 +578,7 @@ const ProjectLanding = ({
                 return (
                   <div
                     key={draft.id}
-                    className="group relative flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
+                    className="group relative flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
                     onClick={() => setPreviewingDraft(draft)}
                   >
                     {/* Delete button */}
@@ -659,7 +659,7 @@ const ProjectLanding = ({
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/85" onClick={() => setPreviewingDraft(null)}>
           <div className="relative flex flex-col rounded-2xl bg-[#111118] overflow-hidden" style={{ maxWidth: '90vw', maxHeight: '85vh', minWidth: 320 }} onClick={e => e.stopPropagation()}>
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-solid border-neutral-800 px-5 py-4">
+            <div className="flex items-center justify-between border-b border-solid border-neutral-200 px-5 py-4">
               <div className="flex flex-col">
                 <span className="text-body-bold font-body-bold text-[#ffffffff]">
                   {previewingDraft.name || 'Untitled Slideshow'}
@@ -692,18 +692,18 @@ const ProjectLanding = ({
             </div>
             {/* Inline quick-schedule form */}
             {showQuickSchedule && (
-              <div className="flex items-center gap-3 border-b border-solid border-neutral-800 px-5 py-3 bg-[#0d0d12]">
+              <div className="flex items-center gap-3 border-b border-solid border-neutral-200 px-5 py-3 bg-[#0d0d12]">
                 <input
                   type="date"
                   value={scheduleDate}
                   onChange={e => setScheduleDate(e.target.value)}
-                  className="rounded bg-[#171717] border border-neutral-700 text-white text-sm px-2 py-1.5 outline-none focus:border-indigo-500"
+                  className="rounded bg-[#171717] border border-neutral-200 text-white text-sm px-2 py-1.5 outline-none focus:border-indigo-500"
                 />
                 <input
                   type="time"
                   value={scheduleTime}
                   onChange={e => setScheduleTime(e.target.value)}
-                  className="rounded bg-[#171717] border border-neutral-700 text-white text-sm px-2 py-1.5 outline-none focus:border-indigo-500"
+                  className="rounded bg-[#171717] border border-neutral-200 text-white text-sm px-2 py-1.5 outline-none focus:border-indigo-500"
                 />
                 <Button variant="brand-primary" size="small" icon={<FeatherSend />} disabled={!scheduleDate} onClick={handleQuickSchedule}>
                   Confirm
@@ -713,7 +713,7 @@ const ProjectLanding = ({
             {/* Slides */}
             <div className="flex flex-wrap justify-center gap-3 p-4 overflow-y-auto" style={{ maxHeight: 'calc(85vh - 72px)' }}>
               {(previewingDraft.slides || []).map((slide, i) => (
-                <div key={slide.id || i} className="relative overflow-hidden rounded-lg border border-solid border-neutral-800" style={{ width: 180, aspectRatio: '9/16', backgroundColor: '#0a0a0f', containerType: 'inline-size' }}>
+                <div key={slide.id || i} className="relative overflow-hidden rounded-lg border border-solid border-neutral-200" style={{ width: 180, aspectRatio: '9/16', backgroundColor: '#0a0a0f', containerType: 'inline-size' }}>
                   {(slide.backgroundImage || slide.thumbnail || slide.imageA?.url) ? (
                     <img src={slide.backgroundImage || slide.thumbnail || slide.imageA?.url} alt={`Slide ${i + 1}`} className="w-full h-full object-cover" />
                   ) : (
@@ -762,7 +762,7 @@ const ProjectLanding = ({
 
       {showCreateForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowCreateForm(false)}>
-          <div className="w-full max-w-md rounded-xl border border-neutral-800 bg-[#111111] p-6" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-[#111111] p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <span className="text-heading-2 font-heading-2 text-[#ffffffff]">New Project</span>
               <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close" onClick={() => setShowCreateForm(false)} />

@@ -141,11 +141,11 @@ const WebImportModal = ({
 
       {/* Modal */}
       <div
-        className="relative z-10 flex w-full max-w-lg flex-col rounded-xl border border-neutral-800 bg-[#111111] shadow-2xl"
+        className="relative z-10 flex w-full max-w-lg flex-col rounded-xl border border-neutral-200 bg-[#111111] shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
           <div className="flex items-center gap-2">
             <FeatherLink className="text-neutral-400" style={{ width: 18, height: 18 }} />
             <span className="text-body-bold font-body-bold text-[#ffffffff]">{audioOnly ? 'Import Audio from URL' : 'Import from Web'}</span>
@@ -170,7 +170,7 @@ const WebImportModal = ({
                     onKeyDown={handleKeyDown}
                     onPaste={handlePaste}
                     placeholder="https://youtube.com/watch?v=..."
-                    className="flex-1 rounded-lg border border-neutral-700 bg-[#1a1a1aff] px-3 py-2.5 text-body font-body text-[#ffffffff] placeholder-neutral-500 outline-none focus:border-indigo-500 transition-colors"
+                    className="flex-1 rounded-lg border border-neutral-200 bg-[#1a1a1aff] px-3 py-2.5 text-body font-body text-[#ffffffff] placeholder-neutral-500 outline-none focus:border-indigo-500 transition-colors"
                   />
                   <Button
                     variant="brand-primary"
@@ -223,7 +223,7 @@ const WebImportModal = ({
           {state === STATES.PREVIEW && metadata && (
             <>
               {/* Media preview */}
-              <div className="flex items-start gap-4 rounded-lg border border-neutral-800 bg-[#1a1a1aff] p-4">
+              <div className="flex items-start gap-4 rounded-lg border border-neutral-200 bg-[#1a1a1aff] p-4">
                 {metadata.thumbnail ? (
                   <img
                     src={metadata.thumbnail}
@@ -231,7 +231,7 @@ const WebImportModal = ({
                     className="h-20 w-28 flex-none rounded-md object-cover"
                   />
                 ) : (
-                  <div className="flex h-20 w-28 flex-none items-center justify-center rounded-md bg-neutral-800">
+                  <div className="flex h-20 w-28 flex-none items-center justify-center rounded-md bg-neutral-100">
                     <FeatherLink className="text-neutral-500" style={{ width: 24, height: 24 }} />
                   </div>
                 )}
@@ -284,7 +284,7 @@ const WebImportModal = ({
                           className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-caption font-caption transition-colors cursor-pointer ${
                             isSelected
                               ? 'border-indigo-500 bg-indigo-500/10 text-[#ffffffff]'
-                              : 'border-neutral-700 bg-transparent text-neutral-400 hover:border-neutral-600'
+                              : 'border-neutral-200 bg-transparent text-neutral-400 hover:border-neutral-600'
                           }`}
                         >
                           <div
@@ -311,7 +311,7 @@ const WebImportModal = ({
                         className={`rounded-lg border px-3 py-2 text-caption font-caption transition-colors cursor-pointer ${
                           maxItems === cap
                             ? 'border-indigo-500 bg-indigo-500/10 text-[#ffffffff]'
-                            : 'border-neutral-700 bg-transparent text-neutral-400 hover:border-neutral-600'
+                            : 'border-neutral-200 bg-transparent text-neutral-400 hover:border-neutral-600'
                         }`}
                       >
                         {cap} images
@@ -349,7 +349,7 @@ const WebImportModal = ({
                   {importProgress.status}
                 </span>
                 {importProgress.progress > 0 && (
-                  <div className="w-48 h-1.5 rounded-full bg-neutral-800 overflow-hidden">
+                  <div className="w-48 h-1.5 rounded-full bg-neutral-100 overflow-hidden">
                     <div
                       className="h-full rounded-full bg-indigo-500"
                       style={{ width: `${importProgress.progress}%`, transition: 'width 0.3s ease' }}

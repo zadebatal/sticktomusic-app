@@ -89,7 +89,7 @@ const AppShell = ({
                 <span className="text-caption font-caption text-neutral-500 uppercase tracking-wider">Artist</span>
                 <SubframeCore.DropdownMenu.Root>
                   <SubframeCore.DropdownMenu.Trigger asChild>
-                    <div role="button" tabIndex={0} aria-label={`Switch artist, current: ${currentArtist?.name || 'none'}`} className="flex w-full items-center gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2.5 cursor-pointer hover:bg-[#262626]">
+                    <div role="button" tabIndex={0} aria-label={`Switch artist, current: ${currentArtist?.name || 'none'}`} className="flex w-full items-center gap-3 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-2.5 cursor-pointer hover:bg-[#262626]">
                       <Avatar size="small" image={currentArtist?.photoURL || undefined} className="bg-brand-600 flex-none">
                         {(currentArtist?.name || '?')[0].toUpperCase()}
                       </Avatar>
@@ -124,7 +124,7 @@ const AppShell = ({
             ) : visibleArtists.length === 1 ? (
               <div className="flex w-full flex-col items-start gap-2">
                 <span className="text-caption font-caption text-neutral-500 uppercase tracking-wider">Artist</span>
-                <div className="flex w-full items-center gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2.5">
+                <div className="flex w-full items-center gap-3 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-2.5">
                   <Avatar size="small" image={currentArtist?.photoURL || undefined} className="bg-brand-600 flex-none">
                     {(currentArtist?.name || '?')[0].toUpperCase()}
                   </Avatar>
@@ -145,7 +145,7 @@ const AppShell = ({
                 <div
                   key={tab.id}
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 cursor-pointer transition-colors ${
-                    isActive ? 'bg-[#2a2a2a]' : 'hover:bg-neutral-950'
+                    isActive ? 'bg-[#2a2a2a]' : 'hover:bg-neutral-50'
                   }`}
                   onClick={() => setActiveTab(tab.id)}
                 >

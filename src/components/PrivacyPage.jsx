@@ -376,7 +376,7 @@ export default function PrivacyPage() {
         </p>
 
         {/* Footer spacing */}
-        <div className="mt-16 pt-8 border-t border-neutral-800">
+        <div className="mt-16 pt-8 border-t border-neutral-200">
           <p className="text-neutral-500 text-sm">
             &copy; {new Date().getFullYear()} StickToMusic. All rights reserved.
           </p>

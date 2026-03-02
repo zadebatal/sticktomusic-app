@@ -27,7 +27,7 @@ const UploadFinishedMediaModal = ({ db, artistId, onClose, onComplete }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-xl border border-neutral-800 bg-[#111111] p-6 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-lg rounded-xl border border-neutral-200 bg-[#111111] p-6 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Upload Finished Media</span>
@@ -37,7 +37,7 @@ const UploadFinishedMediaModal = ({ db, artistId, onClose, onComplete }) => {
         {/* Drop zone */}
         {!uploading && (
           <div
-            className="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed border-neutral-700 bg-[#0a0a0f] px-6 py-8 cursor-pointer hover:border-neutral-500 transition-colors"
+            className="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed border-neutral-200 bg-[#0a0a0f] px-6 py-8 cursor-pointer hover:border-neutral-500 transition-colors"
             onClick={() => fileInputRef.current?.click()}
             onDrop={handleDrop}
             onDragOver={e => e.preventDefault()}
@@ -60,7 +60,7 @@ const UploadFinishedMediaModal = ({ db, artistId, onClose, onComplete }) => {
         {files.length > 0 && (
           <div className="flex flex-col gap-2 mt-4 overflow-y-auto max-h-[300px]">
             {files.map((entry, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1a] px-3 py-2">
+              <div key={i} className="flex items-center gap-3 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1a] px-3 py-2">
                 <div className="w-10 h-10 flex-none rounded bg-[#0a0a0f] overflow-hidden flex items-center justify-center">
                   {entry.type === 'image' ? (
                     <img src={entry.localPreview} alt="" className="w-full h-full object-cover" />
@@ -79,7 +79,7 @@ const UploadFinishedMediaModal = ({ db, artistId, onClose, onComplete }) => {
                     <span className="text-[11px] text-neutral-500">{formatSize(entry.file.size)}</span>
                   </div>
                   {entry.status === 'uploading' && (
-                    <div className="w-full h-1 rounded-full bg-neutral-800 mt-1">
+                    <div className="w-full h-1 rounded-full bg-neutral-100 mt-1">
                       <div className="h-full rounded-full bg-brand-600 transition-all" style={{ width: `${entry.progress}%` }} />
                     </div>
                   )}
@@ -96,18 +96,18 @@ const UploadFinishedMediaModal = ({ db, artistId, onClose, onComplete }) => {
 
         {/* Caption + hashtags */}
         {files.length > 0 && !uploading && (
-          <div className="flex flex-col gap-3 mt-4 border-t border-solid border-neutral-800 pt-4">
+          <div className="flex flex-col gap-3 mt-4 border-t border-solid border-neutral-200 pt-4">
             <div className="flex flex-col gap-1">
               <span className="text-caption-bold font-caption-bold text-neutral-300">Caption (optional)</span>
               <textarea
-                className="w-full rounded-lg border border-neutral-700 bg-[#0a0a0f] px-3 py-2 text-sm text-white outline-none resize-none focus:border-neutral-500"
+                className="w-full rounded-lg border border-neutral-200 bg-[#0a0a0f] px-3 py-2 text-sm text-white outline-none resize-none focus:border-neutral-500"
                 rows={2} placeholder="Caption for all uploads..." value={caption} onChange={e => setCaption(e.target.value)}
               />
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-caption-bold font-caption-bold text-neutral-300">Hashtags (optional)</span>
               <input
-                className="w-full rounded-lg border border-neutral-700 bg-[#0a0a0f] px-3 py-2 text-sm text-white outline-none focus:border-neutral-500"
+                className="w-full rounded-lg border border-neutral-200 bg-[#0a0a0f] px-3 py-2 text-sm text-white outline-none focus:border-neutral-500"
                 placeholder="#music #viral #newrelease" value={hashtags} onChange={e => setHashtags(e.target.value)}
               />
             </div>

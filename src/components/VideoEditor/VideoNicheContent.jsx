@@ -435,7 +435,7 @@ const VideoNicheContent = ({
                 <Button variant="neutral-tertiary" size="small" icon={<FeatherLink />} onClick={onWebImport}>Web</Button>
               </div>
             </div>
-            <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-800 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
+            <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-200 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
               <div className="grid w-full grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-1.5">
                 {nicheMedia.map((item, idx) => (
                   <div
@@ -500,7 +500,7 @@ const VideoNicheContent = ({
                 ))}
                 {/* Upload placeholder tile */}
                 <div
-                  className="flex flex-col items-center justify-center aspect-square rounded border border-dashed border-neutral-700 cursor-pointer hover:border-indigo-500 hover:bg-indigo-500/5 transition-colors"
+                  className="flex flex-col items-center justify-center aspect-square rounded border border-dashed border-neutral-200 cursor-pointer hover:border-indigo-500 hover:bg-indigo-500/5 transition-colors"
                   onClick={onUpload}
                   title="Upload media"
                 >
@@ -542,7 +542,7 @@ const VideoNicheContent = ({
             )}
             <div className="flex items-center gap-2">
               <input
-                className="flex-1 rounded-md border border-solid border-neutral-800 bg-black px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
+                className="flex-1 rounded-md border border-solid border-neutral-200 bg-black px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
                 placeholder="Add text..."
                 value={textBankInput1}
                 onChange={e => setTextBankInput1(e.target.value)}
@@ -581,7 +581,7 @@ const VideoNicheContent = ({
             )}
             <div className="flex items-center gap-2">
               <input
-                className="flex-1 rounded-md border border-solid border-neutral-800 bg-black px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
+                className="flex-1 rounded-md border border-solid border-neutral-200 bg-black px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
                 placeholder="Add text..."
                 value={textBankInput2}
                 onChange={e => setTextBankInput2(e.target.value)}
@@ -594,7 +594,7 @@ const VideoNicheContent = ({
         </div>
 
         {/* Audio Bank — vertical list like text banks */}
-        <div className="flex w-full flex-col gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-4 py-3 mx-8 mb-4" style={{ maxWidth: 'calc(100% - 64px)', maxHeight: 200 }}>
+        <div className="flex w-full flex-col gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-4 py-3 mx-8 mb-4" style={{ maxWidth: 'calc(100% - 64px)', maxHeight: 200 }}>
           <div className="flex w-full flex-none items-center justify-between">
             <div className="flex items-center gap-2">
               <FeatherMusic className="text-neutral-400" style={{ width: 14, height: 14 }} />
@@ -619,7 +619,7 @@ const VideoNicheContent = ({
           <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="flex flex-col gap-1.5">
               {projectAudio.length === 0 ? (
-                <div className="flex items-center justify-center rounded-md border-2 border-dashed border-neutral-700 py-3">
+                <div className="flex items-center justify-center rounded-md border-2 border-dashed border-neutral-200 py-3">
                   <span className="text-caption font-caption text-neutral-500">No audio uploaded</span>
                 </div>
               ) : (
@@ -631,12 +631,12 @@ const VideoNicheContent = ({
                     <div
                       key={audio.id}
                       className={`group flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 cursor-pointer transition-colors flex-none ${
-                        isActive ? 'bg-indigo-500/15 border border-indigo-500 ring-1 ring-indigo-500' : 'bg-black border border-transparent hover:border-neutral-700'
+                        isActive ? 'bg-indigo-500/15 border border-indigo-500 ring-1 ring-indigo-500' : 'bg-black border border-transparent hover:border-neutral-200'
                       }`}
                       onClick={() => handleSelectAudio(audio.id)}
                     >
                       <button
-                        className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-neutral-800 hover:bg-neutral-700 border-none cursor-pointer transition-colors"
+                        className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-neutral-100 hover:bg-neutral-200 border-none cursor-pointer transition-colors"
                         onClick={(e) => handlePlayAudio(e, audio)}
                         title={isPlaying ? 'Stop' : 'Preview'}
                       >
@@ -676,7 +676,7 @@ const VideoNicheContent = ({
                 .map(draft => (
                   <div
                     key={draft.id}
-                    className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
+                    className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
                     onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id, draft)}
                   >
                     {draft.thumbnail ? (
@@ -738,8 +738,8 @@ const VideoNicheContent = ({
       {/* Bank Picker Modal — after transcription */}
       {showBankPicker && pendingTranscription && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowBankPicker(false)}>
-          <div className="w-full max-w-md rounded-xl border border-neutral-800 bg-[#111111] overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+          <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-[#111111] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200">
               <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Add to Text Bank</span>
               <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close" onClick={() => setShowBankPicker(false)} />
             </div>
@@ -747,7 +747,7 @@ const VideoNicheContent = ({
               <span className="text-caption font-caption text-neutral-400 mb-3 block">
                 {pendingTranscription.length} line{pendingTranscription.length !== 1 ? 's' : ''} transcribed
               </span>
-              <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto mb-4 rounded-lg border border-neutral-800 bg-black p-3">
+              <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto mb-4 rounded-lg border border-neutral-200 bg-black p-3">
                 {pendingTranscription.slice(0, 5).map((line, idx) => (
                   <span key={idx} className="text-caption font-caption text-neutral-300 truncate">{line}</span>
                 ))}
@@ -805,7 +805,7 @@ const VideoNicheContent = ({
           onClick={() => setLightboxItem(null)}
         >
           <button
-            className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-800 hover:bg-neutral-700 border-none cursor-pointer z-10 transition-colors"
+            className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 hover:bg-neutral-200 border-none cursor-pointer z-10 transition-colors"
             onClick={() => setLightboxItem(null)}
             aria-label="Close preview"
           >

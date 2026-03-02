@@ -275,10 +275,10 @@ const WizardStepBanks = ({ db, artistId, projectId, nicheMap, selectedFormats, o
           const fmtColor = VIDEO_FORMAT_COLORS[fmt.id] || '#6366f1';
 
           return (
-            <div key={fmt.id} className="flex flex-col rounded-lg border border-solid border-neutral-800 bg-[#111111] overflow-hidden">
+            <div key={fmt.id} className="flex flex-col rounded-lg border border-solid border-neutral-200 bg-[#111111] overflow-hidden">
               {/* Section header */}
               <div
-                className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-neutral-900/50 transition-colors"
+                className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-neutral-50/50 transition-colors"
                 onClick={() => toggleNicheExpanded(fmt.id)}
               >
                 <div className="flex items-center gap-3">
@@ -337,7 +337,7 @@ const WizardStepBanks = ({ db, artistId, projectId, nicheMap, selectedFormats, o
                             </div>
 
                             {/* Images section */}
-                            <div className="flex w-full flex-col items-start gap-2 rounded-b-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-3 min-h-[120px]">
+                            <div className="flex w-full flex-col items-start gap-2 rounded-b-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-3 min-h-[120px]">
                               <div className="flex w-full items-center justify-between">
                                 <span className="text-caption font-caption text-neutral-400">Images</span>
                                 <button
@@ -358,7 +358,7 @@ const WizardStepBanks = ({ db, artistId, projectId, nicheMap, selectedFormats, o
                                   />
                                 ))}
                                 <div
-                                  className="flex flex-col items-center justify-center rounded-sm border-2 border-dashed border-neutral-700 aspect-square cursor-pointer hover:border-indigo-500 hover:bg-indigo-500/5 transition-colors"
+                                  className="flex flex-col items-center justify-center rounded-sm border-2 border-dashed border-neutral-200 aspect-square cursor-pointer hover:border-indigo-500 hover:bg-indigo-500/5 transition-colors"
                                   onClick={() => triggerUpload(nicheId, bankIdx)}
                                   title="Upload images"
                                 >
@@ -368,7 +368,7 @@ const WizardStepBanks = ({ db, artistId, projectId, nicheMap, selectedFormats, o
                             </div>
 
                             {/* Text bank section */}
-                            <div className="flex w-full flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-3 min-h-[100px]">
+                            <div className="flex w-full flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-3 min-h-[100px]">
                               <div className="flex w-full items-center justify-between">
                                 <span className="text-caption font-caption text-neutral-400">{label} Lines</span>
                                 <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add text" onClick={() => handleAddText(nicheId, bankIdx)} />
@@ -386,7 +386,7 @@ const WizardStepBanks = ({ db, artistId, projectId, nicheMap, selectedFormats, o
                                   );
                                 })}
                               </div>
-                              <div className="flex w-full items-center gap-2 rounded-md border border-solid border-neutral-800 bg-black px-2 py-1.5">
+                              <div className="flex w-full items-center gap-2 rounded-md border border-solid border-neutral-200 bg-black px-2 py-1.5">
                                 <input
                                   className="grow bg-transparent text-caption font-caption text-white outline-none placeholder-neutral-500"
                                   placeholder={`Add ${label.toLowerCase()} line...`}
@@ -431,7 +431,7 @@ const WizardStepBanks = ({ db, artistId, projectId, nicheMap, selectedFormats, o
         <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setShowCrossPollinationFor(null)}>
           <div className="absolute inset-0 bg-black/60" />
           <div
-            className="relative w-80 h-full bg-[#111111] border-l border-solid border-neutral-800 flex flex-col"
+            className="relative w-80 h-full bg-[#111111] border-l border-solid border-neutral-200 flex flex-col"
             onClick={e => e.stopPropagation()}
           >
             <CrossPollinationDrawer

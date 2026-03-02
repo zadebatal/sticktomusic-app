@@ -60,7 +60,7 @@ const AllMediaContent = ({
   return (
     <div className="flex flex-1 flex-col items-start self-stretch overflow-y-auto">
       {/* Header */}
-      <div className="flex w-full items-center justify-between px-8 py-4 border-b border-solid border-neutral-800">
+      <div className="flex w-full items-center justify-between px-8 py-4 border-b border-solid border-neutral-200">
         <div className="flex items-center gap-3">
           <span className="text-heading-2 font-heading-2 text-[#ffffffff]">All Media</span>
           <Badge variant="neutral">{scopedImages.length} images</Badge>
@@ -79,7 +79,7 @@ const AllMediaContent = ({
 
       {/* Search + scope */}
       <div className="flex w-full items-center gap-4 px-8 py-3">
-        <div className="flex items-center gap-2 flex-1 rounded-md border border-solid border-neutral-800 bg-black px-3 py-1.5">
+        <div className="flex items-center gap-2 flex-1 rounded-md border border-solid border-neutral-200 bg-black px-3 py-1.5">
           <FeatherSearch className="text-neutral-500 flex-none" style={{ width: 14, height: 14 }} />
           <input
             className="w-full bg-transparent text-body font-body text-white placeholder-neutral-500 outline-none"
@@ -104,7 +104,7 @@ const AllMediaContent = ({
       {/* Upload progress */}
       {isUploading && uploadProgress && (
         <div className="w-full px-8 py-2">
-          <div className="h-1.5 w-full bg-neutral-800 rounded-full overflow-hidden">
+          <div className="h-1.5 w-full bg-neutral-100 rounded-full overflow-hidden">
             <div className="h-full bg-indigo-500" style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }} />
           </div>
           <span className="text-caption font-caption text-neutral-400 mt-1">{uploadProgress.current}/{uploadProgress.total}</span>
@@ -119,7 +119,7 @@ const AllMediaContent = ({
             <span className="text-body-bold font-body-bold text-[#ffffffff]">Images</span>
             <Badge variant="neutral">{filteredImages.length}</Badge>
           </div>
-          <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-800 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
+          <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-200 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
             <div className="grid w-full grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-1.5">
               {filteredImages.map(item => (
                 <div
@@ -148,7 +148,7 @@ const AllMediaContent = ({
             <span className="text-body-bold font-body-bold text-[#ffffffff]">Videos</span>
             <Badge variant="neutral">{filteredVideos.length}</Badge>
           </div>
-          <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-800 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
+          <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-200 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
             <div className="grid w-full grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-1.5">
               {filteredVideos.map(item => (
                 <div
@@ -188,9 +188,9 @@ const AllMediaContent = ({
             <span className="text-body-bold font-body-bold text-[#ffffffff]">Audio</span>
             <Badge variant="neutral">{projectAudio.length}</Badge>
           </div>
-          <div className="flex flex-col gap-1 rounded-lg border border-solid border-neutral-800 bg-[#111118] overflow-hidden">
+          <div className="flex flex-col gap-1 rounded-lg border border-solid border-neutral-200 bg-[#111118] overflow-hidden">
             {projectAudio.map(audio => (
-              <div key={audio.id} className="flex items-center gap-3 px-3 py-2 hover:bg-neutral-800/30 transition-colors">
+              <div key={audio.id} className="flex items-center gap-3 px-3 py-2 hover:bg-neutral-100/30 transition-colors">
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-indigo-500/10 flex-none">
                   <FeatherPlay className="text-indigo-400" style={{ width: 11, height: 11 }} />
                 </div>

@@ -267,7 +267,7 @@ const SlideshowNicheContent = ({
               {/* Images section — capped height, scrolls internally */}
               <div
                 className={`flex w-full flex-col items-start gap-2 rounded-b-lg border bg-[#1a1a1aff] overflow-hidden transition-colors px-3 py-3 ${
-                  isDragOver ? 'border-indigo-500 bg-indigo-500/5' : 'border-solid border-neutral-800'
+                  isDragOver ? 'border-indigo-500 bg-indigo-500/5' : 'border-solid border-neutral-200'
                 }`}
                 style={{ height: '45%', minHeight: '120px' }}
                 onDragOver={e => { e.preventDefault(); setDragOverBank(bankIdx); }}
@@ -305,7 +305,7 @@ const SlideshowNicheContent = ({
                       />
                     ))}
                     <div
-                      className="flex flex-col items-center justify-center rounded-sm border-2 border-dashed border-neutral-700 aspect-square cursor-pointer hover:border-indigo-500 hover:bg-indigo-500/5 transition-colors"
+                      className="flex flex-col items-center justify-center rounded-sm border-2 border-dashed border-neutral-200 aspect-square cursor-pointer hover:border-indigo-500 hover:bg-indigo-500/5 transition-colors"
                       onClick={() => onUploadToBank?.(bankIdx)}
                       title="Upload images to this bank"
                     >
@@ -317,7 +317,7 @@ const SlideshowNicheContent = ({
 
               {/* Text bank section — fixed uniform height */}
               <div
-                className="flex w-full flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-3"
+                className="flex w-full flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-3"
                 style={{ height: '45%', minHeight: '140px' }}
               >
                 <div className="flex w-full flex-none items-center justify-between">
@@ -340,7 +340,7 @@ const SlideshowNicheContent = ({
                     );
                   })}
                 </div>
-                <div className="flex w-full flex-none items-center gap-2 rounded-md border border-solid border-neutral-800 bg-black px-2 py-1.5">
+                <div className="flex w-full flex-none items-center gap-2 rounded-md border border-solid border-neutral-200 bg-black px-2 py-1.5">
                   <input
                     className="grow bg-transparent text-caption font-caption text-white outline-none placeholder-neutral-500"
                     placeholder={`Add ${label.toLowerCase()} line...`}
@@ -365,7 +365,7 @@ const SlideshowNicheContent = ({
           </div>
 
           {/* Audio items — vertical scroll, fills remaining height */}
-          <div className="flex w-full flex-col items-start gap-2 rounded-b-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-3 flex-1 min-h-0 overflow-hidden">
+          <div className="flex w-full flex-col items-start gap-2 rounded-b-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-3 flex-1 min-h-0 overflow-hidden">
             <div className="flex w-full flex-none items-center justify-between">
               <span className="text-caption font-caption text-neutral-400">Tracks</span>
               <div className="flex items-center gap-1">
@@ -394,12 +394,12 @@ const SlideshowNicheContent = ({
                     <div
                       key={audio.id}
                       className={`group flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 cursor-pointer transition-colors flex-none ${
-                        isActive ? 'bg-indigo-500/15 border border-indigo-500 ring-1 ring-indigo-500' : 'bg-black border border-transparent hover:border-neutral-700'
+                        isActive ? 'bg-indigo-500/15 border border-indigo-500 ring-1 ring-indigo-500' : 'bg-black border border-transparent hover:border-neutral-200'
                       }`}
                       onClick={() => handleSelectAudio(audio.id)}
                     >
                       <button
-                        className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-neutral-800 hover:bg-neutral-700 border-none cursor-pointer transition-colors"
+                        className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-neutral-100 hover:bg-neutral-200 border-none cursor-pointer transition-colors"
                         onClick={(e) => handlePlayAudio(e, audio)}
                         title={isPlaying ? 'Stop' : 'Preview'}
                       >
@@ -421,7 +421,7 @@ const SlideshowNicheContent = ({
                   );
                 })}
                 <div
-                  className="flex flex-col items-center justify-center rounded-md border-2 border-dashed border-neutral-700 py-3 cursor-pointer hover:border-indigo-500 hover:bg-indigo-500/5 transition-colors"
+                  className="flex flex-col items-center justify-center rounded-md border-2 border-dashed border-neutral-200 py-3 cursor-pointer hover:border-indigo-500 hover:bg-indigo-500/5 transition-colors"
                   onClick={() => onUploadAudio?.()}
                   title="Upload audio"
                 >
@@ -434,7 +434,7 @@ const SlideshowNicheContent = ({
         </div>
         {/* From Project Pool — media in project but not in this niche */}
         {poolOnlyMedia.length > 0 && (
-          <div className="flex flex-col gap-2 px-4 py-3 border-t border-neutral-800">
+          <div className="flex flex-col gap-2 px-4 py-3 border-t border-neutral-200">
             <button
               className="flex items-center gap-2 bg-transparent border-none cursor-pointer p-0 w-full text-left"
               onClick={() => setPoolExpanded(prev => !prev)}
@@ -452,7 +452,7 @@ const SlideshowNicheContent = ({
                 {poolOnlyMedia.slice(0, 24).map(item => (
                   <img
                     key={item.id}
-                    className="rounded-sm aspect-square object-cover w-full cursor-pointer border border-neutral-800 hover:border-neutral-600 transition-colors"
+                    className="rounded-sm aspect-square object-cover w-full cursor-pointer border border-neutral-200 hover:border-neutral-600 transition-colors"
                     src={item.thumbnailUrl || item.url}
                     alt={item.name}
                     loading="lazy"
@@ -460,7 +460,7 @@ const SlideshowNicheContent = ({
                   />
                 ))}
                 {poolOnlyMedia.length > 24 && (
-                  <div className="flex items-center justify-center aspect-square rounded-sm bg-neutral-800">
+                  <div className="flex items-center justify-center aspect-square rounded-sm bg-neutral-100">
                     <span className="text-[10px] text-neutral-400">+{poolOnlyMedia.length - 24}</span>
                   </div>
                 )}
@@ -499,8 +499,8 @@ const SlideshowNicheContent = ({
       {/* Bank Picker Modal — assign transcribed lines to slide banks */}
       {showBankPicker && pendingTranscription && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowBankPicker(false)}>
-          <div className="w-full max-w-md rounded-xl border border-neutral-800 bg-[#111111] overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+          <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-[#111111] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200">
               <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Add to Slide Bank</span>
               <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close" onClick={() => setShowBankPicker(false)} />
             </div>
@@ -508,7 +508,7 @@ const SlideshowNicheContent = ({
               <span className="text-caption font-caption text-neutral-400 mb-3 block">
                 {pendingTranscription.length} line{pendingTranscription.length !== 1 ? 's' : ''} transcribed
               </span>
-              <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto mb-4 rounded-lg border border-neutral-800 bg-black p-3">
+              <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto mb-4 rounded-lg border border-neutral-200 bg-black p-3">
                 {pendingTranscription.slice(0, 5).map((line, idx) => (
                   <span key={idx} className="text-caption font-caption text-neutral-300 truncate">{line}</span>
                 ))}
@@ -554,7 +554,7 @@ const SlideshowNicheContent = ({
           onClick={() => setLightboxItem(null)}
         >
           <button
-            className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-800 hover:bg-neutral-700 border-none cursor-pointer z-10 transition-colors"
+            className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 hover:bg-neutral-200 border-none cursor-pointer z-10 transition-colors"
             onClick={() => setLightboxItem(null)}
             aria-label="Close preview"
           >

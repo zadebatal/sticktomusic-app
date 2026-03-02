@@ -136,7 +136,7 @@ const ClipperNicheContent = ({
               </Button>
             </div>
           </div>
-          <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-800 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
+          <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-200 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
             <div className="grid w-full grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-1.5">
               {nicheVideos.map(v => (
                 <div key={v.id} className="relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group"
@@ -183,10 +183,10 @@ const ClipperNicheContent = ({
             const isCollapsed = collapsedBanks[bankIdx];
 
             return (
-              <div key={bankIdx} className="flex flex-col rounded-lg border border-neutral-800 overflow-hidden">
+              <div key={bankIdx} className="flex flex-col rounded-lg border border-neutral-200 overflow-hidden">
                 {/* Bank header */}
                 <div
-                  className="flex items-center gap-2 px-4 py-3 cursor-pointer hover:bg-neutral-800/30 transition-colors"
+                  className="flex items-center gap-2 px-4 py-3 cursor-pointer hover:bg-neutral-100/30 transition-colors"
                   style={{ backgroundColor: color.bg, borderBottom: `1px solid ${color.border}` }}
                   onClick={() => toggleBank(bankIdx)}
                 >
@@ -205,18 +205,18 @@ const ClipperNicheContent = ({
                     {clips.map((clip, i) => (
                       <div
                         key={clip.id || i}
-                        className="flex items-center gap-3 px-4 py-2.5 border-t border-neutral-800/50 hover:bg-neutral-800/20 transition-colors"
+                        className="flex items-center gap-3 px-4 py-2.5 border-t border-neutral-200/50 hover:bg-neutral-100/20 transition-colors"
                       >
                         {/* Play button */}
                         {clip.url ? (
                           <button
-                            className="flex h-9 w-9 items-center justify-center rounded-md bg-neutral-800 hover:bg-neutral-700 transition-colors flex-none"
+                            className="flex h-9 w-9 items-center justify-center rounded-md bg-neutral-100 hover:bg-neutral-200 transition-colors flex-none"
                             onClick={() => setPreviewUrl(previewUrl === clip.url ? null : clip.url)}
                           >
                             <FeatherPlay className="text-white" style={{ width: 14, height: 14 }} />
                           </button>
                         ) : (
-                          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-neutral-900 flex-none">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-neutral-50 flex-none">
                             <FeatherScissors className="text-neutral-600" style={{ width: 14, height: 14 }} />
                           </div>
                         )}
@@ -277,7 +277,7 @@ const ClipperNicheContent = ({
               return (
                 <div
                   key={session.id}
-                  className="relative group flex flex-col items-start gap-2 rounded-lg border border-neutral-800 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
+                  className="relative group flex flex-col items-start gap-2 rounded-lg border border-neutral-200 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
                   onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id, session, null, nicheVideos)}
                 >
                   <button
@@ -308,7 +308,7 @@ const ClipperNicheContent = ({
 
       {/* From Project Pool — videos in project but not in this niche */}
       {poolOnlyVideos.length > 0 && (
-        <div className="flex w-full flex-col gap-3 border-t border-neutral-800 px-12 py-4">
+        <div className="flex w-full flex-col gap-3 border-t border-neutral-200 px-12 py-4">
           <button
             className="flex items-center gap-2 bg-transparent border-none cursor-pointer p-0 w-full text-left"
             onClick={() => setPoolExpanded(prev => !prev)}
@@ -322,7 +322,7 @@ const ClipperNicheContent = ({
             <Badge variant="neutral">{poolOnlyVideos.length}</Badge>
           </button>
           {poolExpanded && (
-            <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-800 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
+            <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-200 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
               <div className="grid w-full grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-1.5">
                 {poolOnlyVideos.map(v => (
                   <div

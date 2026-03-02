@@ -1628,7 +1628,7 @@ const SchedulingPage = ({
     <div className="flex h-full w-full items-stretch bg-black overflow-hidden">
       <div style={{ ...s.page, flex: '1 1 0%', minWidth: 0 }}>
       {/* ═══ HEADER ═══ */}
-      <div className="flex w-full flex-col items-start border-b border-solid border-neutral-800 bg-black px-12 py-8" style={isMobile ? { padding: '12px 16px' } : undefined}>
+      <div className="flex w-full flex-col items-start border-b border-solid border-neutral-200 bg-black px-12 py-8" style={isMobile ? { padding: '12px 16px' } : undefined}>
         <div className="flex w-full items-center justify-between" style={isMobile ? { flexDirection: 'column', alignItems: 'flex-start', gap: '8px' } : undefined}>
           <div className="flex items-center gap-6">
             <div className="flex flex-col items-start gap-1">
@@ -1641,7 +1641,7 @@ const SchedulingPage = ({
             {visibleArtists.length > 1 && onArtistChange && (
               <SubframeCore.DropdownMenu.Root>
                 <SubframeCore.DropdownMenu.Trigger asChild>
-                  <div className="flex items-center gap-3 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2 cursor-pointer hover:bg-[#262626]">
+                  <div className="flex items-center gap-3 rounded-md border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-2 cursor-pointer hover:bg-[#262626]">
                     {visibleArtists.find(a => a.id === artistId)?.photoURL ? (
                       <img src={visibleArtists.find(a => a.id === artistId).photoURL} alt="" className="h-6 w-6 flex-none rounded-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
@@ -1682,7 +1682,7 @@ const SchedulingPage = ({
                 <IconButton variant="neutral-tertiary" size="medium" icon={queuePaused ? <FeatherPlay /> : <FeatherPause />} aria-label={queuePaused ? "Resume queue" : "Pause queue"} onClick={() => setQueuePaused(!queuePaused)} />
               </>
             )}
-            <div className="flex h-8 w-px flex-none flex-col items-start bg-neutral-800" />
+            <div className="flex h-8 w-px flex-none flex-col items-start bg-neutral-100" />
             {/* Note: Radix ToggleGroup may emit aria-checked on non-checkbox roles (axe "aria-allowed-attr").
                 This is a known Radix UI library issue — cannot fix without patching Radix internals. */}
             <ToggleGroup value={viewMode} onValueChange={(v) => v && setViewMode(v)}>
@@ -1902,7 +1902,7 @@ const SchedulingPage = ({
               />
               <span className="text-body font-body text-neutral-400">Select All</span>
             </div>
-            <div className="flex h-4 w-px flex-none flex-col items-start bg-neutral-800" />
+            <div className="flex h-4 w-px flex-none flex-col items-start bg-neutral-100" />
             <Button variant="neutral-tertiary" size="small" onClick={selectDraftsOnly}>
               Drafts Only
             </Button>
@@ -2225,7 +2225,7 @@ const PostRow = ({
   const previewImage = post.editorState?.exportedImages?.[0]?.url || post.thumbnail || post.editorState?.thumbnail || post.editorState?.slides?.[0]?.backgroundImage || post.editorState?.slides?.[0]?.thumbnail || post.editorState?.slides?.[0]?.imageA?.url || post.editorState?.clips?.[0]?.thumbnailUrl || post.editorState?.clips?.[0]?.thumbnail || post.editorState?.montagePhotos?.[0]?.thumbnailUrl || post.editorState?.montagePhotos?.[0]?.url || post._repairedThumb || null;
 
   return (
-    <div className="rounded-lg border border-solid border-neutral-800 mb-1 mx-2 overflow-hidden">
+    <div className="rounded-lg border border-solid border-neutral-200 mb-1 mx-2 overflow-hidden">
       <div
         draggable
         onDragStart={onDragStart}

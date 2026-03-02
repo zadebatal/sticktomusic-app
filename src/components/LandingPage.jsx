@@ -71,7 +71,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
   return (
     <div className="flex h-screen w-full flex-col items-center bg-black overflow-auto focus:outline-none" tabIndex={0}>
       {/* NAV */}
-      <div className="flex w-full items-center justify-between border-b border-solid border-neutral-800 bg-black px-4 sm:px-12 py-4">
+      <div className="flex w-full items-center justify-between border-b border-solid border-neutral-200 bg-black px-4 sm:px-12 py-4">
         <span className="text-heading-2 font-heading-2 text-[#ffffffff]">StickToMusic</span>
         <div className="flex items-center gap-3">
           <Button variant="brand-tertiary" size="medium" onClick={() => { setAuthMode('login'); setShowAuth(true); }}>
@@ -150,7 +150,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
               { num: '3', title: 'Schedule & grow', desc: 'Queue your posts, track analytics, and watch your audience grow across every platform.' },
             ].map((step, i) => (
               <div key={i} className="flex grow shrink-0 basis-0 flex-col items-center gap-4">
-                <div className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-neutral-800">
+                <div className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-neutral-100">
                   <span className="text-heading-2 font-heading-2 text-[#000000ff]">{step.num}</span>
                 </div>
                 <div className="flex w-full flex-col items-center gap-2">
@@ -192,13 +192,13 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
               <Accordion
                 key={i}
                 trigger={
-                  <div className="flex w-full items-center justify-between py-5 border-b border-solid border-neutral-800">
+                  <div className="flex w-full items-center justify-between py-5 border-b border-solid border-neutral-200">
                     <span className="text-body-bold font-body-bold text-[#ffffffff]">{item.q}</span>
                     <Accordion.Chevron />
                   </div>
                 }
               >
-                <div className="pb-5 border-b border-solid border-neutral-800">
+                <div className="pb-5 border-b border-solid border-neutral-200">
                   <span className="text-body font-body text-brand-900">{item.a}</span>
                 </div>
               </Accordion>
@@ -222,7 +222,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
       </div>
 
       {/* FOOTER */}
-      <div className="flex w-full flex-col sm:flex-row items-center justify-between border-t border-solid border-neutral-800 bg-black px-4 sm:px-12 py-8 gap-4">
+      <div className="flex w-full flex-col sm:flex-row items-center justify-between border-t border-solid border-neutral-200 bg-black px-4 sm:px-12 py-8 gap-4">
         <span className="text-caption font-caption text-neutral-400">&copy; 2026 StickToMusic</span>
         <div className="flex items-center gap-6">
           <button onClick={() => navigate('/terms')} className="text-caption font-caption text-neutral-400 hover:text-white transition-colors bg-transparent border-none cursor-pointer p-0">Terms of Service</button>
@@ -237,7 +237,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
           className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
           onClick={(e) => { if (e.target === e.currentTarget) setShowAuth(false); }}
         >
-          <div className="bg-[#0a0a0aff] border border-solid border-neutral-800 rounded-xl w-full max-w-md mx-4 px-8 py-8">
+          <div className="bg-[#0a0a0aff] border border-solid border-neutral-200 rounded-xl w-full max-w-md mx-4 px-8 py-8">
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
               <span className="text-heading-2 font-heading-2 text-[#ffffffff] block">
@@ -252,7 +252,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
             </div>
 
             {/* Tabs */}
-            <div className="flex items-center rounded-lg border border-solid border-neutral-800 bg-black px-1 py-1 mb-6">
+            <div className="flex items-center rounded-lg border border-solid border-neutral-200 bg-black px-1 py-1 mb-6">
               <div
                 className={`flex flex-1 h-9 items-center justify-center rounded-md cursor-pointer transition-colors ${authMode === 'login' ? 'bg-neutral-100' : ''}`}
                 onClick={() => { setAuthMode('login'); setResetMessage(null); }}
@@ -347,9 +347,9 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
               </form>
 
               <div className="my-5 flex items-center gap-3">
-                <div className="flex-1 h-px bg-neutral-800" />
+                <div className="flex-1 h-px bg-neutral-100" />
                 <span className="text-caption font-caption text-neutral-400">or</span>
-                <div className="flex-1 h-px bg-neutral-800" />
+                <div className="flex-1 h-px bg-neutral-100" />
               </div>
               <Button className="w-full min-h-[44px]" variant="neutral-secondary" size="large" disabled={authLoading} onClick={onGoogleAuth}>
                 {authLoading ? (

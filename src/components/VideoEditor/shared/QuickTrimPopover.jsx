@@ -122,12 +122,12 @@ const QuickTrimPopover = ({ item, initialTrimStart = 0, initialTrimEnd, onSave, 
 
   return (
     <div
-      className="absolute z-50 rounded-xl border border-neutral-700 bg-[#111111] shadow-2xl overflow-hidden"
+      className="absolute z-50 rounded-xl border border-neutral-200 bg-[#111111] shadow-2xl overflow-hidden"
       style={{ width: POPOVER_WIDTH }}
       onClick={e => e.stopPropagation()}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-800">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-200">
         <span className="text-caption-bold font-caption-bold text-white truncate flex-1">Quick Trim</span>
         <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />} aria-label="Close" onClick={onClose} />
       </div>
@@ -158,7 +158,7 @@ const QuickTrimPopover = ({ item, initialTrimStart = 0, initialTrimEnd, onSave, 
       <div className="px-3 py-3">
         <div
           ref={trackRef}
-          className="relative h-6 w-full rounded bg-neutral-800 cursor-crosshair"
+          className="relative h-6 w-full rounded bg-neutral-100 cursor-crosshair"
         >
           {/* Selected range */}
           <div

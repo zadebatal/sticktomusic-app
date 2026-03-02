@@ -851,7 +851,7 @@ const ProjectWorkspace = ({
   return (
     <div className="flex h-full w-full flex-col items-start bg-black">
       {/* Top header bar */}
-      <div className="flex w-full items-center justify-between border-b border-solid border-neutral-800 bg-black px-6 py-4">
+      <div className="flex w-full items-center justify-between border-b border-solid border-neutral-200 bg-black px-6 py-4">
         <div className="flex items-center gap-4">
           <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherArrowLeft />} aria-label="Back" onClick={navigateBack} />
           <div
@@ -881,7 +881,7 @@ const ProjectWorkspace = ({
       </div>
 
       {/* Niche tabs */}
-      <div className="flex w-full items-center gap-0 border-b border-solid border-neutral-800 bg-black px-6 overflow-x-auto">
+      <div className="flex w-full items-center gap-0 border-b border-solid border-neutral-200 bg-black px-6 overflow-x-auto">
         {niches.map(niche => {
           const isActive = niche.id === activeNicheId && !showAllMedia && !showCaptionPage;
           const fmt = niche.formats?.[0];
@@ -897,13 +897,13 @@ const ProjectWorkspace = ({
               <span className="text-body-bold font-body-bold">{niche.name}</span>
               {draftCount > 0 && (
                 <span className={`text-caption font-caption px-1.5 py-0.5 rounded-full ${
-                  isActive ? 'bg-indigo-500/20 text-indigo-300' : 'bg-neutral-800 text-neutral-400'
+                  isActive ? 'bg-indigo-500/20 text-indigo-300' : 'bg-neutral-100 text-neutral-400'
                 }`}>
                   {draftCount}
                 </span>
               )}
               <button
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-neutral-700"
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-neutral-200"
                 onClick={(e) => { e.stopPropagation(); handleDeleteNiche(niche.id); }}
                 title="Delete niche"
               >
@@ -950,7 +950,7 @@ const ProjectWorkspace = ({
 
       {/* Centered Create bar — visible when a niche is active */}
       {!showAllMedia && !showCaptionPage && activeNiche && activeFormat?.id !== 'finished_media' && (
-        <div className="flex items-center justify-center gap-3 px-4 py-3 border-b border-neutral-800">
+        <div className="flex items-center justify-center gap-3 px-4 py-3 border-b border-neutral-200">
           <div style={{ display: 'flex', alignItems: 'center', borderRadius: 6, border: '1px solid #404040', backgroundColor: '#171717', overflow: 'hidden' }}>
             <button
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, background: 'none', border: 'none', cursor: 'pointer', color: '#a3a3a3', fontSize: 16 }}
@@ -1094,7 +1094,7 @@ const ProjectWorkspace = ({
                 return (
                   <div
                     key={fmt.id}
-                    className="flex flex-col items-center gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-5 cursor-pointer hover:border-neutral-600 transition-colors"
+                    className="flex flex-col items-center gap-3 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-5 py-5 cursor-pointer hover:border-neutral-600 transition-colors"
                     onClick={() => handleCreateNiche(fmt)}
                   >
                     {fmt.type === 'slideshow' ? (
@@ -1139,7 +1139,7 @@ const ProjectWorkspace = ({
       {/* New Niche format picker modal */}
       {showNichePicker && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowNichePicker(false)}>
-          <div className="w-full max-w-2xl rounded-xl border border-neutral-800 bg-[#111111] p-6 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-2xl rounded-xl border border-neutral-200 bg-[#111111] p-6 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Add Niche</span>
               <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close" onClick={() => setShowNichePicker(false)} />
@@ -1150,7 +1150,7 @@ const ProjectWorkspace = ({
               {slideshowFormats.map(fmt => (
                 <div
                   key={fmt.id}
-                  className="flex flex-col items-start gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-4 py-4 cursor-pointer hover:border-neutral-600 transition-colors"
+                  className="flex flex-col items-start gap-3 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-4 py-4 cursor-pointer hover:border-neutral-600 transition-colors"
                   onClick={() => handleCreateNiche(fmt)}
                 >
                   <div className="flex items-center gap-1 flex-wrap">
@@ -1177,7 +1177,7 @@ const ProjectWorkspace = ({
                 return (
                   <div
                     key={fmt.id}
-                    className="flex flex-col items-start gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-4 py-4 cursor-pointer hover:border-neutral-600 transition-colors"
+                    className="flex flex-col items-start gap-3 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-4 py-4 cursor-pointer hover:border-neutral-600 transition-colors"
                     onClick={() => handleCreateNiche(fmt)}
                   >
                     <div className="flex items-center justify-center rounded-md" style={{
@@ -1260,13 +1260,13 @@ const ProjectWorkspace = ({
 
       {/* Upload progress banner */}
       {isUploading && uploadProgress && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-xl border border-neutral-700 bg-[#111111] px-5 py-3 shadow-2xl">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-xl border border-neutral-200 bg-[#111111] px-5 py-3 shadow-2xl">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent flex-none" />
           <div className="flex flex-col gap-0.5">
             <span className="text-body-bold font-body-bold text-[#ffffffff]">
               Uploading {uploadProgress.current} of {uploadProgress.total}
             </span>
-            <div className="w-48 h-1.5 rounded-full bg-neutral-800 overflow-hidden">
+            <div className="w-48 h-1.5 rounded-full bg-neutral-100 overflow-hidden">
               <div
                 className="h-full rounded-full bg-indigo-500 transition-all"
                 style={{ width: `${Math.round((uploadProgress.current / uploadProgress.total) * 100)}%` }}
@@ -1422,8 +1422,8 @@ const ImportFromLibraryModal = ({ items: defaultItems, onImport: defaultOnImport
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={onClose}>
-      <div className="w-full max-w-2xl rounded-xl border border-neutral-800 bg-[#111111] overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="flex flex-col border-b border-neutral-800">
+      <div className="w-full max-w-2xl rounded-xl border border-neutral-200 bg-[#111111] overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex flex-col border-b border-neutral-200">
           <div className="flex items-center justify-between px-6 py-4">
             <div className="flex flex-col gap-1">
               <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{title}</span>
@@ -1437,7 +1437,7 @@ const ImportFromLibraryModal = ({ items: defaultItems, onImport: defaultOnImport
             </div>
           </div>
           <div className="px-6 pb-3">
-            <div className="flex items-center gap-2 rounded-lg border border-neutral-700 bg-black px-3 py-2">
+            <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-black px-3 py-2">
               <FeatherSearch className="text-neutral-500 flex-none" style={{ width: 14, height: 14 }} />
               <input
                 className="flex-1 bg-transparent text-body font-body text-white outline-none placeholder-neutral-500"
@@ -1472,11 +1472,11 @@ const ImportFromLibraryModal = ({ items: defaultItems, onImport: defaultOnImport
           )}
           {/* Niche filter */}
           {filterableNiches.length > 0 && (
-            <div className="flex items-center gap-2 px-6 py-2 border-t border-neutral-800/50">
+            <div className="flex items-center gap-2 px-6 py-2 border-t border-neutral-200/50">
               <span className="text-caption font-caption text-neutral-500">Filter:</span>
               <button
                 className={`px-2.5 py-1 rounded-full text-caption font-caption transition-colors cursor-pointer border ${
-                  !nicheFilter ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-transparent border-neutral-700 text-neutral-400 hover:text-neutral-200'
+                  !nicheFilter ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-transparent border-neutral-200 text-neutral-400 hover:text-neutral-200'
                 }`}
                 onClick={() => { setNicheFilter(null); setSelected(new Set()); }}
               >
@@ -1486,7 +1486,7 @@ const ImportFromLibraryModal = ({ items: defaultItems, onImport: defaultOnImport
                 <button
                   key={n.id}
                   className={`px-2.5 py-1 rounded-full text-caption font-caption transition-colors cursor-pointer border ${
-                    nicheFilter === n.id ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-transparent border-neutral-700 text-neutral-400 hover:text-neutral-200'
+                    nicheFilter === n.id ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-transparent border-neutral-200 text-neutral-400 hover:text-neutral-200'
                   }`}
                   onClick={() => { setNicheFilter(n.id); setSelected(new Set()); }}
                 >
@@ -1553,7 +1553,7 @@ const ImportFromLibraryModal = ({ items: defaultItems, onImport: defaultOnImport
                         {item.thumbnailUrl ? (
                           <img src={item.thumbnailUrl} alt={item.name} className="h-full w-full object-cover" loading="lazy" draggable={false} />
                         ) : (
-                          <div className="h-full w-full bg-neutral-800 flex items-center justify-center">
+                          <div className="h-full w-full bg-neutral-100 flex items-center justify-center">
                             <FeatherFilm className="text-neutral-500" style={{ width: 24, height: 24 }} />
                           </div>
                         )}
@@ -1596,7 +1596,7 @@ const ImportFromLibraryModal = ({ items: defaultItems, onImport: defaultOnImport
             </>
           )}
         </div>
-        <div className="flex items-center justify-between border-t border-neutral-800 px-6 py-4">
+        <div className="flex items-center justify-between border-t border-neutral-200 px-6 py-4">
           <span className="text-caption font-caption text-neutral-400">
             {selected.size > 0 ? `${selected.size} selected` : 'Drag to select multiple'}
           </span>
@@ -1796,7 +1796,7 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
   const renderHashtagPill = (tag, tier, idx) => {
     const isAlways = tier === 'always';
     return (
-      <div key={`${tier}-${idx}`} className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 group ${isAlways ? 'bg-green-500/10 border border-green-500/30' : 'bg-neutral-800 border border-neutral-700'}`}>
+      <div key={`${tier}-${idx}`} className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 group ${isAlways ? 'bg-green-500/10 border border-green-500/30' : 'bg-neutral-100 border border-neutral-200'}`}>
         <span className={`text-caption font-caption ${isAlways ? 'text-green-400' : 'text-neutral-400'}`}>{tag}</span>
         <button
           className="text-neutral-500 hover:text-indigo-400 bg-transparent border-none cursor-pointer p-0 text-[9px] opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1825,7 +1825,7 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
       </div>
 
       {/* Scope Tabs */}
-      <div className="flex items-center gap-1 border-b border-neutral-800 w-full">
+      <div className="flex items-center gap-1 border-b border-neutral-200 w-full">
         <button
           onClick={() => setScope('project')}
           className={`border-none cursor-pointer px-4 py-2 text-[13px] font-semibold rounded-t-md transition-all ${isProjectScope ? 'bg-indigo-500/15 text-indigo-400 border-b-2 border-b-indigo-500' : 'bg-transparent text-neutral-500'}`}
@@ -1844,7 +1844,7 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
       </div>
 
       {/* Captions Section */}
-      <div className="flex w-full flex-col gap-3 rounded-lg border border-solid border-neutral-800 bg-[#111111] p-5">
+      <div className="flex w-full flex-col gap-3 rounded-lg border border-solid border-neutral-200 bg-[#111111] p-5">
         <div className="flex items-center gap-2">
           <FeatherMessageSquare className="text-neutral-400" style={{ width: 14, height: 14 }} />
           <span className="text-body-bold font-body-bold text-[#ffffffff]">Captions</span>
@@ -1887,10 +1887,10 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
           <div className="flex flex-col gap-1 flex-1">
             <div className="flex items-center gap-1">
               <button onClick={() => setCaptionAddTier('always')} className={`border-none cursor-pointer px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all ${captionAddTier === 'always' ? 'bg-green-500/20 text-green-400' : 'bg-transparent text-neutral-600'}`}>Always On</button>
-              <button onClick={() => setCaptionAddTier('pool')} className={`border-none cursor-pointer px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all ${captionAddTier === 'pool' ? 'bg-neutral-700 text-neutral-300' : 'bg-transparent text-neutral-600'}`}>Pool</button>
+              <button onClick={() => setCaptionAddTier('pool')} className={`border-none cursor-pointer px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all ${captionAddTier === 'pool' ? 'bg-neutral-200 text-neutral-300' : 'bg-transparent text-neutral-600'}`}>Pool</button>
             </div>
             <textarea
-              className="min-h-[32px] max-h-[80px] rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500 resize-none"
+              className="min-h-[32px] max-h-[80px] rounded-md border border-solid border-neutral-200 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500 resize-none"
               placeholder={`Add to ${captionAddTier === 'always' ? 'always-on' : 'pool'}...`}
               value={newCaption}
               onChange={e => setNewCaption(e.target.value)}
@@ -1903,7 +1903,7 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
       </div>
 
       {/* Hashtags Section */}
-      <div className="flex w-full flex-col gap-3 rounded-lg border border-solid border-neutral-800 bg-[#111111] p-5">
+      <div className="flex w-full flex-col gap-3 rounded-lg border border-solid border-neutral-200 bg-[#111111] p-5">
         <div className="flex items-center gap-2">
           <FeatherHash className="text-neutral-400" style={{ width: 14, height: 14 }} />
           <span className="text-body-bold font-body-bold text-[#ffffffff]">Hashtags</span>
@@ -1935,10 +1935,10 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
           <div className="flex flex-col gap-1 flex-1">
             <div className="flex items-center gap-1">
               <button onClick={() => setHashtagAddTier('always')} className={`border-none cursor-pointer px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all ${hashtagAddTier === 'always' ? 'bg-green-500/20 text-green-400' : 'bg-transparent text-neutral-600'}`}>Always On</button>
-              <button onClick={() => setHashtagAddTier('pool')} className={`border-none cursor-pointer px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all ${hashtagAddTier === 'pool' ? 'bg-neutral-700 text-neutral-300' : 'bg-transparent text-neutral-600'}`}>Pool</button>
+              <button onClick={() => setHashtagAddTier('pool')} className={`border-none cursor-pointer px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all ${hashtagAddTier === 'pool' ? 'bg-neutral-200 text-neutral-300' : 'bg-transparent text-neutral-600'}`}>Pool</button>
             </div>
             <input
-              className="rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500"
+              className="rounded-md border border-solid border-neutral-200 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500"
               placeholder={`#hashtag → ${hashtagAddTier === 'always' ? 'always-on' : 'pool'}`}
               value={newHashtag}
               onChange={e => setNewHashtag(e.target.value)}
@@ -1950,7 +1950,7 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
       </div>
 
       {/* Platform Rules Section */}
-      <div className="flex w-full flex-col gap-3 rounded-lg border border-solid border-neutral-800 bg-[#111111] p-5">
+      <div className="flex w-full flex-col gap-3 rounded-lg border border-solid border-neutral-200 bg-[#111111] p-5">
         <button
           className="flex items-center gap-2 bg-transparent border-none cursor-pointer p-0 w-full"
           onClick={() => setShowPlatformRules(!showPlatformRules)}
@@ -1985,7 +1985,7 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
                     </div>
                     <div className="flex gap-1.5">
                       <input
-                        className="flex-1 rounded-md border border-solid border-neutral-800 bg-black px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
+                        className="flex-1 rounded-md border border-solid border-neutral-200 bg-black px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
                         placeholder={`#${platform} tag...`}
                         value={newPlatformTag[platform] || ''}
                         onChange={e => setNewPlatformTag(prev => ({ ...prev, [platform]: e.target.value }))}
@@ -2005,7 +2005,7 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
                           return (
                             <button
                               key={idx}
-                              className={`rounded-full px-2 py-0.5 text-caption font-caption border cursor-pointer transition-all ${isExcluded ? 'bg-red-500/10 border-red-500/30 text-red-400 line-through' : 'bg-transparent border-neutral-700 text-neutral-500'}`}
+                              className={`rounded-full px-2 py-0.5 text-caption font-caption border cursor-pointer transition-all ${isExcluded ? 'bg-red-500/10 border-red-500/30 text-red-400 line-through' : 'bg-transparent border-neutral-200 text-neutral-500'}`}
                               onClick={() => handleToggleExclude(platform, tag)}
                               title={isExcluded ? 'Click to include' : 'Click to exclude'}
                             >

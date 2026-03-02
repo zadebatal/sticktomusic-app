@@ -65,7 +65,7 @@ const WizardStepNiches = ({ selectedFormats, setSelectedFormats, onNext, onBack 
                 className={`flex flex-col items-start gap-3 rounded-lg border border-solid px-4 py-4 cursor-pointer transition-colors ${
                   selected
                     ? 'border-indigo-500 bg-indigo-500/10'
-                    : 'border-neutral-800 bg-[#1a1a1aff] hover:border-neutral-600'
+                    : 'border-neutral-200 bg-[#1a1a1aff] hover:border-neutral-600'
                 }`}
                 onClick={() => toggleFormat(fmt)}
               >
@@ -104,7 +104,7 @@ const WizardStepNiches = ({ selectedFormats, setSelectedFormats, onNext, onBack 
                 className={`flex flex-col items-start gap-3 rounded-lg border border-solid px-4 py-4 cursor-pointer transition-colors ${
                   selected
                     ? 'border-indigo-500 bg-indigo-500/10'
-                    : 'border-neutral-800 bg-[#1a1a1aff] hover:border-neutral-600'
+                    : 'border-neutral-200 bg-[#1a1a1aff] hover:border-neutral-600'
                 }`}
                 onClick={() => toggleFormat(fmt)}
               >

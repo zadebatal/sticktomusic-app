@@ -2547,7 +2547,7 @@ const VideoEditorModal = ({
           <div className="flex grow basis-0 min-h-0 flex-col items-center bg-black overflow-hidden">
             <div className="flex w-full max-w-[448px] grow flex-col items-center gap-4 py-6 px-4 overflow-auto">
               {/* Video Preview */}
-              <div ref={previewRef} className="flex items-center justify-center rounded-lg bg-[#1a1a1aff] border border-neutral-800 relative overflow-hidden" style={{ aspectRatio: '9/16', height: '50vh' }} onClick={() => setEditingTextId(null)}>
+              <div ref={previewRef} className="flex items-center justify-center rounded-lg bg-[#1a1a1aff] border border-neutral-200 relative overflow-hidden" style={{ aspectRatio: '9/16', height: '50vh' }} onClick={() => setEditingTextId(null)}>
                 {/* Hidden audio element for playback */}
                 <audio ref={audioRef} style={{ display: 'none' }} />
 
@@ -2769,14 +2769,14 @@ const VideoEditorModal = ({
                 <input
                   type="number" min={1} max={50} value={generateCount}
                   onChange={(e) => setGenerateCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
-                  className="w-16 px-2 py-1.5 rounded-md border border-neutral-700 bg-[#1a1a1aff] text-[#ffffffff] text-[12px] text-center outline-none"
+                  className="w-16 px-2 py-1.5 rounded-md border border-neutral-200 bg-[#1a1a1aff] text-[#ffffffff] text-[12px] text-center outline-none"
                 />
               </div>
 
             </div>
 
             {/* ═══ TIMELINE ═══ */}
-            <div className="flex w-full flex-col items-start border-t border-neutral-800 bg-[#1a1a1aff] px-6 py-4 flex-shrink-0">
+            <div className="flex w-full flex-col items-start border-t border-neutral-200 bg-[#1a1a1aff] px-6 py-4 flex-shrink-0">
               {/* Timeline header — title + cut actions left, BPM + zoom right */}
               <div className="flex w-full items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
@@ -2791,7 +2791,7 @@ const VideoEditorModal = ({
                     <input type="number" min={1} max={300} step={1}
                       value={Math.round(userMaxDuration)}
                       onChange={(e) => setUserMaxDuration(Math.max(1, Math.min(300, parseInt(e.target.value) || 30)))}
-                      className="w-12 px-1 py-0.5 rounded border border-neutral-700 bg-black text-[11px] text-white text-center"
+                      className="w-12 px-1 py-0.5 rounded border border-neutral-200 bg-black text-[11px] text-white text-center"
                       title="Set minimum timeline duration (seconds)"
                     />
                     <span className="text-[11px] text-neutral-500">s</span>
@@ -2814,7 +2814,7 @@ const VideoEditorModal = ({
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[12px] whitespace-nowrap flex-shrink-0 cursor-pointer transition-colors ${
                         idx === activeVideoIndex
                           ? 'border-brand-600 bg-brand-600/15 text-brand-600 font-semibold'
-                          : 'border-neutral-700 bg-[#1a1a1aff] text-neutral-400 hover:border-neutral-600'
+                          : 'border-neutral-200 bg-[#1a1a1aff] text-neutral-400 hover:border-neutral-600'
                       }`}
                     >
                       {video.isTemplate ? 'Template' : (
@@ -2913,7 +2913,7 @@ const VideoEditorModal = ({
                 </div>
 
                 {/* Single scrollable column */}
-                <div className="flex-1 rounded-md border border-neutral-800 bg-black overflow-x-auto" ref={timelineRef}>
+                <div className="flex-1 rounded-md border border-neutral-200 bg-black overflow-x-auto" ref={timelineRef}>
                   <div style={{ position: 'relative', minWidth: '100%', width: `${timelinePx}px` }}>
                     {/* Playhead line — spans all tracks */}
                     {timelineDuration > 0 && (
@@ -3304,7 +3304,7 @@ const VideoEditorModal = ({
 
           {/* RIGHT: Sidebar */}
           {!isMobile && (
-            <div className="flex w-96 flex-none flex-col items-start self-stretch border-l border-neutral-800 bg-[#1a1a1aff] overflow-auto">
+            <div className="flex w-96 flex-none flex-col items-start self-stretch border-l border-neutral-200 bg-[#1a1a1aff] overflow-auto">
               <div className="flex w-full flex-col items-start">
                 {renderCollapsibleSection('audio', 'Audio', (
                   <div className="flex flex-col gap-3">
@@ -3337,7 +3337,7 @@ const VideoEditorModal = ({
                         {libraryAudio.map(audio => (
                           <div
                             key={audio.id}
-                            className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-neutral-800 text-[12px] text-[#ffffffff]"
+                            className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-neutral-100 text-[12px] text-[#ffffffff]"
                             onClick={() => { setAudioToTrim(audio); setShowAudioTrimmer(true); }}
                           >
                             <FeatherMusic className="w-3.5 h-3.5 opacity-60 flex-shrink-0" />
@@ -3355,7 +3355,7 @@ const VideoEditorModal = ({
                     <select
                       value={selectedCollection}
                       onChange={(e) => setSelectedCollection(e.target.value)}
-                      className="w-full px-3 py-2 bg-black border border-neutral-800 rounded-md text-[#ffffffff] text-[13px] outline-none cursor-pointer"
+                      className="w-full px-3 py-2 bg-black border border-neutral-200 rounded-md text-[#ffffffff] text-[13px] outline-none cursor-pointer"
                     >
                       <option value="category">Selected Clips</option>
                       <option value="all">All Videos (Library)</option>
@@ -3436,11 +3436,11 @@ const VideoEditorModal = ({
                             <div className="flex gap-1.5 mb-2">
                               <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)}
                                 onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }}
-                                placeholder="Add text..." className="flex-1 px-2.5 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
+                                placeholder="Add text..." className="flex-1 px-2.5 py-1.5 rounded-md border border-neutral-200 bg-black text-[#ffffffff] text-[12px] outline-none" />
                               <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }} aria-label="Add to Text Bank A" />
                             </div>
                             {textBank1.map((text, idx) => (
-                              <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-300 cursor-pointer hover:bg-neutral-700/50" onClick={() => addTextOverlay(text)}>
+                              <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-100/50 mb-1 text-neutral-300 cursor-pointer hover:bg-neutral-200/50" onClick={() => addTextOverlay(text)}>
                                 <span className="flex-1 text-[12px]">{text}</span>
                               </div>
                             ))}
@@ -3451,11 +3451,11 @@ const VideoEditorModal = ({
                             <div className="flex gap-1.5 mb-2">
                               <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)}
                                 onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }}
-                                placeholder="Add text..." className="flex-1 px-2.5 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
+                                placeholder="Add text..." className="flex-1 px-2.5 py-1.5 rounded-md border border-neutral-200 bg-black text-[#ffffffff] text-[12px] outline-none" />
                               <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }} aria-label="Add to Text Bank B" />
                             </div>
                             {textBank2.map((text, idx) => (
-                              <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-300 cursor-pointer hover:bg-neutral-700/50" onClick={() => addTextOverlay(text)}>
+                              <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-100/50 mb-1 text-neutral-300 cursor-pointer hover:bg-neutral-200/50" onClick={() => addTextOverlay(text)}>
                                 <span className="flex-1 text-[12px]">{text}</span>
                               </div>
                             ))}
@@ -3494,7 +3494,7 @@ const VideoEditorModal = ({
                       {selOverlay && (
                         <input value={selOverlay.text}
                           onChange={(e) => updateTextOverlay(selOverlay.id, { text: e.target.value })}
-                          className="w-full px-3 py-2 rounded-md border border-neutral-800 bg-black text-white text-sm" />
+                          className="w-full px-3 py-2 rounded-md border border-neutral-200 bg-black text-white text-sm" />
                       )}
 
                       {/* Font Family */}
@@ -3502,7 +3502,7 @@ const VideoEditorModal = ({
                         <div className="text-[13px] text-neutral-500 mb-1.5">Font Family</div>
                         <select value={activeStyle.fontFamily || "'Inter', sans-serif"}
                           onChange={(e) => handleStyleChange({ fontFamily: e.target.value })}
-                          className="w-full px-3 py-2 rounded-sm border border-neutral-700 bg-neutral-800 text-white text-[13px] outline-none cursor-pointer">
+                          className="w-full px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-100 text-white text-[13px] outline-none cursor-pointer">
                           {AVAILABLE_FONTS.map(f => <option key={f.name} value={f.value}>{f.name}</option>)}
                         </select>
                       </div>
@@ -3522,7 +3522,7 @@ const VideoEditorModal = ({
                       <div className="flex gap-3">
                         <div className="flex-1">
                           <div className="text-[13px] text-neutral-500 mb-1.5">Text Color</div>
-                          <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-neutral-700 bg-neutral-800">
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-100">
                             <input type="color" value={activeStyle.color || '#ffffff'}
                               onChange={(e) => handleStyleChange({ color: e.target.value })}
                               className="w-6 h-6 border-none rounded-full cursor-pointer p-0 bg-transparent" />
@@ -3531,7 +3531,7 @@ const VideoEditorModal = ({
                         </div>
                         <div className="flex-1">
                           <div className="text-[13px] text-neutral-500 mb-1.5">Outline</div>
-                          <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-neutral-700 bg-neutral-800">
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-100">
                             <input type="color" value={activeStyle.outlineColor || '#000000'}
                               onChange={(e) => handleStyleChange({ outlineColor: e.target.value, outline: true })}
                               className="w-6 h-6 border-none rounded-full cursor-pointer p-0 bg-transparent" />
@@ -3546,7 +3546,7 @@ const VideoEditorModal = ({
                           <div className="flex gap-3">
                             <div className="flex-1">
                               <div className="text-[13px] text-neutral-500 mb-1.5">Stroke Color</div>
-                              <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-neutral-700 bg-neutral-800">
+                              <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-100">
                                 <input type="color" value={strokeInfo.color.startsWith('#') ? strokeInfo.color : '#000000'}
                                   onChange={(e) => handleStyleChange({ textStroke: buildStroke(strokeInfo.width, e.target.value) })}
                                   className="w-6 h-6 border-none rounded-full cursor-pointer p-0 bg-transparent" />
@@ -3596,14 +3596,14 @@ const VideoEditorModal = ({
                       </div>
 
                       {/* Text Overlays list */}
-                      <div className="pt-2 border-t border-neutral-800">
+                      <div className="pt-2 border-t border-neutral-200">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-[13px] text-neutral-500">Text Overlays</span>
                         </div>
                         {textOverlays.length > 0 ? (
                           <div className="flex flex-col gap-1.5">
                             {textOverlays.map(overlay => (
-                              <div key={overlay.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${editingTextId === overlay.id ? 'bg-brand-600/20 border border-brand-600' : 'border border-neutral-800 hover:bg-neutral-800'}`}
+                              <div key={overlay.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${editingTextId === overlay.id ? 'bg-brand-600/20 border border-brand-600' : 'border border-neutral-200 hover:bg-neutral-100'}`}
                                 onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}>
                                 <span className="text-body font-body text-[#ffffffff] text-[12px] truncate flex-1">{overlay.text}</span>
                                 <IconButton size="small" variant="destructive-tertiary" icon={<FeatherTrash2 className="w-3 h-3" />} onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} aria-label="Remove" />
@@ -3616,9 +3616,9 @@ const VideoEditorModal = ({
                       </div>
 
                       {/* Crop */}
-                      <div className="flex items-center gap-2 pt-2 border-t border-neutral-800">
+                      <div className="flex items-center gap-2 pt-2 border-t border-neutral-200">
                         <span className="text-caption font-caption text-neutral-400">Crop</span>
-                        <select value={cropMode} onChange={(e) => setCropMode(e.target.value)} className="flex-1 px-2 py-1.5 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[12px] outline-none">
+                        <select value={cropMode} onChange={(e) => setCropMode(e.target.value)} className="flex-1 px-2 py-1.5 bg-neutral-100 border border-neutral-200 rounded-md text-[#ffffffff] text-[12px] outline-none">
                           <option value="9:16">9:16 (Full)</option>
                           <option value="4:3">4:3 (Crop)</option>
                           <option value="1:1">1:1 (Crop)</option>
@@ -3628,7 +3628,7 @@ const VideoEditorModal = ({
                         <div className="flex flex-col gap-1">
                           <span className="text-caption font-caption text-neutral-400">Apply Preset</span>
                           <select value={selectedPreset?.id || ''} onChange={(e) => { const preset = presets.find(p => p.id === e.target.value); if (preset) handleApplyPreset(preset); }}
-                            className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[13px] outline-none">
+                            className="w-full px-3 py-2 bg-neutral-100 border border-neutral-200 rounded-md text-[#ffffffff] text-[13px] outline-none">
                             <option value="">Choose a preset...</option>
                             {presets.map(preset => (<option key={preset.id} value={preset.id}>{preset.name}</option>))}
                           </select>
@@ -3665,7 +3665,7 @@ const VideoEditorModal = ({
                 value={lyrics}
                 onChange={(e) => setLyrics(e.target.value)}
                 placeholder="Enter your lyrics here, one word or line per row..."
-                className={`w-full h-[200px] p-3 bg-[#0a0a0a] border border-neutral-700 rounded-lg text-white text-sm resize-none outline-none mb-4 ${isMobile ? 'min-h-[150px] text-base' : ''}`}
+                className={`w-full h-[200px] p-3 bg-[#0a0a0a] border border-neutral-200 rounded-lg text-white text-sm resize-none outline-none mb-4 ${isMobile ? 'min-h-[150px] text-base' : ''}`}
                 autoFocus={!isMobile}
               />
               <div className={`flex items-center gap-2 mb-4 text-[13px] text-neutral-400 ${isMobile ? 'flex-col items-stretch' : ''}`}>

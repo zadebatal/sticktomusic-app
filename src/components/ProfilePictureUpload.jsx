@@ -60,7 +60,7 @@ const ProfilePictureUpload = ({ db, onSave, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-neutral-800 bg-[#111118] p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-[#111118] p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <span className="text-heading-3 font-heading-3 text-[#ffffffff]">Update Profile Picture</span>
           <button onClick={onClose} className="text-neutral-400 hover:text-white">

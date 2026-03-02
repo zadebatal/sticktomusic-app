@@ -139,17 +139,17 @@ const CrossPollinationDrawer = ({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-solid border-neutral-800 px-4 py-3 flex-none">
+      <div className="flex items-center justify-between border-b border-solid border-neutral-200 px-4 py-3 flex-none">
         <span className="text-body-bold font-body-bold text-[#ffffffff]">Import from Projects</span>
         <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />} aria-label="Close" onClick={onClose} />
       </div>
 
       {/* Target bank selector (for slideshow niches) */}
       {slideCount > 0 && (
-        <div className="flex items-center gap-2 px-4 py-2 border-b border-solid border-neutral-800 flex-none">
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-solid border-neutral-200 flex-none">
           <span className="text-caption font-caption text-neutral-400">Import images to:</span>
           <select
-            className="bg-neutral-900 border border-neutral-700 rounded text-caption text-white px-2 py-1 outline-none"
+            className="bg-neutral-50 border border-neutral-200 rounded text-caption text-white px-2 py-1 outline-none"
             value={targetBankIdx}
             onChange={e => setTargetBankIdx(Number(e.target.value))}
           >
@@ -168,7 +168,7 @@ const CrossPollinationDrawer = ({
           <div key={project.id} className="mb-2">
             {/* Project node */}
             <div
-              className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-neutral-800/50 transition-colors"
+              className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-neutral-100/50 transition-colors"
               onClick={() => toggleProject(project.id)}
             >
               {expandedProjects[project.id] ? (
@@ -189,7 +189,7 @@ const CrossPollinationDrawer = ({
                     <div key={niche.id} className="mb-1">
                       {/* Niche node */}
                       <div
-                        className="flex items-center gap-2 px-2 py-1 rounded cursor-pointer hover:bg-neutral-800/50 transition-colors"
+                        className="flex items-center gap-2 px-2 py-1 rounded cursor-pointer hover:bg-neutral-100/50 transition-colors"
                         onClick={() => toggleNiche(niche.id)}
                       >
                         {expandedNiches[niche.id] ? (
@@ -241,7 +241,7 @@ const CrossPollinationDrawer = ({
                                         <div
                                           key={ti}
                                           className={`flex items-center gap-1.5 rounded px-1.5 py-1 cursor-pointer transition-colors ${
-                                            isSelected ? 'bg-indigo-500/20' : 'hover:bg-neutral-800/50'
+                                            isSelected ? 'bg-indigo-500/20' : 'hover:bg-neutral-100/50'
                                           }`}
                                           onClick={() => toggleText(niche.id, bankIdx, text)}
                                         >
@@ -269,7 +269,7 @@ const CrossPollinationDrawer = ({
                                   <div
                                     key={ci}
                                     className={`flex items-center gap-1.5 rounded px-1.5 py-1 cursor-pointer transition-colors ${
-                                      isSelected ? 'bg-indigo-500/20' : 'hover:bg-neutral-800/50'
+                                      isSelected ? 'bg-indigo-500/20' : 'hover:bg-neutral-100/50'
                                     }`}
                                     onClick={() => toggleCaption(niche.id, cap)}
                                   >
@@ -295,7 +295,7 @@ const CrossPollinationDrawer = ({
                                     className={`flex items-center gap-1 rounded-full px-2 py-0.5 cursor-pointer text-[11px] transition-colors ${
                                       isSelected
                                         ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                                        : 'bg-neutral-800/50 text-neutral-400 border border-transparent hover:border-neutral-700'
+                                        : 'bg-neutral-100/50 text-neutral-400 border border-transparent hover:border-neutral-200'
                                     }`}
                                     onClick={() => toggleHashtag(niche.id, tag)}
                                   >
@@ -318,7 +318,7 @@ const CrossPollinationDrawer = ({
 
       {/* Import footer */}
       {totalSelected > 0 && (
-        <div className="flex items-center gap-2 border-t border-solid border-neutral-800 px-4 py-3 flex-none">
+        <div className="flex items-center gap-2 border-t border-solid border-neutral-200 px-4 py-3 flex-none">
           <Button variant="brand-primary" size="small" className="flex-1" onClick={handleImport}>
             Import {totalSelected} item{totalSelected !== 1 ? 's' : ''}
           </Button>
