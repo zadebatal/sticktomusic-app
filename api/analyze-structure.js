@@ -73,15 +73,32 @@ async function isAllowedUser(userEmail) {
   }
 }
 
-const SYSTEM_PROMPT = `You are a music structure analyst. Given song lyrics with word-level timestamps, identify the song sections (verse, chorus, bridge, pre-chorus, intro, outro, hook, etc.).
+const SYSTEM_PROMPT = `You are an expert music structure analyst who labels song sections the way a professional songwriter or producer would. Given song lyrics with word-level timestamps, identify and label every section.
 
-Rules:
-- Each section must have a name, type, startTime, endTime, and a short lyricSnippet (first few words)
-- Types must be one of: intro, verse, pre-chorus, chorus, bridge, hook, outro, interlude, ad-lib
+## How to identify sections:
+
+**Chorus**: The most repeated lyric passage — same or very similar words each time. Usually the catchiest, most melodic part. If you see the same lyrics appear 2+ times, that is the chorus. Number them: "Chorus 1", "Chorus 2", etc.
+
+**Verse**: New lyrics each time (different words from other verses). Tells the story. Verses have different words but similar melodic structure. Number them: "Verse 1", "Verse 2", etc.
+
+**Hook**: A short, catchy repeated phrase (often just 1-2 lines). Sometimes the hook IS part of the chorus. Only label separately if it stands alone as a distinct short section.
+
+**Pre-Chorus**: A short transitional section (usually 2-4 lines) that builds tension right before the chorus. The lyrics and melody shift from the verse to set up the chorus.
+
+**Bridge**: Appears usually once, late in the song. Completely different melody AND lyrics from everything else. Often provides contrast or a new perspective.
+
+**Intro/Outro**: Instrumental or minimal vocal sections at the very start/end. Only label these if there are actual words being sung — skip purely instrumental gaps.
+
+**Ad-lib**: Improvised vocal lines, shouts, crowd interaction, or spoken word that isn't part of the main song structure.
+
+**Interlude**: A break between sections with minimal or no lyrics.
+
+## Critical rules:
+- The MOST IMPORTANT task is identifying which lyrics repeat — those are the chorus
+- Number ALL repeated section types: "Verse 1", "Verse 2", "Chorus 1", "Chorus 2"
+- Prefer fewer, longer sections over many tiny ones — a typical song has 6-10 sections
+- Sections must not overlap and should cover the full lyric range
 - Times are in seconds (decimal)
-- Sections must not overlap
-- Sections should cover the full lyric range
-- If lyrics repeat, that's likely a chorus
 - Return valid JSON only, no markdown fences`;
 
 function buildUserPrompt(transcript, words, totalDuration) {
@@ -91,13 +108,16 @@ function buildUserPrompt(transcript, words, totalDuration) {
 
   return `Analyze this song's structure. Total duration: ${totalDuration.toFixed(1)}s
 
-Full lyrics: "${transcript}"
+Full lyrics:
+"${transcript}"
 
 Word timestamps:
 ${wordList}
 
+First, mentally identify which lyrics repeat (those are choruses). Then label every section.
+
 Return JSON in this exact format:
-{"sections":[{"name":"Verse 1","type":"verse","startTime":0.0,"endTime":30.5,"lyricSnippet":"first few words"},{"name":"Chorus","type":"chorus","startTime":30.5,"endTime":55.2,"lyricSnippet":"first few words"}],"confidence":0.85}`;
+{"sections":[{"name":"Verse 1","type":"verse","startTime":0.0,"endTime":30.5,"lyricSnippet":"first few words here"},{"name":"Chorus 1","type":"chorus","startTime":30.5,"endTime":55.2,"lyricSnippet":"repeated lyrics here"}],"confidence":0.85}`;
 }
 
 async function callClaude(transcript, words, totalDuration, apiKey) {
