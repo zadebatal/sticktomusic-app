@@ -213,13 +213,22 @@ const ClipperEditor = ({
       if (playheadRef.current) playheadRef.current.style.left = '0%';
     };
     const onEnded = () => setIsPlaying(false);
+    const onError = () => {
+      log.error('Clipper video load error:', video.error?.message || 'unknown', sourceUrl);
+    };
     video.addEventListener('timeupdate', onTimeUpdate);
     video.addEventListener('loadedmetadata', onLoadedMetadata);
     video.addEventListener('ended', onEnded);
+    video.addEventListener('error', onError);
+    // If metadata already loaded (race condition), read duration now
+    if (video.readyState >= 1 && video.duration) {
+      setDuration(video.duration);
+    }
     return () => {
       video.removeEventListener('timeupdate', onTimeUpdate);
       video.removeEventListener('loadedmetadata', onLoadedMetadata);
       video.removeEventListener('ended', onEnded);
+      video.removeEventListener('error', onError);
     };
   }, [sourceUrl]);
 
@@ -850,9 +859,11 @@ const ClipperEditor = ({
               {/* Video player */}
               <div className="flex flex-1 items-center justify-center bg-black min-h-0 p-4">
                 <video
+                  key={sourceUrl}
                   ref={videoRef}
                   src={sourceUrl}
                   crossOrigin="anonymous"
+                  preload="metadata"
                   className="max-w-full max-h-full rounded-lg"
                   onClick={togglePlay}
                   playsInline
