@@ -5,6 +5,9 @@
     },
     "api/web-import.js": {
       "maxDuration": 60
+    },
+    "api/analyze-structure.js": {
+      "maxDuration": 30
     }
   },
   "headers": [

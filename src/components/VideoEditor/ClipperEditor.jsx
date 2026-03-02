@@ -20,7 +20,8 @@ import {
   FeatherPlay, FeatherPause, FeatherScissors, FeatherTrash2,
   FeatherPlus, FeatherDownload, FeatherUpload, FeatherX,
   FeatherSkipBack, FeatherSkipForward, FeatherVolume2, FeatherVolumeX,
-  FeatherChevronDown, FeatherChevronRight, FeatherCheck,
+  FeatherChevronDown, FeatherChevronRight, FeatherCheck, FeatherZap,
+  FeatherLoader,
 } from '@subframe/core';
 import EditorShell from './shared/EditorShell';
 import EditorTopBar from './shared/EditorTopBar';
@@ -29,6 +30,9 @@ import useIsMobile from '../../hooks/useIsMobile';
 import useUnsavedChanges from './shared/useUnsavedChanges';
 import { uploadFile } from '../../services/firebaseStorage';
 import { addToLibraryAsync, addToLibrary, addToCollection, addToProjectPool, getBankColor } from '../../services/libraryService';
+import { transcribeAudio } from '../../services/whisperService';
+import { analyzeSongStructure } from '../../services/structureAnalysisService';
+import { extractAudioSnippet } from '../../utils/audioSnippet';
 // ── FFmpeg singleton (lazy-loaded) ──
 let ffmpegInstance = null;
 let ffmpegLoadPromise = null;
@@ -116,6 +120,12 @@ const ClipperEditor = ({
   // Export destination: 'current-niche' | 'project-pool' | 'library-only' | nicheId
   const [exportDestination, setExportDestination] = useState('current-niche');
   const [destPickerOpen, setDestPickerOpen] = useState(false);
+
+  // Auto-detect state
+  const [detecting, setDetecting] = useState(false);
+  const [detectProgress, setDetectProgress] = useState('');
+  const [detectedSections, setDetectedSections] = useState(null);
+  const [selectedSections, setSelectedSections] = useState({});
 
   // ── Refs ──
   const videoRef = useRef(null);
@@ -448,6 +458,93 @@ const ClipperEditor = ({
     savedClipsSnapshotRef.current = clips.map(c => ({ id: c.id, start: c.start, end: c.end, bankIndex: c.bankIndex }));
     toastSuccess('Session saved');
   }, [onSaveSession, buildSessionData, clips, toastSuccess]);
+
+  // ── Auto-detect song sections ──
+  const handleAutoDetect = useCallback(async () => {
+    if (!sourceUrl && !sourceFile) {
+      toastError('No source video loaded');
+      return;
+    }
+    setDetecting(true);
+    setDetectProgress('Extracting audio...');
+    setDetectedSections(null);
+    setSelectedSections({});
+    try {
+      // 1. Extract audio (cap at 600s)
+      const audioSource = sourceFile || sourceUrl;
+      const capDuration = Math.min(duration || 600, 600);
+      const audioFile = await extractAudioSnippet(audioSource, 0, capDuration);
+
+      // 2. Transcribe via Whisper
+      setDetectProgress('Transcribing lyrics...');
+      const transcription = await transcribeAudio(audioFile, 'team', (msg) => setDetectProgress(msg));
+
+      // 3. Check for enough words
+      if (!transcription.words || transcription.words.length < 5) {
+        toastError('No lyrics detected — auto-detect works best with songs that have vocals');
+        setDetecting(false);
+        setDetectProgress('');
+        return;
+      }
+
+      // 4. Analyze structure via Claude
+      setDetectProgress('Analyzing song structure...');
+      const result = await analyzeSongStructure(transcription, capDuration, (msg) => setDetectProgress(msg));
+
+      if (!result.sections || result.sections.length === 0) {
+        toastError('Could not identify song sections');
+        setDetecting(false);
+        setDetectProgress('');
+        return;
+      }
+
+      // 5. Pre-select all sections
+      const selMap = {};
+      result.sections.forEach((_, i) => { selMap[i] = true; });
+      setDetectedSections(result.sections);
+      setSelectedSections(selMap);
+      toastSuccess(`Found ${result.sections.length} sections`);
+    } catch (err) {
+      log.error('Auto-detect failed:', err);
+      toastError('Auto-detect failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setDetecting(false);
+      setDetectProgress('');
+    }
+  }, [sourceUrl, sourceFile, duration, toastSuccess, toastError]);
+
+  const handleAddDetectedClips = useCallback(() => {
+    if (!detectedSections) return;
+    const newClips = [];
+    detectedSections.forEach((section, i) => {
+      if (!selectedSections[i]) return;
+      newClips.push({
+        id: `clip_${Date.now()}_${i}`,
+        name: section.name,
+        start: section.startTime,
+        end: section.endTime,
+        duration: section.endTime - section.startTime,
+        bankIndex: activeBankIndexRef.current,
+        exportedMediaId: null,
+      });
+    });
+    if (newClips.length === 0) return;
+    setClips(prev => {
+      const merged = [...prev, ...newClips].sort((a, b) => a.start - b.start);
+      return merged;
+    });
+    toastSuccess(`Added ${newClips.length} clips`);
+    setDetectedSections(null);
+    setSelectedSections({});
+  }, [detectedSections, selectedSections, toastSuccess]);
+
+  const toggleSectionSelect = useCallback((idx) => {
+    setSelectedSections(prev => ({ ...prev, [idx]: !prev[idx] }));
+  }, []);
+
+  const selectedSectionCount = useMemo(() =>
+    Object.values(selectedSections).filter(Boolean).length
+  , [selectedSections]);
 
   // ── Export clips to banks (replaces handleExport) ──
   const handleExportToBanks = useCallback(async () => {
@@ -988,6 +1085,15 @@ const ClipperEditor = ({
               <div className="flex items-center gap-2">
                 <span className="text-body-bold font-body-bold text-white">Clips</span>
                 <Badge variant="neutral">{clips.length}</Badge>
+                {hasSource && clips.length > 0 && (
+                  <IconButton
+                    variant="neutral-tertiary" size="small"
+                    icon={<FeatherZap />}
+                    aria-label="Auto-detect sections"
+                    onClick={handleAutoDetect}
+                    disabled={detecting}
+                  />
+                )}
               </div>
               {hasSource && (
                 <Button variant="neutral-secondary" size="small" icon={<FeatherUpload />} onClick={() => fileInputRef.current?.click()}>
@@ -1040,12 +1146,99 @@ const ClipperEditor = ({
             )}
 
             {/* Clip list — grouped by bank */}
-            {clips.length === 0 ? (
-              <div className="flex flex-1 flex-col items-center justify-center px-4 gap-2">
+            {/* Auto-detect loading state */}
+            {detecting && (
+              <div className="flex flex-col items-center justify-center px-4 py-6 gap-3">
+                <FeatherLoader className="text-indigo-400 animate-spin" style={{ width: 24, height: 24 }} />
+                <span className="text-caption font-caption text-neutral-400 text-center">{detectProgress || 'Detecting...'}</span>
+              </div>
+            )}
+
+            {/* Detected sections panel */}
+            {!detecting && detectedSections && detectedSections.length > 0 && (
+              <div className="flex flex-col border-b border-neutral-200">
+                <div className="flex items-center justify-between px-3 py-2 bg-indigo-500/10">
+                  <span className="text-caption-bold font-caption-bold text-indigo-400">Detected Sections</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      className="text-[10px] text-neutral-400 hover:text-white px-1"
+                      onClick={() => {
+                        const allSelected = selectedSectionCount === detectedSections.length;
+                        const next = {};
+                        if (!allSelected) detectedSections.forEach((_, i) => { next[i] = true; });
+                        setSelectedSections(next);
+                      }}
+                    >
+                      {selectedSectionCount === detectedSections.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                    <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />} aria-label="Dismiss" onClick={() => { setDetectedSections(null); setSelectedSections({}); }} />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-0.5 px-2 py-2 max-h-[240px] overflow-y-auto">
+                  {detectedSections.map((section, i) => (
+                    <div
+                      key={i}
+                      className={`flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer transition-colors ${
+                        selectedSections[i] ? 'bg-indigo-500/15' : 'hover:bg-neutral-100/50'
+                      }`}
+                      onClick={() => toggleSectionSelect(i)}
+                    >
+                      <div className={`w-4 h-4 rounded border flex-none flex items-center justify-center ${
+                        selectedSections[i] ? 'bg-indigo-500 border-indigo-500' : 'border-neutral-300'
+                      }`}>
+                        {selectedSections[i] && <FeatherCheck className="text-white" style={{ width: 10, height: 10 }} />}
+                      </div>
+                      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-white font-medium truncate">{section.name}</span>
+                          <Badge variant="neutral">{section.type}</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-neutral-500">
+                            {formatTime(section.startTime)} → {formatTime(section.endTime)}
+                          </span>
+                          {section.lyricSnippet && (
+                            <span className="text-[10px] text-neutral-600 truncate italic">"{section.lyricSnippet}"</span>
+                          )}
+                        </div>
+                      </div>
+                      <IconButton
+                        variant="neutral-tertiary" size="small"
+                        icon={<FeatherPlay />}
+                        aria-label="Seek to section"
+                        onClick={(e) => { e.stopPropagation(); seekTo(section.startTime); }}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="px-3 py-2 border-t border-neutral-200/50">
+                  <Button
+                    variant="brand-primary" size="small"
+                    icon={<FeatherPlus />}
+                    disabled={selectedSectionCount === 0}
+                    onClick={handleAddDetectedClips}
+                  >
+                    {selectedSectionCount > 0 ? `Add ${selectedSectionCount} as Clips` : 'Select sections'}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {clips.length === 0 && !detecting ? (
+              <div className="flex flex-1 flex-col items-center justify-center px-4 gap-3">
                 <FeatherScissors className="text-neutral-700" style={{ width: 24, height: 24 }} />
                 <span className="text-caption font-caption text-neutral-500 text-center">
                   {hasSource ? 'Use I/O keys or the Mark In/Out button to define clip segments' : 'Select a source video first'}
                 </span>
+                {hasSource && !detectedSections && (
+                  <Button
+                    variant="neutral-secondary" size="small"
+                    icon={<FeatherZap />}
+                    onClick={handleAutoDetect}
+                  >
+                    Auto-Detect Sections
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="flex flex-col flex-1">
