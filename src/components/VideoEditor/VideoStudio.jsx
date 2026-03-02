@@ -545,10 +545,14 @@ const VideoStudio = ({
     let pipelineMedia = lib.filter(item => (pipeline.mediaIds || []).includes(item.id));
 
     // Filter by selected media banks if provided
-    if (selectedMediaBankIds && pipeline.mediaBanks) {
+    let parsedMediaBanks = pipeline.mediaBanks;
+    if (typeof parsedMediaBanks === 'string') {
+      try { parsedMediaBanks = JSON.parse(parsedMediaBanks); } catch { parsedMediaBanks = null; }
+    }
+    if (selectedMediaBankIds && Array.isArray(parsedMediaBanks)) {
       const selectedBankSet = new Set(selectedMediaBankIds);
       const allowedIds = new Set();
-      pipeline.mediaBanks.forEach(bank => {
+      parsedMediaBanks.forEach(bank => {
         if (selectedBankSet.has(bank.id)) {
           (bank.mediaIds || []).forEach(id => allowedIds.add(id));
         }

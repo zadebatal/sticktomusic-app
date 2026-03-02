@@ -1055,7 +1055,11 @@ export const MAX_MEDIA_BANKS = 6;
  */
 export const migrateToMediaBanks = (collection) => {
   if (!collection) return collection;
-  if (collection.mediaBanks) return collection;
+  // Deserialize mediaBanks if it's a JSON string (from Firestore serialization)
+  if (typeof collection.mediaBanks === 'string') {
+    try { collection.mediaBanks = JSON.parse(collection.mediaBanks); } catch { collection.mediaBanks = null; }
+  }
+  if (Array.isArray(collection.mediaBanks) && collection.mediaBanks.length > 0) return collection;
   // Use deterministic ID derived from collection ID so React keys stay stable across re-renders
   const defaultBank = {
     id: 'mb_' + (collection.id || 'default').slice(0, 12),

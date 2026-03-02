@@ -271,7 +271,12 @@ const ProjectWorkspace = ({
           }
           // Preserve mediaBanks from localStorage (most recent local source)
           // Also apply recent removals to mediaBanks
+          // Deserialize if stored as JSON string (from Firestore serialization)
           let mergedMediaBanks = fromLocal?.mediaBanks || col.mediaBanks || null;
+          if (typeof mergedMediaBanks === 'string') {
+            try { mergedMediaBanks = JSON.parse(mergedMediaBanks); } catch { mergedMediaBanks = null; }
+          }
+          if (!Array.isArray(mergedMediaBanks)) mergedMediaBanks = null;
           if (mergedMediaBanks && removed?.size > 0) {
             mergedMediaBanks = mergedMediaBanks.map(b => ({
               ...b,
