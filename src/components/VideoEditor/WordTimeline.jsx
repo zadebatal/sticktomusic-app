@@ -1571,6 +1571,40 @@ const WordTimeline = ({
                   />
                 </div>
               ))}
+              {/* Cell grouping preview — shows how words will be grouped when applied */}
+              {onApplyTextCells && words.length > 0 && (
+                <div style={{
+                  position: 'absolute', left: 0, right: 0,
+                  bottom: 0, height: '18px',
+                  pointerEvents: 'none'
+                }}>
+                  {buildTextCells().map((cell, i) => {
+                    const CELL_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4'];
+                    const color = CELL_COLORS[i % CELL_COLORS.length];
+                    const left = timeToPixels(cell.startTime);
+                    const width = Math.max(4, timeToPixels((cell.endTime || cell.startTime + 0.5) - cell.startTime));
+                    return (
+                      <div key={cell.id || i} style={{
+                        position: 'absolute', left, width,
+                        top: '2px', height: '14px',
+                        backgroundColor: color + '40',
+                        border: `1px solid ${color}80`,
+                        borderRadius: '3px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        overflow: 'hidden'
+                      }}>
+                        <span style={{
+                          fontSize: '8px', color: '#fff', whiteSpace: 'nowrap',
+                          overflow: 'hidden', textOverflow: 'ellipsis',
+                          padding: '0 2px', lineHeight: 1
+                        }}>
+                          {cell.text.slice(0, 20)}{cell.text.length > 20 ? '...' : ''}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
