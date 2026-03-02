@@ -312,7 +312,7 @@ const ProjectLanding = ({
       {/* Header */}
       <div className="flex w-full items-start sm:items-center justify-between gap-4 flex-col sm:flex-row">
         <div className="flex flex-col items-start gap-2">
-          <span className="text-heading-1 font-heading-1 text-[#ffffffff]">Studio</span>
+          <span className="text-heading-1 font-heading-1 text-white">Studio</span>
           <span className="text-body font-body text-neutral-400">
             {projects.length} project{projects.length !== 1 ? 's' : ''}
           </span>
@@ -335,24 +335,28 @@ const ProjectLanding = ({
       {/* Stat cards */}
       <div className="flex w-full items-center gap-4 mt-6">
         <div
-          className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-5 py-4 cursor-pointer hover:border-neutral-600 transition-colors"
+          className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-neutral-50 px-5 py-4 cursor-pointer hover:border-neutral-600 transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none"
+          tabIndex={0}
+          role="button"
           onClick={() => onViewContent?.({ type: 'slideshows' })}
         >
-          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{totalDrafts}</span>
+          <span className="text-heading-2 font-heading-2 text-white">{totalDrafts}</span>
           <span className="text-caption font-caption text-neutral-400">Drafts</span>
         </div>
         <div
-          className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-5 py-4 cursor-pointer hover:border-neutral-600 transition-colors"
+          className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-neutral-50 px-5 py-4 cursor-pointer hover:border-neutral-600 transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none"
+          tabIndex={0}
+          role="button"
           onClick={() => onViewAllMedia?.()}
         >
-          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{library.length}</span>
+          <span className="text-heading-2 font-heading-2 text-white">{library.length}</span>
           <span className="text-caption font-caption text-neutral-400">All Media</span>
         </div>
       </div>
 
       {/* Project Cards */}
       <div className="flex w-full items-center justify-between mt-8">
-        <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Your Projects</span>
+        <span className="text-heading-2 font-heading-2 text-white">Your Projects</span>
       </div>
 
       <div className="grid w-full grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
@@ -375,7 +379,9 @@ const ProjectLanding = ({
           return (
             <div
               key={project.id}
-              className="flex flex-col items-start gap-4 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-6 py-5 cursor-pointer hover:border-neutral-600 transition-colors"
+              className="flex flex-col items-start gap-4 rounded-lg border border-solid border-neutral-200 bg-neutral-50 px-6 py-5 cursor-pointer hover:border-neutral-600 transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none"
+              tabIndex={0}
+              role="button"
               onClick={() => !isRenaming && onOpenProject(project.id)}
             >
               <div className="flex w-full items-center gap-3">
@@ -383,7 +389,7 @@ const ProjectLanding = ({
                   className="flex h-10 w-10 flex-none items-center justify-center rounded-full"
                   style={{ backgroundColor: project.projectColor || '#6366f1' }}
                 >
-                  <span className="text-body-bold font-body-bold text-[#ffffffff]">
+                  <span className="text-body-bold font-body-bold text-white">
                     {(project.name || 'P').split(/\s+/).filter(Boolean).slice(0, 2).map(w => (w.replace(/[^a-zA-Z0-9]/g, '')[0] || w[0])).join('').toUpperCase()}
                   </span>
                 </div>
@@ -398,7 +404,7 @@ const ProjectLanding = ({
                       autoFocus
                     />
                   ) : (
-                    <span className="text-heading-3 font-heading-3 text-[#ffffffff]">{project.name}</span>
+                    <span className="text-heading-3 font-heading-3 text-white">{project.name}</span>
                   )}
                   {project.linkedPage && (
                     <span className="text-caption font-caption text-neutral-400">
@@ -459,7 +465,7 @@ const ProjectLanding = ({
         <div className="flex w-full flex-col gap-4 mt-8">
           <div className="flex w-full items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Upcoming</span>
+              <span className="text-heading-2 font-heading-2 text-white">Upcoming</span>
               <Badge variant="brand">{upcomingPosts.length}</Badge>
             </div>
           </div>
@@ -477,7 +483,7 @@ const ProjectLanding = ({
               return (
                 <div
                   key={post.id}
-                  className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
+                  className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-neutral-50 overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
                   onClick={() => setPreviewingDraft({
                     ...post,
                     name: post.contentName,
@@ -486,7 +492,7 @@ const ProjectLanding = ({
                   })}
                 >
                   {firstSlideUrl ? (
-                    <div className="w-full aspect-[9/16] bg-[#171717] relative overflow-hidden" style={{ containerType: 'inline-size' }}>
+                    <div className="w-full aspect-[9/16] bg-neutral-100 relative overflow-hidden" style={{ containerType: 'inline-size' }}>
                       <img src={firstSlideUrl} alt="" className="w-full h-full object-cover" loading="lazy" onError={e => { e.target.style.display = 'none'; }} />
                       {(firstSlide?.textOverlays || []).map((overlay, oi) => (
                         <div
@@ -515,7 +521,7 @@ const ProjectLanding = ({
                       ))}
                     </div>
                   ) : (
-                    <div className="w-full aspect-[9/16] bg-[#171717] flex items-center justify-center">
+                    <div className="w-full aspect-[9/16] bg-neutral-100 flex items-center justify-center">
                       <FeatherImage className="text-neutral-700" style={{ width: 24, height: 24 }} />
                     </div>
                   )}
@@ -564,7 +570,7 @@ const ProjectLanding = ({
         <div className="flex w-full flex-col gap-4 mt-8">
           <div className="flex w-full items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Recent Drafts</span>
+              <span className="text-heading-2 font-heading-2 text-white">Recent Drafts</span>
               <Badge variant="neutral">{totalDrafts}</Badge>
             </div>
             {onViewContent && (
@@ -589,7 +595,7 @@ const ProjectLanding = ({
                 return (
                   <div
                     key={draft.id}
-                    className="group relative flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
+                    className="group relative flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-neutral-50 overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
                     onClick={() => setPreviewingDraft(draft)}
                   >
                     {/* Delete button */}
@@ -614,7 +620,7 @@ const ProjectLanding = ({
                       <FeatherTrash2 style={{ width: 14, height: 14 }} />
                     </button>
                     {firstSlideUrl ? (
-                      <div className="w-full aspect-[9/16] bg-[#171717] relative overflow-hidden" style={{ containerType: 'inline-size' }}>
+                      <div className="w-full aspect-[9/16] bg-neutral-100 relative overflow-hidden" style={{ containerType: 'inline-size' }}>
                         <img src={firstSlideUrl} alt="" className="w-full h-full object-cover" loading="lazy" onError={e => { e.target.style.display = 'none'; }} />
                         {!isVideo && (draft.slides?.[0]?.textOverlays || []).map((overlay, oi) => (
                           <div
@@ -643,7 +649,7 @@ const ProjectLanding = ({
                         ))}
                       </div>
                     ) : (
-                      <div className="w-full aspect-[9/16] bg-[#171717] flex items-center justify-center">
+                      <div className="w-full aspect-[9/16] bg-neutral-100 flex items-center justify-center">
                         <FeatherImage className="text-neutral-700" style={{ width: 24, height: 24 }} />
                       </div>
                     )}
@@ -670,12 +676,12 @@ const ProjectLanding = ({
 
       {/* Slideshow Preview Modal */}
       {previewingDraft && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/85" onClick={() => setPreviewingDraft(null)}>
-          <div className="relative flex flex-col rounded-2xl bg-[#111118] overflow-hidden" style={{ maxWidth: '90vw', maxHeight: '85vh', minWidth: 320 }} onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85" onClick={() => setPreviewingDraft(null)}>
+          <div className="relative flex flex-col rounded-2xl bg-neutral-50 overflow-hidden" style={{ maxWidth: '90vw', maxHeight: '85vh', minWidth: 320 }} onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between border-b border-solid border-neutral-200 px-5 py-4">
               <div className="flex flex-col">
-                <span className="text-body-bold font-body-bold text-[#ffffffff]">
+                <span className="text-body-bold font-body-bold text-white">
                   {previewingDraft.name || 'Untitled Slideshow'}
                 </span>
                 <span className="text-caption font-caption text-neutral-400">
@@ -706,18 +712,18 @@ const ProjectLanding = ({
             </div>
             {/* Inline quick-schedule form */}
             {showQuickSchedule && (
-              <div className="flex items-center gap-3 border-b border-solid border-neutral-200 px-5 py-3 bg-[#0d0d12]">
+              <div className="flex items-center gap-3 border-b border-solid border-neutral-200 px-5 py-3 bg-neutral-50">
                 <input
                   type="date"
                   value={scheduleDate}
                   onChange={e => setScheduleDate(e.target.value)}
-                  className="rounded bg-[#171717] border border-neutral-200 text-white text-sm px-2 py-1.5 outline-none focus:border-indigo-500"
+                  className="rounded bg-neutral-100 border border-neutral-200 text-white text-sm px-2 py-1.5 outline-none focus:border-indigo-500"
                 />
                 <input
                   type="time"
                   value={scheduleTime}
                   onChange={e => setScheduleTime(e.target.value)}
-                  className="rounded bg-[#171717] border border-neutral-200 text-white text-sm px-2 py-1.5 outline-none focus:border-indigo-500"
+                  className="rounded bg-neutral-100 border border-neutral-200 text-white text-sm px-2 py-1.5 outline-none focus:border-indigo-500"
                 />
                 <Button variant="brand-primary" size="small" icon={<FeatherSend />} disabled={!scheduleDate} onClick={handleQuickSchedule}>
                   Confirm
@@ -776,9 +782,9 @@ const ProjectLanding = ({
 
       {showCreateForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowCreateForm(false)}>
-          <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-[#111111] p-6" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-neutral-50 p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
-              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">New Project</span>
+              <span className="text-heading-2 font-heading-2 text-white">New Project</span>
               <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close" onClick={() => setShowCreateForm(false)} />
             </div>
 

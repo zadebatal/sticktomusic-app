@@ -78,10 +78,10 @@ const AppShell = ({
     <div className="flex h-screen w-full items-start bg-black">
       {/* LEFT SIDEBAR — desktop only */}
       {!isMobile && (
-        <div className="flex w-64 flex-none flex-col items-start self-stretch border-r border-solid border-[#333] bg-black">
+        <div className="flex w-64 flex-none flex-col items-start self-stretch border-r border-solid border-neutral-200 bg-black">
           {/* Logo + Artist Selector */}
           <div className="flex w-full flex-col items-start gap-6 px-6 py-6">
-            <span className="text-heading-2 font-heading-2 text-[#ffffffff]">StickToMusic</span>
+            <span className="text-heading-2 font-heading-2 text-white">StickToMusic</span>
 
             {/* Artist selector — dropdown for multiple, static for single */}
             {visibleArtists.length > 1 ? (
@@ -89,11 +89,11 @@ const AppShell = ({
                 <span className="text-caption font-caption text-neutral-500 uppercase tracking-wider">Artist</span>
                 <SubframeCore.DropdownMenu.Root>
                   <SubframeCore.DropdownMenu.Trigger asChild>
-                    <div role="button" tabIndex={0} aria-label={`Switch artist, current: ${currentArtist?.name || 'none'}`} className="flex w-full items-center gap-3 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-2.5 cursor-pointer hover:bg-[#262626]">
+                    <div role="button" tabIndex={0} aria-label={`Switch artist, current: ${currentArtist?.name || 'none'}`} className="flex w-full items-center gap-3 rounded-lg border border-solid border-neutral-200 bg-neutral-50 px-3 py-2.5 cursor-pointer hover:bg-neutral-100">
                       <Avatar size="small" image={currentArtist?.photoURL || undefined} className="bg-brand-600 flex-none">
                         {(currentArtist?.name || '?')[0].toUpperCase()}
                       </Avatar>
-                      <span className="text-body-bold font-body-bold text-[#ffffffff] truncate grow">
+                      <span className="text-body-bold font-body-bold text-white truncate grow">
                         {currentArtist?.name || 'Select Artist'}
                       </span>
                       <FeatherChevronDown className="text-neutral-400 flex-none" style={{ width: 16, height: 16 }} />
@@ -124,11 +124,11 @@ const AppShell = ({
             ) : visibleArtists.length === 1 ? (
               <div className="flex w-full flex-col items-start gap-2">
                 <span className="text-caption font-caption text-neutral-500 uppercase tracking-wider">Artist</span>
-                <div className="flex w-full items-center gap-3 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-2.5">
+                <div className="flex w-full items-center gap-3 rounded-lg border border-solid border-neutral-200 bg-neutral-50 px-3 py-2.5">
                   <Avatar size="small" image={currentArtist?.photoURL || undefined} className="bg-brand-600 flex-none">
                     {(currentArtist?.name || '?')[0].toUpperCase()}
                   </Avatar>
-                  <span className="text-body-bold font-body-bold text-[#ffffffff] truncate grow">
+                  <span className="text-body-bold font-body-bold text-white truncate grow">
                     {currentArtist?.name || 'Artist'}
                   </span>
                 </div>
@@ -144,13 +144,15 @@ const AppShell = ({
               return (
                 <div
                   key={tab.id}
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 cursor-pointer transition-colors ${
-                    isActive ? 'bg-[#2a2a2a]' : 'hover:bg-neutral-50'
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none ${
+                    isActive ? 'bg-neutral-100' : 'hover:bg-neutral-100'
                   }`}
+                  tabIndex={0}
+                  role="button"
                   onClick={() => setActiveTab(tab.id)}
                 >
-                  <Icon className={`text-body font-body ${isActive ? 'text-[#ffffffff]' : 'text-neutral-400'}`} />
-                  <span className={`${isActive ? 'text-body-bold font-body-bold text-[#ffffffff]' : 'text-body font-body text-neutral-400'}`}>
+                  <Icon className={`text-body font-body ${isActive ? 'text-white' : 'text-neutral-400'}`} />
+                  <span className={`${isActive ? 'text-body-bold font-body-bold text-white' : 'text-body font-body text-neutral-400'}`}>
                     {tab.label}
                   </span>
                 </div>
@@ -159,7 +161,7 @@ const AppShell = ({
           </div>
 
           {/* User Footer */}
-          <div className="flex w-full flex-col items-start border-t border-solid border-[#333] px-6 py-4">
+          <div className="flex w-full flex-col items-start border-t border-solid border-neutral-200 px-6 py-4">
             <SubframeCore.DropdownMenu.Root>
               <SubframeCore.DropdownMenu.Trigger asChild>
                 <div className="flex w-full items-center gap-3 cursor-pointer">
@@ -171,7 +173,7 @@ const AppShell = ({
                     {(user?.name || user?.email || '?')[0].toUpperCase()}
                   </Avatar>
                   <div className="flex grow shrink-0 basis-0 flex-col items-start overflow-hidden">
-                    <span className="text-body-bold font-body-bold text-[#ffffffff] truncate w-full">
+                    <span className="text-body-bold font-body-bold text-white truncate w-full">
                       {user?.name || user?.email || 'User'}
                     </span>
                     <div className="flex items-center gap-2">
@@ -210,18 +212,8 @@ const AppShell = ({
       {/* MOBILE BOTTOM TAB BAR */}
       {isMobile && (
         <nav
-          style={{
-            position: 'fixed',
-            left: 0, right: 0, bottom: 0,
-            zIndex: 900,
-            backgroundColor: '#0a0a0a',
-            borderTop: '1px solid #1a1a1a',
-            display: 'flex',
-            justifyContent: 'space-around',
-            alignItems: 'center',
-            height: 64,
-            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-          }}
+          className="fixed inset-x-0 bottom-0 z-[900] bg-black border-t border-neutral-200 flex justify-around items-center h-16"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
           {tabs.map(tab => {
             const isActive = activeTab === tab.id;
@@ -230,27 +222,14 @@ const AppShell = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                style={{
-                  flex: 1, display: 'flex', flexDirection: 'column',
-                  alignItems: 'center', justifyContent: 'center',
-                  gap: 2, padding: '6px 0', border: 'none',
-                  backgroundColor: 'transparent', cursor: 'pointer',
-                  minHeight: 44, position: 'relative',
-                }}
+                className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 border-none bg-transparent cursor-pointer min-h-11 relative"
               >
-                <Icon style={{ width: 20, height: 20, color: isActive ? '#818cf8' : '#737373' }} />
-                <span style={{
-                  fontSize: 10, fontWeight: isActive ? 600 : 400,
-                  color: isActive ? '#818cf8' : '#737373',
-                  transition: 'color 0.15s',
-                }}>
+                <Icon className={`w-5 h-5 ${isActive ? 'text-indigo-400' : 'text-neutral-500'}`} />
+                <span className={`text-[10px] ${isActive ? 'font-semibold text-indigo-400' : 'font-normal text-neutral-500'} transition-colors`}>
                   {tab.label}
                 </span>
                 {isActive && (
-                  <div style={{
-                    position: 'absolute', top: 0, left: '25%', right: '25%',
-                    height: 2, borderRadius: 1, backgroundColor: '#818cf8',
-                  }} />
+                  <div className="absolute top-0 left-1/4 right-1/4 h-0.5 rounded-full bg-indigo-400" />
                 )}
               </button>
             );

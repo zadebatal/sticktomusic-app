@@ -228,7 +228,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
 
   return (
     <div className="flex-1 overflow-auto bg-black px-4 md:px-12 py-8">
-      <span className="text-heading-1 font-heading-1 text-[#ffffffff]">Settings</span>
+      <span className="text-heading-1 font-heading-1 text-white">Settings</span>
 
       {/* ═══ PROFILE HERO ═══ */}
       <div className="mt-6 flex w-full items-center gap-6 rounded-xl border border-solid border-neutral-200 p-6"
@@ -246,7 +246,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
           </div>
         </div>
         <div className="flex flex-col items-start gap-1.5">
-          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{user?.name || 'User'}</span>
+          <span className="text-heading-2 font-heading-2 text-white">{user?.name || 'User'}</span>
           <span className="text-body font-body text-neutral-300">{user?.email || ''}</span>
           <div className="flex items-center gap-2 mt-1">
             {user?.role && <Badge variant="brand" className="capitalize">{user.role}</Badge>}
@@ -260,12 +260,12 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
 
         {/* ── TEAM ── */}
         {isConductor ? (
-          <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-[#111118] p-6 col-span-2">
+          <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-neutral-50 p-6 col-span-2">
             <div className="flex w-full items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600/20">
                 <FeatherUsers style={{ width: 18, height: 18, color: '#818cf8' }} />
               </div>
-              <span className="text-body-bold font-body-bold text-[#ffffffff]">User Management</span>
+              <span className="text-body-bold font-body-bold text-white">User Management</span>
               <Badge variant="brand">{allUsers.length} users</Badge>
             </div>
 
@@ -282,7 +282,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
               <select
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value)}
-                className="rounded-lg border border-neutral-200 bg-[#1a1a1e] px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+                className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-500/50"
               >
                 <option value="operator">Operator</option>
                 <option value="artist">Artist</option>
@@ -332,7 +332,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
                               onChange={(e) => setEditRole(e.target.value)}
                               onBlur={() => { if (editRole !== u.role) handleRoleChange(u.email, editRole); else setEditingUser(null); }}
                               autoFocus
-                              className="rounded border border-neutral-200 bg-[#1a1a1e] px-2 py-1 text-sm text-white outline-none focus:border-indigo-500"
+                              className="rounded border border-neutral-200 bg-neutral-50 px-2 py-1 text-sm text-white outline-none focus:border-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-500/50"
                             >
                               <option value="conductor">Conductor</option>
                               <option value="operator">Operator</option>
@@ -395,12 +395,12 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
             </div>
           </div>
         ) : user?.role !== 'collaborator' ? (
-          <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-[#111118] p-6">
+          <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-neutral-50 p-6">
             <div className="flex w-full items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600/20">
                 <FeatherUsers style={{ width: 18, height: 18, color: '#818cf8' }} />
               </div>
-              <span className="text-body-bold font-body-bold text-[#ffffffff]">Team</span>
+              <span className="text-body-bold font-body-bold text-white">Team</span>
             </div>
             <span className="text-caption font-caption text-neutral-400">
               Invite collaborators who can help create content for your artist.
@@ -433,12 +433,12 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
         ) : null}
 
         {/* ── CLOUD STORAGE ── */}
-        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-[#111118] p-6">
+        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-neutral-50 p-6">
           <div className="flex w-full items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-600/20">
               <FeatherCloud style={{ width: 18, height: 18, color: '#06b6d4' }} />
             </div>
-            <span className="text-body-bold font-body-bold text-[#ffffffff]">Cloud Storage</span>
+            <span className="text-body-bold font-body-bold text-white">Cloud Storage</span>
           </div>
           <span className="text-caption font-caption text-neutral-400">
             Connect cloud storage to import and export media directly from your studio.
@@ -455,7 +455,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
                 <path d="M14.85 3.5L22.85 15h-7.14z" fill="#2684FC" opacity="0.5"/>
                 <path d="M8.29 15l3.43 5.95L15.15 15z" fill="#FFBA00" opacity="0.5"/>
               </svg>
-              <span className="text-body font-body text-[#ffffffff]">Google Drive</span>
+              <span className="text-body font-body text-white">Google Drive</span>
               <Badge variant={driveSettings?.connected ? 'success' : 'neutral'}>
                 {driveSettings?.connected ? 'Connected' : 'Not connected'}
               </Badge>
@@ -479,7 +479,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
                 <path d="M18 9.5l6 3.75-6 3.75-6-3.75z" fill="#0061FF"/>
                 <path d="M6 17.75l6-3.75 6 3.75-6 3.75z" fill="#0061FF"/>
               </svg>
-              <span className="text-body font-body text-[#ffffffff]">Dropbox</span>
+              <span className="text-body font-body text-white">Dropbox</span>
               <Badge variant={dropboxSettings?.connected ? 'success' : 'neutral'}>
                 {dropboxSettings?.connected ? 'Connected' : 'Not connected'}
               </Badge>
@@ -495,12 +495,12 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
         </div>
 
         {/* ── STORAGE USAGE ── */}
-        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-[#111118] p-6">
+        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-neutral-50 p-6">
           <div className="flex w-full items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-600/20">
               <FeatherHardDrive style={{ width: 18, height: 18, color: '#8b5cf6' }} />
             </div>
-            <span className="text-body-bold font-body-bold text-[#ffffffff]">Storage</span>
+            <span className="text-body-bold font-body-bold text-white">Storage</span>
             {user?.storageQuotaBytes != null && user.storageUsedBytes / user.storageQuotaBytes >= 0.8 && (
               <Badge variant="warning">Running low</Badge>
             )}
@@ -544,12 +544,12 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
         </div>
 
         {/* ── SUBSCRIPTION / ACCOUNT ── */}
-        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-[#111118] p-6">
+        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-neutral-50 p-6">
           <div className="flex w-full items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-600/20">
               <FeatherCreditCard style={{ width: 18, height: 18, color: '#f59e0b' }} />
             </div>
-            <span className="text-body-bold font-body-bold text-[#ffffffff]">Account</span>
+            <span className="text-body-bold font-body-bold text-white">Account</span>
           </div>
 
           {canCancel ? (

@@ -1212,6 +1212,8 @@ const PhotoMontageEditor = ({
   // ── Keyboard shortcuts ──
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Don't handle keys when a modal/overlay is open — let the modal handle them
+      if (showAudioTrimmer || showBeatSelector || showMomentumSelector || showTranscriber) return;
       if (e.code === 'Escape') {
         e.preventDefault();
         handleCloseRequest();
@@ -1226,7 +1228,7 @@ const PhotoMontageEditor = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleCloseRequest, isPlaying, stopPlayback, startPlayback]);
+  }, [handleCloseRequest, isPlaying, stopPlayback, startPlayback, showAudioTrimmer, showBeatSelector, showMomentumSelector, showTranscriber]);
 
   // ── Export ──
   const handleExport = useCallback(async () => {
@@ -1778,26 +1780,26 @@ const PhotoMontageEditor = ({
                     </div>
                     {/* Zoom controls — right-aligned */}
                     <div className="flex items-center gap-1.5 ml-auto">
-                      <FeatherZoomOut style={{ width: 12, height: 12, color: '#737373' }} />
+                      <FeatherZoomOut style={{ width: 12, height: 12, color: '#737373', cursor: 'pointer' }} onClick={() => setTimelineScale(s => Math.max(0.3, s - 0.2))} />
                       <input type="range" min="0.3" max="3" step="0.05" value={timelineScale}
                         onChange={e => setTimelineScale(parseFloat(e.target.value))}
                         style={{ width: '80px', height: '4px', accentColor: '#6366f1', cursor: 'pointer' }}
                         title={`Zoom: ${Math.round(timelineScale * 100)}%`}
                       />
-                      <FeatherZoomIn style={{ width: 12, height: 12, color: '#737373' }} />
+                      <FeatherZoomIn style={{ width: 12, height: 12, color: '#737373', cursor: 'pointer' }} onClick={() => setTimelineScale(s => Math.min(3, s + 0.2))} />
                     </div>
                   </div>
                 )}
                 {/* Zoom controls when no audio tracks */}
                 {!hasAudioTrack && (
                   <div className="flex items-center gap-1.5 mb-2 justify-end">
-                    <FeatherZoomOut style={{ width: 12, height: 12, color: '#737373' }} />
+                    <FeatherZoomOut style={{ width: 12, height: 12, color: '#737373', cursor: 'pointer' }} onClick={() => setTimelineScale(s => Math.max(0.3, s - 0.2))} />
                     <input type="range" min="0.3" max="3" step="0.05" value={timelineScale}
                       onChange={e => setTimelineScale(parseFloat(e.target.value))}
                       style={{ width: '80px', height: '4px', accentColor: '#6366f1', cursor: 'pointer' }}
                       title={`Zoom: ${Math.round(timelineScale * 100)}%`}
                     />
-                    <FeatherZoomIn style={{ width: 12, height: 12, color: '#737373' }} />
+                    <FeatherZoomIn style={{ width: 12, height: 12, color: '#737373', cursor: 'pointer' }} onClick={() => setTimelineScale(s => Math.min(3, s + 0.2))} />
                   </div>
                 )}
 
@@ -2045,23 +2047,61 @@ const PhotoMontageEditor = ({
                         );
                       })()}
 
-                      {/* Unified cut lines — span from photos row through audio waveform */}
+                      {/* Unified cut lines — draggable to resize photo durations */}
                       {photoDurations.length > 1 && (() => {
                         let cumDur = 0;
                         const boundaries = [];
                         photoDurations.forEach((dur, idx) => {
                           cumDur += dur;
                           if (idx < photoDurations.length - 1) {
-                            boundaries.push({ px: cumDur * effectivePxPerSec, idx });
+                            boundaries.push({ px: cumDur * effectivePxPerSec, idx, cumDur });
                           }
                         });
-                        return boundaries.map(({ px, idx }) => (
-                          <div key={`cut-${idx}`} style={{
-                            position: 'absolute', top: '24px', bottom: 0,
-                            left: `${px}px`, width: '1px',
-                            backgroundColor: 'rgba(255,255,255,0.35)',
-                            zIndex: 12, pointerEvents: 'none'
-                          }} />
+                        const canDrag = !beatSyncEnabled;
+                        return boundaries.map(({ px, idx, cumDur: boundaryTime }) => (
+                          <div key={`cut-${idx}`}
+                            style={{
+                              position: 'absolute', top: '24px', bottom: 0,
+                              left: `${px - 3}px`, width: '7px',
+                              cursor: canDrag ? 'col-resize' : 'default',
+                              zIndex: 14,
+                              display: 'flex', justifyContent: 'center',
+                            }}
+                            onMouseDown={canDrag ? (e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const startX = e.clientX;
+                              const leftIdx = idx;
+                              const rightIdx = idx + 1;
+                              const leftPhotoIdx = leftIdx % photos.length;
+                              const rightPhotoIdx = rightIdx % photos.length;
+                              const origLeftDur = photoDurations[leftIdx];
+                              const origRightDur = photoDurations[rightIdx];
+                              const MIN_DUR = 0.1;
+                              const onMove = (me) => {
+                                const dx = (me.clientX - startX) / effectivePxPerSec;
+                                const newLeft = Math.max(MIN_DUR, Math.min(origLeftDur + origRightDur - MIN_DUR, origLeftDur + dx));
+                                const newRight = origLeftDur + origRightDur - newLeft;
+                                setPhotos(prev => {
+                                  const copy = [...prev];
+                                  copy[leftPhotoIdx] = { ...copy[leftPhotoIdx], customDuration: Math.round(newLeft * 100) / 100 };
+                                  copy[rightPhotoIdx] = { ...copy[rightPhotoIdx], customDuration: Math.round(newRight * 100) / 100 };
+                                  return copy;
+                                });
+                              };
+                              const onUp = () => {
+                                window.removeEventListener('mousemove', onMove);
+                                window.removeEventListener('mouseup', onUp);
+                              };
+                              window.addEventListener('mousemove', onMove);
+                              window.addEventListener('mouseup', onUp);
+                            } : undefined}
+                          >
+                            <div style={{
+                              width: '1px', height: '100%',
+                              backgroundColor: canDrag ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.35)',
+                            }} />
+                          </div>
                         ));
                       })()}
                     </div>

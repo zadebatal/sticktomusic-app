@@ -1779,6 +1779,40 @@ const ALL_PLATFORMS = ['tiktok', 'instagram', 'youtube', 'facebook'];
 // Helper: extract text from caption (supports string | { text, generatedBy, generatedAt })
 const getCaptionText = (cap) => typeof cap === 'string' ? cap : (cap?.text || '');
 
+// Tiny input component for adding captions to a named bank (manages own text state)
+const CaptionBankInput = ({ bankId, onAdd }) => {
+  const [val, setVal] = useState('');
+  return (
+    <div className="flex gap-1.5 items-center mt-0.5">
+      <input
+        className="flex-1 rounded-md border border-solid border-neutral-200 bg-black px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
+        placeholder="Add caption..."
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter' && val.trim()) { onAdd(bankId, val.trim()); setVal(''); } }}
+      />
+      <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add" onClick={() => { if (val.trim()) { onAdd(bankId, val.trim()); setVal(''); } }} />
+    </div>
+  );
+};
+
+// Tiny input component for adding hashtags to a named bank
+const HashtagBankInput = ({ bankId, onAdd }) => {
+  const [val, setVal] = useState('');
+  return (
+    <div className="flex gap-1.5 items-center mt-0.5">
+      <input
+        className="flex-1 rounded-md border border-solid border-neutral-200 bg-black px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
+        placeholder="#hashtag..."
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter' && val.trim()) { onAdd(bankId, val.trim()); setVal(''); } }}
+      />
+      <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add" onClick={() => { if (val.trim()) { onAdd(bankId, val.trim()); setVal(''); } }} />
+    </div>
+  );
+};
+
 const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], accounts = [] }) => {
   const { success: toastSuccess } = useToast();
   const [newCaption, setNewCaption] = useState('');
@@ -1795,6 +1829,11 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
   const [aiResults, setAiResults] = useState(null); // { captions: string[], hashtags: string[] }
   const [aiError, setAiError] = useState(null);
   const [aiAccepted, setAiAccepted] = useState({ captions: new Set(), hashtags: new Set() });
+  // Named banks
+  const [newBankName, setNewBankName] = useState('');
+  const [addingBankFor, setAddingBankFor] = useState(null); // 'captions' | 'hashtags' | null
+  const [renamingBankId, setRenamingBankId] = useState(null);
+  const [renamingBankVal, setRenamingBankVal] = useState('');
 
   // Determine which entity we're editing
   const isProjectScope = scope === 'project';
@@ -1814,6 +1853,9 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
     if (Array.isArray(rawHB)) return { always: rawHB, pool: [] };
     return { always: rawHB.always || [], pool: rawHB.pool || [] };
   }, [rawHB]);
+
+  const captionBanks = useMemo(() => rawCB?.banks || [], [rawCB]);
+  const hashtagBanks = useMemo(() => rawHB?.banks || [], [rawHB]);
 
   const platformOnly = useMemo(() => {
     if (!target?.hashtagBank || Array.isArray(target.hashtagBank)) return {};
@@ -2017,6 +2059,81 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
     setAiAccepted(prev => ({ ...prev, hashtags: new Set(aiResults.hashtags.map((_, i) => i)) }));
   }, [aiResults, hashtags, hashtagAddTier, allHashtags, saveHashtags]);
 
+  // Named bank handlers
+  const handleCreateBank = useCallback((type) => {
+    const name = newBankName.trim();
+    if (!name) return;
+    const id = Date.now().toString(36);
+    if (type === 'captions') {
+      const banks = [...captionBanks, { id, name, items: [] }];
+      saveCaptions({ ...captions, banks });
+    } else {
+      const banks = [...hashtagBanks, { id, name, items: [] }];
+      saveHashtags({ ...hashtags, banks });
+    }
+    setNewBankName('');
+    setAddingBankFor(null);
+  }, [newBankName, captions, hashtags, captionBanks, hashtagBanks, saveCaptions, saveHashtags]);
+
+  const handleRenameBank = useCallback((type, bankId, name) => {
+    if (!name.trim()) return;
+    if (type === 'captions') {
+      const banks = captionBanks.map(b => b.id === bankId ? { ...b, name: name.trim() } : b);
+      saveCaptions({ ...captions, banks });
+    } else {
+      const banks = hashtagBanks.map(b => b.id === bankId ? { ...b, name: name.trim() } : b);
+      saveHashtags({ ...hashtags, banks });
+    }
+    setRenamingBankId(null);
+  }, [captions, hashtags, captionBanks, hashtagBanks, saveCaptions, saveHashtags]);
+
+  const handleDeleteBank = useCallback((type, bankId) => {
+    if (type === 'captions') {
+      const banks = captionBanks.filter(b => b.id !== bankId);
+      saveCaptions({ ...captions, banks });
+    } else {
+      const banks = hashtagBanks.filter(b => b.id !== bankId);
+      saveHashtags({ ...hashtags, banks });
+    }
+  }, [captions, hashtags, captionBanks, hashtagBanks, saveCaptions, saveHashtags]);
+
+  const handleAddToBankCaption = useCallback((bankId, text) => {
+    if (!text.trim()) return;
+    const banks = captionBanks.map(b => {
+      if (b.id !== bankId) return b;
+      if (b.items.some(i => (typeof i === 'string' ? i : i.text) === text)) return b;
+      return { ...b, items: [...b.items, text] };
+    });
+    saveCaptions({ ...captions, banks });
+  }, [captions, captionBanks, saveCaptions]);
+
+  const handleRemoveFromBankCaption = useCallback((bankId, idx) => {
+    const banks = captionBanks.map(b => {
+      if (b.id !== bankId) return b;
+      return { ...b, items: b.items.filter((_, i) => i !== idx) };
+    });
+    saveCaptions({ ...captions, banks });
+  }, [captions, captionBanks, saveCaptions]);
+
+  const handleAddToBankHashtag = useCallback((bankId, raw) => {
+    if (!raw.trim()) return;
+    const tag = raw.startsWith('#') ? raw.trim() : `#${raw.trim()}`;
+    const banks = hashtagBanks.map(b => {
+      if (b.id !== bankId) return b;
+      if (b.items.includes(tag)) return b;
+      return { ...b, items: [...b.items, tag] };
+    });
+    saveHashtags({ ...hashtags, banks });
+  }, [hashtags, hashtagBanks, saveHashtags]);
+
+  const handleRemoveFromBankHashtag = useCallback((bankId, idx) => {
+    const banks = hashtagBanks.map(b => {
+      if (b.id !== bankId) return b;
+      return { ...b, items: b.items.filter((_, i) => i !== idx) };
+    });
+    saveHashtags({ ...hashtags, banks });
+  }, [hashtags, hashtagBanks, saveHashtags]);
+
   if (!project) return null;
 
   const renderHashtagPill = (tag, tier, idx) => {
@@ -2076,7 +2193,7 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
           onClick={() => setShowAiPanel(!showAiPanel)}
         >
           <FeatherZap className="text-indigo-400" style={{ width: 14, height: 14 }} />
-          <span className="text-body-bold font-body-bold text-indigo-300">AI Generate</span>
+          <span className="text-body-bold font-body-bold text-indigo-300">Generate</span>
           <span className="ml-auto text-neutral-500 text-xs">{showAiPanel ? '▲' : '▼'}</span>
         </button>
 
@@ -2228,6 +2345,69 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
           </div>
         )}
 
+        {/* Named caption banks */}
+        {captionBanks.map(bank => (
+          <div key={bank.id} className="flex flex-col gap-1">
+            <div className="flex items-center gap-1 group">
+              {renamingBankId === bank.id ? (
+                <input
+                  autoFocus
+                  className="text-[10px] font-semibold bg-black border border-indigo-500/30 rounded px-1.5 py-0.5 text-indigo-300 outline-none w-32"
+                  value={renamingBankVal}
+                  onChange={e => setRenamingBankVal(e.target.value)}
+                  onBlur={() => handleRenameBank('captions', bank.id, renamingBankVal)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleRenameBank('captions', bank.id, renamingBankVal); if (e.key === 'Escape') setRenamingBankId(null); }}
+                />
+              ) : (
+                <span
+                  className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider cursor-pointer hover:text-indigo-300"
+                  onDoubleClick={() => { setRenamingBankId(bank.id); setRenamingBankVal(bank.name); }}
+                  title="Double-click to rename"
+                >{bank.name}</span>
+              )}
+              <Badge variant="neutral">{bank.items.length}</Badge>
+              <button className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 transition-opacity ml-auto" onClick={() => handleDeleteBank('captions', bank.id)}>
+                <FeatherTrash2 style={{ width: 11, height: 11 }} />
+              </button>
+            </div>
+            <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto">
+              {bank.items.map((cap, idx) => {
+                const text = typeof cap === 'string' ? cap : cap.text || '';
+                return (
+                  <div key={idx} className="flex items-start gap-2 rounded-md bg-indigo-500/5 border border-indigo-500/20 px-2.5 py-1.5 group">
+                    <span className="grow text-caption font-caption text-indigo-200 cursor-pointer hover:text-white line-clamp-3" title="Click to copy" onClick={() => { navigator.clipboard.writeText(text); toastSuccess('Copied'); }}>{text}</span>
+                    <button className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 flex-none opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveFromBankCaption(bank.id, idx)}><FeatherTrash2 style={{ width: 12, height: 12 }} /></button>
+                  </div>
+                );
+              })}
+            </div>
+            <CaptionBankInput bankId={bank.id} onAdd={handleAddToBankCaption} />
+          </div>
+        ))}
+
+        {/* Add new caption bank */}
+        {addingBankFor === 'captions' ? (
+          <div className="flex gap-2 items-center">
+            <input
+              autoFocus
+              className="flex-1 rounded-md border border-solid border-indigo-500/30 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500"
+              placeholder="Bank name..."
+              value={newBankName}
+              onChange={e => setNewBankName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleCreateBank('captions'); if (e.key === 'Escape') { setAddingBankFor(null); setNewBankName(''); } }}
+            />
+            <Button variant="brand-primary" size="small" onClick={() => handleCreateBank('captions')}>Create</Button>
+            <button className="text-neutral-500 hover:text-neutral-300 bg-transparent border-none cursor-pointer text-xs" onClick={() => { setAddingBankFor(null); setNewBankName(''); }}>Cancel</button>
+          </div>
+        ) : (
+          <button
+            className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer p-0"
+            onClick={() => setAddingBankFor('captions')}
+          >
+            <FeatherPlus style={{ width: 12, height: 12 }} /> New Bank
+          </button>
+        )}
+
         <div className="flex w-full gap-2 items-end">
           <div className="flex flex-col gap-1 flex-1">
             <div className="flex items-center gap-1">
@@ -2274,6 +2454,68 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
             <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Pool — available for manual pick</span>
             <div className="flex flex-wrap gap-1.5">{hashtags.pool.map((tag, idx) => renderHashtagPill(tag, 'pool', idx))}</div>
           </div>
+        )}
+
+        {/* Named hashtag banks */}
+        {hashtagBanks.map(bank => (
+          <div key={bank.id} className="flex flex-col gap-1">
+            <div className="flex items-center gap-1 group">
+              {renamingBankId === bank.id ? (
+                <input
+                  autoFocus
+                  className="text-[10px] font-semibold bg-black border border-indigo-500/30 rounded px-1.5 py-0.5 text-indigo-300 outline-none w-32"
+                  value={renamingBankVal}
+                  onChange={e => setRenamingBankVal(e.target.value)}
+                  onBlur={() => handleRenameBank('hashtags', bank.id, renamingBankVal)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleRenameBank('hashtags', bank.id, renamingBankVal); if (e.key === 'Escape') setRenamingBankId(null); }}
+                />
+              ) : (
+                <span
+                  className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider cursor-pointer hover:text-indigo-300"
+                  onDoubleClick={() => { setRenamingBankId(bank.id); setRenamingBankVal(bank.name); }}
+                  title="Double-click to rename"
+                >{bank.name}</span>
+              )}
+              <Badge variant="neutral">{bank.items.length}</Badge>
+              <button className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 transition-opacity ml-auto" onClick={() => handleDeleteBank('hashtags', bank.id)}>
+                <FeatherTrash2 style={{ width: 11, height: 11 }} />
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {bank.items.map((tag, idx) => (
+                <div key={idx} className="flex items-center gap-1 rounded-full px-2.5 py-0.5 bg-indigo-500/10 border border-indigo-500/30 group">
+                  <span className="text-caption font-caption text-indigo-300">{tag}</span>
+                  <button className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveFromBankHashtag(bank.id, idx)}>
+                    <FeatherX style={{ width: 10, height: 10 }} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <HashtagBankInput bankId={bank.id} onAdd={handleAddToBankHashtag} />
+          </div>
+        ))}
+
+        {/* Add new hashtag bank */}
+        {addingBankFor === 'hashtags' ? (
+          <div className="flex gap-2 items-center">
+            <input
+              autoFocus
+              className="flex-1 rounded-md border border-solid border-indigo-500/30 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500"
+              placeholder="Bank name..."
+              value={newBankName}
+              onChange={e => setNewBankName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleCreateBank('hashtags'); if (e.key === 'Escape') { setAddingBankFor(null); setNewBankName(''); } }}
+            />
+            <Button variant="brand-primary" size="small" onClick={() => handleCreateBank('hashtags')}>Create</Button>
+            <button className="text-neutral-500 hover:text-neutral-300 bg-transparent border-none cursor-pointer text-xs" onClick={() => { setAddingBankFor(null); setNewBankName(''); }}>Cancel</button>
+          </div>
+        ) : (
+          <button
+            className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer p-0"
+            onClick={() => setAddingBankFor('hashtags')}
+          >
+            <FeatherPlus style={{ width: 12, height: 12 }} /> New Bank
+          </button>
         )}
 
         <div className="flex w-full gap-2 items-end">

@@ -72,7 +72,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
     <div className="flex h-screen w-full flex-col items-center bg-black overflow-auto focus:outline-none" tabIndex={0}>
       {/* NAV */}
       <div className="flex w-full items-center justify-between border-b border-solid border-neutral-200 bg-black px-4 sm:px-12 py-4">
-        <span className="text-heading-2 font-heading-2 text-[#ffffffff]">StickToMusic</span>
+        <span className="text-heading-2 font-heading-2 text-white">StickToMusic</span>
         <div className="flex items-center gap-3">
           <Button variant="brand-tertiary" size="medium" onClick={() => { setAuthMode('login'); setShowAuth(true); }}>
             Log in
@@ -90,7 +90,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
         <div className="flex w-full flex-col items-center gap-12">
           <div className="flex w-full max-w-[768px] flex-col items-center gap-8">
             <div className="flex w-full flex-col items-center gap-6">
-              <span className="w-full font-['Outfit'] text-[40px] sm:text-[56px] lg:text-[72px] font-[700] leading-[48px] sm:leading-[64px] lg:leading-[80px] text-[#ffffffff] text-center -tracking-[0.02em]">
+              <span className="w-full font-['Outfit'] text-[40px] sm:text-[56px] lg:text-[72px] font-[700] leading-[48px] sm:leading-[64px] lg:leading-[80px] text-white text-center -tracking-[0.02em]">
                 Your music, everywhere.
               </span>
               <span className="w-full text-heading-2 font-heading-2 text-brand-700 text-center">
@@ -112,7 +112,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
         {/* ═══ FEATURES ═══ */}
         <div className="flex w-full flex-col items-center gap-16" id="features">
           <div className="flex w-full max-w-[768px] flex-col items-center gap-4">
-            <span className="text-heading-1 font-heading-1 text-[#ffffffff] text-center">
+            <span className="text-heading-1 font-heading-1 text-white text-center">
               Everything you need
             </span>
             <span className="text-body font-body text-brand-900 text-center">
@@ -128,7 +128,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
               <div key={i} className="flex grow shrink-0 basis-0 flex-col items-start gap-4">
                 <IconWithBackground className="h-12 w-12 flex-none mx-auto" variant="neutral" size="large" icon={f.icon} square={false} />
                 <div className="flex w-full flex-col items-start gap-2">
-                  <span className="w-full text-heading-2 font-heading-2 text-[#ffffffff] text-center">{f.title}</span>
+                  <span className="w-full text-heading-2 font-heading-2 text-white text-center">{f.title}</span>
                   <span className="text-body font-body text-brand-900 text-center">{f.desc}</span>
                 </div>
               </div>
@@ -139,7 +139,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
         {/* ═══ HOW IT WORKS ═══ */}
         <div className="flex w-full flex-col items-center gap-16">
           <div className="flex w-full max-w-[768px] flex-col items-center gap-4">
-            <span className="text-heading-1 font-heading-1 text-[#ffffffff] text-center">
+            <span className="text-heading-1 font-heading-1 text-white text-center">
               How it works
             </span>
           </div>
@@ -151,10 +151,10 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
             ].map((step, i) => (
               <div key={i} className="flex grow shrink-0 basis-0 flex-col items-center gap-4">
                 <div className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-neutral-100">
-                  <span className="text-heading-2 font-heading-2 text-[#000000ff]">{step.num}</span>
+                  <span className="text-heading-2 font-heading-2 text-black">{step.num}</span>
                 </div>
                 <div className="flex w-full flex-col items-center gap-2">
-                  <span className="text-heading-3 font-heading-3 text-[#ffffffff] text-center">{step.title}</span>
+                  <span className="text-heading-3 font-heading-3 text-white text-center">{step.title}</span>
                   <span className="text-body font-body text-brand-900 text-center">{step.desc}</span>
                 </div>
               </div>
@@ -165,7 +165,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
         {/* ═══ REQUEST A DEMO ═══ */}
         <div className="flex w-full flex-col items-center gap-8">
           <div className="flex w-full max-w-[768px] flex-col items-center gap-4">
-            <span className="text-heading-1 font-heading-1 text-[#ffffffff] text-center">
+            <span className="text-heading-1 font-heading-1 text-white text-center">
               See it in action
             </span>
             <span className="text-body font-body text-brand-900 text-center">
@@ -180,7 +180,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
         {/* ═══ FAQ ═══ */}
         <div className="flex w-full flex-col items-center gap-12">
           <div className="flex w-full max-w-[768px] flex-col items-center gap-4">
-            <span className="text-heading-1 font-heading-1 text-[#ffffffff] text-center">
+            <span className="text-heading-1 font-heading-1 text-white text-center">
               Frequently asked questions
             </span>
             <span className="text-body font-body text-brand-900 text-center">
@@ -193,7 +193,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
                 key={i}
                 trigger={
                   <div className="flex w-full items-center justify-between py-5 border-b border-solid border-neutral-200">
-                    <span className="text-body-bold font-body-bold text-[#ffffffff]">{item.q}</span>
+                    <span className="text-body-bold font-body-bold text-white">{item.q}</span>
                     <Accordion.Chevron />
                   </div>
                 }
@@ -207,9 +207,9 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
         </div>
 
         {/* ═══ CTA ═══ */}
-        <div className="flex w-full flex-col items-center gap-6 rounded-lg bg-[#000000ff] px-6 sm:px-12 py-16">
+        <div className="flex w-full flex-col items-center gap-6 rounded-lg bg-black px-6 sm:px-12 py-16">
           <div className="flex w-full max-w-[768px] flex-col items-center gap-4">
-            <span className="text-heading-1 font-heading-1 text-[#ffffffff] text-center">Ready to create?</span>
+            <span className="text-heading-1 font-heading-1 text-white text-center">Ready to create?</span>
             <span className="text-body font-body text-brand-900 text-center">
               Join hundreds of artists growing their audience with StickToMusic.
             </span>
@@ -240,7 +240,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
           <div className="bg-[#0a0a0aff] border border-solid border-neutral-200 rounded-xl w-full max-w-md mx-4 px-8 py-8">
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
-              <span className="text-heading-2 font-heading-2 text-[#ffffffff] block">
+              <span className="text-heading-2 font-heading-2 text-white block">
                 {authMode === 'login' ? 'Welcome back' : 'Create your account'}
               </span>
               <button
@@ -254,7 +254,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
             {/* Tabs */}
             <div className="flex items-center rounded-lg border border-solid border-neutral-200 bg-black px-1 py-1 mb-6">
               <div
-                className={`flex flex-1 h-9 items-center justify-center rounded-md cursor-pointer transition-colors ${authMode === 'login' ? 'bg-neutral-100' : ''}`}
+                className={`flex flex-1 h-9 items-center justify-center rounded-md cursor-pointer transition-colors ${authMode === 'login' ? 'bg-neutral-200' : ''}`}
                 onClick={() => { setAuthMode('login'); setResetMessage(null); }}
               >
                 <span className={`text-sm ${authMode === 'login' ? 'text-default-font font-semibold' : 'text-neutral-400'}`}>
@@ -262,7 +262,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
                 </span>
               </div>
               <div
-                className={`flex flex-1 h-9 items-center justify-center rounded-md cursor-pointer transition-colors ${authMode === 'signup' ? 'bg-neutral-100' : ''}`}
+                className={`flex flex-1 h-9 items-center justify-center rounded-md cursor-pointer transition-colors ${authMode === 'signup' ? 'bg-neutral-200' : ''}`}
                 onClick={() => { setAuthMode('signup'); setResetMessage(null); }}
               >
                 <span className={`text-sm ${authMode === 'signup' ? 'text-default-font font-semibold' : 'text-neutral-400'}`}>

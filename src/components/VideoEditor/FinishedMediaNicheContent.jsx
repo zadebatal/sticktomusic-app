@@ -77,7 +77,7 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-500/10 border border-cyan-500/30">
             <FeatherUploadCloud className="text-cyan-400" style={{ width: 28, height: 28 }} />
           </div>
-          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Finished Media</span>
+          <span className="text-heading-2 font-heading-2 text-white">Finished Media</span>
           <span className="text-body font-body text-neutral-400 text-center max-w-sm">
             Upload ready-to-post videos and images directly to your scheduling queue
           </span>
@@ -178,22 +178,31 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
         )}
       </div>
 
+      {/* Empty state */}
+      {nicheUploads.length === 0 && files.length === 0 && (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center px-4 sm:px-12">
+          <FeatherUploadCloud className="w-12 h-12 text-neutral-500" />
+          <h3 className="text-body-bold font-body-bold text-white">No uploads yet</h3>
+          <p className="text-caption font-caption text-neutral-400">Upload finished videos or images using the area above</p>
+        </div>
+      )}
+
       {/* Uploaded posts grid */}
       {nicheUploads.length > 0 && (
         <div className="flex w-full flex-col gap-4 px-4 sm:px-12 pb-6">
           <div className="flex items-center gap-2">
-            <span className="text-body-bold font-body-bold text-[#ffffffff]">Uploads</span>
+            <span className="text-body-bold font-body-bold text-white">Uploads</span>
             <Badge variant="neutral">{nicheUploads.length}</Badge>
           </div>
           <div className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {nicheUploads.map(post => (
               <div
                 key={post.id}
-                className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
+                className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-neutral-50 overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
                 onClick={() => setPreviewPost(post)}
               >
                 {post.thumbnail ? (
-                  <div className="w-full aspect-video bg-[#171717]">
+                  <div className="w-full aspect-video bg-neutral-100">
                     {post.mediaType === 'video' ? (
                       <video src={post.cloudUrl} className="w-full h-full object-cover" muted preload="metadata" />
                     ) : (
@@ -201,7 +210,7 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
                     )}
                   </div>
                 ) : (
-                  <div className="w-full aspect-video bg-[#171717] flex items-center justify-center">
+                  <div className="w-full aspect-video bg-neutral-100 flex items-center justify-center">
                     <FeatherImage className="text-neutral-700" style={{ width: 24, height: 24 }} />
                   </div>
                 )}
@@ -246,11 +255,11 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
         <span className="text-caption-bold font-caption-bold text-neutral-300">Audio</span>
         <div className="relative max-w-sm">
           <button
-            className="flex w-full items-center gap-2 rounded-md border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-2 hover:bg-[#262626] transition"
+            className="flex w-full items-center gap-2 rounded-md border border-solid border-neutral-200 bg-neutral-50 px-3 py-2 hover:bg-[#262626] transition"
             onClick={() => setAudioPickerOpen(!audioPickerOpen)}
           >
             <FeatherMusic className="text-indigo-400 flex-none" style={{ width: 14, height: 14 }} />
-            <span className="text-caption font-caption text-[#ffffffff] truncate grow text-left">
+            <span className="text-caption font-caption text-white truncate grow text-left">
               {selectedAudio?.name || 'No audio'}
             </span>
             <FeatherChevronDown
@@ -274,7 +283,7 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
                     onClick={() => handleSelectAudio(audio.id)}
                   >
                     <FeatherPlay className="text-neutral-300 flex-none" style={{ width: 10, height: 10 }} />
-                    <span className="text-caption font-caption text-[#ffffffff] truncate grow">{audio.name}</span>
+                    <span className="text-caption font-caption text-white truncate grow">{audio.name}</span>
                     {isActive && <FeatherCheck className="text-indigo-300 flex-none" style={{ width: 12, height: 12 }} />}
                   </button>
                 );

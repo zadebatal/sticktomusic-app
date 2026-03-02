@@ -943,7 +943,7 @@ const VideoNicheContent = ({
             )}
             <div className="flex items-center gap-2">
               <input
-                className="flex-1 rounded-md border border-solid border-neutral-200 bg-black px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
+                className="flex-1 rounded-md border border-solid border-neutral-200 bg-neutral-0 px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
                 placeholder="Add text..."
                 value={textBankInput1}
                 onChange={e => setTextBankInput1(e.target.value)}
@@ -982,7 +982,7 @@ const VideoNicheContent = ({
             )}
             <div className="flex items-center gap-2">
               <input
-                className="flex-1 rounded-md border border-solid border-neutral-200 bg-black px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
+                className="flex-1 rounded-md border border-solid border-neutral-200 bg-neutral-0 px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
                 placeholder="Add text..."
                 value={textBankInput2}
                 onChange={e => setTextBankInput2(e.target.value)}
