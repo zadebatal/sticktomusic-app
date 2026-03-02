@@ -2,7 +2,8 @@
  * ClipperNicheContent — Clip bank display for clipper niches
  * Shows saved clipper sessions from niche, exported clips by bank, create button, audio picker
  */
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import log from '../../utils/logger';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { Badge } from '../../ui/components/Badge';
@@ -86,6 +87,19 @@ const ClipperNicheContent = ({
     if (!niche) return [];
     return library.filter(item => (niche.mediaIds || []).includes(item.id) && item.type === 'video');
   }, [niche, library]);
+
+  // Prefetch source videos so they're in browser cache when Clipper opens
+  useEffect(() => {
+    if (nicheVideos.length === 0) return;
+    const controller = new AbortController();
+    const url = nicheVideos[0]?.url || nicheVideos[0]?.cloudUrl;
+    if (!url || url.startsWith('blob:')) return;
+    fetch(url, { mode: 'cors', signal: controller.signal })
+      .then(r => r.blob())
+      .then(blob => log.info(`[ClipperNiche] Prefetched video: ${(blob.size / 1024 / 1024).toFixed(1)}MB`))
+      .catch(() => {}); // ignore abort/network errors
+    return () => controller.abort();
+  }, [nicheVideos]);
 
   // Project pool videos NOT in this niche
   const [poolExpanded, setPoolExpanded] = useState(false);
