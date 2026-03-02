@@ -35,6 +35,7 @@ import useUnsavedChanges from './shared/useUnsavedChanges';
 import usePixelTimeline from './shared/usePixelTimeline';
 import useTimelineZoom from '../../hooks/useTimelineZoom';
 import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
+import LyricBankSection from './shared/LyricBankSection';
 import { FeatherAlignLeft, FeatherAlignCenter, FeatherAlignRight } from '@subframe/core';
 
 // Stroke string helpers: parse "0.5px black" ↔ { width: 0.5, color: '#000000' }
@@ -388,7 +389,7 @@ const MultiClipEditor = ({
   // ── BeatSync layout state ──
   const [videoName, setVideoName] = useState(existingVideo?.name || 'Untitled Multi-Clip');
   const { openSections, renderCollapsibleSection } = useCollapsibleSections({
-    audio: true, clips: true, text: false, textStyle: (existingVideo?.textOverlays?.length > 0)
+    audio: true, clips: true, lyricBank: false, text: false, textStyle: (existingVideo?.textOverlays?.length > 0)
   });
 
   // ── Session persistence ──
@@ -2666,6 +2667,36 @@ const MultiClipEditor = ({
                     )}
                   </div>
                 </div>
+              ))}
+
+              {renderCollapsibleSection('lyricBank', 'Lyric Bank', (
+                <LyricBankSection
+                  lyrics={lyricsBank}
+                  hasAudio={!!selectedAudio}
+                  onAddNew={() => {
+                    if (!selectedAudio) { toastError('Upload audio first'); return; }
+                    setShowTranscriber(true);
+                  }}
+                  onApplyLyric={(lyric) => {
+                    setLoadedBankLyricId(lyric.id);
+                    if (lyric.words?.length > 0) {
+                      setWords(lyric.words);
+                      setShowWordTimeline(true);
+                    } else if (lyric.content) {
+                      const plainWords = lyric.content.split(/\s+/).filter(Boolean).map((text, i) => ({
+                        text, start: i * 0.5, end: (i + 1) * 0.5
+                      }));
+                      setWords(plainWords);
+                      setShowWordTimeline(true);
+                    } else {
+                      toastError('This lyric has no content to edit');
+                    }
+                  }}
+                  onDeleteLyric={(lyricId) => {
+                    if (onDeleteLyrics) onDeleteLyrics(lyricId);
+                    setLyricsBank(prev => prev.filter(l => l.id !== lyricId));
+                  }}
+                />
               ))}
 
               {renderCollapsibleSection('text', 'Text Banks', (

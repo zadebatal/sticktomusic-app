@@ -2763,6 +2763,9 @@ const VideoStudio = ({
             onSchedule={() => {
               setCurrentView('scheduling');
             }}
+            onAddLyrics={handleAddLyrics}
+            onUpdateLyrics={handleUpdateLyrics}
+            onDeleteLyrics={handleDeleteLyrics}
           />
         )}
 

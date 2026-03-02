@@ -108,6 +108,9 @@ const ProjectWorkspace = ({
   onViewDrafts,
   onSchedule,
   latePages = [],
+  onAddLyrics,
+  onUpdateLyrics,
+  onDeleteLyrics,
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
 
@@ -1066,6 +1069,9 @@ const ProjectWorkspace = ({
             onImportAudio={handleImportAudio}
             onWebImport={handleWebImport}
             onWebImportAudio={handleWebImportAudio}
+            onAddLyrics={onAddLyrics}
+            onUpdateLyrics={onUpdateLyrics}
+            onDeleteLyrics={onDeleteLyrics}
           />
         )}
 

@@ -24,8 +24,10 @@ import {
   addToProjectPool,
   removeFromCollection,
 } from '../../services/libraryService';
+import { getLyrics } from '../../services/libraryService';
 import useDragReorder from './shared/useDragReorder';
 import QuickTrimPopover from './shared/QuickTrimPopover';
+import LyricBankSection from './shared/LyricBankSection';
 import AudioClipSelector from './AudioClipSelector';
 import WordTimeline from './WordTimeline';
 import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
@@ -52,6 +54,9 @@ const VideoNicheContent = ({
   onImportAudio,
   onWebImport,
   onWebImportAudio,
+  onAddLyrics,
+  onUpdateLyrics,
+  onDeleteLyrics,
 }) => {
   const activeFormat = niche?.formats?.find(f => f.id === niche.activeFormatId) || niche?.formats?.[0];
   const IconComponent = FORMAT_ICONS[activeFormat?.id] || FeatherPlay;
@@ -89,6 +94,12 @@ const VideoNicheContent = ({
       setPlayingAudioId(audio.id);
     }
   }, [playingAudioId, toastError]);
+
+  // Lyric bank state
+  const [lyricsBank, setLyricsBank] = useState([]);
+  useEffect(() => {
+    if (artistId) setLyricsBank(getLyrics(artistId));
+  }, [artistId]);
 
   // Audio tools
   const [showAudioTrimmer, setShowAudioTrimmer] = useState(false);
@@ -593,6 +604,56 @@ const VideoNicheContent = ({
           </div>
         </div>
 
+        {/* Lyric Bank */}
+        <div className="flex w-full flex-col gap-2 rounded-lg border border-solid border-green-500/30 bg-green-500/5 p-3 mx-8 mb-4" style={{ maxWidth: 'calc(100% - 64px)' }}>
+          <div className="flex items-center gap-2 mb-1">
+            <FeatherMusic className="text-green-400 flex-none" style={{ width: 14, height: 14 }} />
+            <span className="text-caption-bold font-caption-bold text-green-300">Lyric Bank</span>
+            <Badge variant="success">{lyricsBank.length}</Badge>
+          </div>
+          <LyricBankSection
+            lyrics={lyricsBank}
+            hasAudio={projectAudio.length > 0}
+            onAddNew={() => {
+              if (projectAudio.length === 0) { toastError('Upload audio first'); return; }
+              const audio = selectedAudio || projectAudio[0];
+              if (!audio) return;
+              const validUrl = (u) => u && !u.startsWith('blob:');
+              const src = validUrl(audio.url) ? audio.url : validUrl(audio.localUrl) ? audio.localUrl : null;
+              if (!src) { toastError('Audio has no valid URL — please re-upload'); return; }
+              analyzeAudio(src, audio.startTime || 0, audio.endTime || audio.duration || 30)
+                .then(result => {
+                  if (result?.words?.length > 0) {
+                    setTranscribedWords(result.words);
+                    setTranscribedDuration(audio.endTime || audio.duration || 30);
+                    setShowWordTimeline(true);
+                  }
+                })
+                .catch(() => toastError('Transcription failed'));
+            }}
+            onApplyLyric={(lyric) => {
+              if (lyric.words?.length > 0) {
+                setTranscribedWords(lyric.words);
+                setTranscribedDuration(lyric.words[lyric.words.length - 1]?.end || 30);
+                setShowWordTimeline(true);
+              } else if (lyric.content) {
+                const plainWords = lyric.content.split(/\s+/).filter(Boolean).map((text, i) => ({
+                  text, start: i * 0.5, end: (i + 1) * 0.5
+                }));
+                setTranscribedWords(plainWords);
+                setTranscribedDuration(plainWords.length * 0.5);
+                setShowWordTimeline(true);
+              } else {
+                toastError('This lyric has no content to edit');
+              }
+            }}
+            onDeleteLyric={(lyricId) => {
+              if (onDeleteLyrics) onDeleteLyrics(lyricId);
+              setLyricsBank(prev => prev.filter(l => l.id !== lyricId));
+            }}
+          />
+        </div>
+
         {/* Audio Bank — vertical list like text banks */}
         <div className="flex w-full flex-col gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-4 py-3 mx-8 mb-4" style={{ maxWidth: 'calc(100% - 64px)', maxHeight: 200 }}>
           <div className="flex w-full flex-none items-center justify-between">
@@ -732,6 +793,11 @@ const VideoNicheContent = ({
           onClose={handleWtClose}
           audioRef={wordTimelineAudioRef}
           onAddToBank={handleWtAddToBank}
+          onSaveToBank={onUpdateLyrics ? (lyricId, wordsToSave) => {
+            onUpdateLyrics(lyricId, { words: wordsToSave });
+            setLyricsBank(prev => prev.map(l => l.id === lyricId ? { ...l, words: wordsToSave } : l));
+            toastSuccess('Lyric timings saved');
+          } : undefined}
         />
       )}
 

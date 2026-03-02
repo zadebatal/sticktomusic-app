@@ -4,6 +4,7 @@ import WordTimeline from './WordTimeline';
 import BeatSelector from './BeatSelector';
 import MomentumSelector from './MomentumSelector';
 import LyricBank from './LyricBank';
+import LyricBankSection from './shared/LyricBankSection';
 import TemplatePicker from './TemplatePicker';
 const SoloClipEditor = React.lazy(() => import('./SoloClipEditor'));
 const MultiClipEditor = React.lazy(() => import('./MultiClipEditor'));
@@ -355,6 +356,7 @@ const VideoEditorModal = ({
     setLibraryAudio(cached.filter(i => i.type === MEDIA_TYPES.AUDIO));
     const cols = getCollections(artistId);
     setSidebarCollections(cols.filter(c => c.type !== 'smart'));
+    setLyricsBank(getLyrics(artistId));
 
     if (!db) return;
     const unsubs = [];
@@ -458,6 +460,7 @@ const VideoEditorModal = ({
   // Lyric bank picker state
   const [showLyricBankPicker, setShowLyricBankPicker] = useState(false);
   const [loadedBankLyricId, setLoadedBankLyricId] = useState(null); // Track which lyric from bank is loaded
+  const [lyricsBank, setLyricsBank] = useState([]);
 
   // Text overlay editing state
   const [editingTextId, setEditingTextId] = useState(null);
@@ -489,7 +492,7 @@ const VideoEditorModal = ({
   // ── Right Sidebar: collapsible sections ──
   const [videoName, setVideoName] = useState(existingVideo?.name || 'Untitled Video');
   const { renderCollapsibleSection } = useCollapsibleSections({
-    audio: true, clips: true, text: false, textStyle: false
+    audio: true, clips: true, lyricBank: false, text: false, textStyle: false
   });
 
   // Beat detection
@@ -3454,6 +3457,36 @@ const VideoEditorModal = ({
                       </div>
                     )}
                   </div>
+                ))}
+
+                {renderCollapsibleSection('lyricBank', 'Lyric Bank', (
+                  <LyricBankSection
+                    lyrics={lyricsBank}
+                    hasAudio={!!selectedAudio}
+                    onAddNew={() => {
+                      if (!selectedAudio) { toast.error('Upload audio first'); return; }
+                      handleAITranscribe();
+                    }}
+                    onApplyLyric={(lyric) => {
+                      setLoadedBankLyricId(lyric.id);
+                      if (lyric.words?.length > 0) {
+                        setWords(lyric.words);
+                        setShowWordTimeline(true);
+                      } else if (lyric.content) {
+                        const plainWords = lyric.content.split(/\s+/).filter(Boolean).map((text, i) => ({
+                          text, start: i * 0.5, end: (i + 1) * 0.5
+                        }));
+                        setWords(plainWords);
+                        setShowWordTimeline(true);
+                      } else {
+                        toast.error('This lyric has no content to edit');
+                      }
+                    }}
+                    onDeleteLyric={(lyricId) => {
+                      if (onDeleteLyrics) onDeleteLyrics(lyricId);
+                      setLyricsBank(prev => prev.filter(l => l.id !== lyricId));
+                    }}
+                  />
                 ))}
 
                 {renderCollapsibleSection('text', 'Text Banks', (
