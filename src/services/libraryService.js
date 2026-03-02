@@ -1056,13 +1056,11 @@ export const MAX_MEDIA_BANKS = 6;
 export const migrateToMediaBanks = (collection) => {
   if (!collection) return collection;
   if (collection.mediaBanks) return collection;
+  // Use deterministic ID derived from collection ID so React keys stay stable across re-renders
   const defaultBank = {
-    id: Date.now().toString(36),
+    id: 'mb_' + (collection.id || 'default').slice(0, 12),
     name: 'All Media',
-    mediaIds: [...(collection.mediaIds || [])].filter(id => {
-      // Only include non-audio items in media banks
-      return id; // All IDs — we can't filter by type here without library access
-    }),
+    mediaIds: [...(collection.mediaIds || [])],
   };
   return { ...collection, mediaBanks: [defaultBank] };
 };
@@ -1109,7 +1107,10 @@ export const addMediaBank = (artistId, collectionId, name, db = null) => {
 export const removeMediaBank = (artistId, collectionId, bankId, db = null) => {
   const collections = getUserCollections(artistId);
   const collection = collections.find(c => c.id === collectionId);
-  if (!collection?.mediaBanks) return;
+  if (!collection) return;
+  const migrated = migrateToMediaBanks(collection);
+  Object.assign(collection, migrated);
+  if (!collection.mediaBanks) return;
   if (collection.mediaBanks.length <= 1) return; // Must keep at least 1
   const idx = collection.mediaBanks.findIndex(b => b.id === bankId);
   if (idx === -1) return;
@@ -1131,7 +1132,9 @@ export const removeMediaBank = (artistId, collectionId, bankId, db = null) => {
 export const renameMediaBank = (artistId, collectionId, bankId, newName, db = null) => {
   const collections = getUserCollections(artistId);
   const collection = collections.find(c => c.id === collectionId);
-  if (!collection?.mediaBanks) return;
+  if (!collection) return;
+  const migrated = migrateToMediaBanks(collection);
+  Object.assign(collection, migrated);
   const bank = collection.mediaBanks.find(b => b.id === bankId);
   if (!bank) return;
   bank.name = newName;
@@ -1167,7 +1170,10 @@ export const removeFromMediaBank = (artistId, collectionId, mediaIds, bankId, db
   const ids = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
   const collections = getUserCollections(artistId);
   const collection = collections.find(c => c.id === collectionId);
-  if (!collection?.mediaBanks) return;
+  if (!collection) return;
+  const migrated = migrateToMediaBanks(collection);
+  Object.assign(collection, migrated);
+  if (!collection.mediaBanks) return;
   const bank = collection.mediaBanks.find(b => b.id === bankId);
   if (!bank) return;
   bank.mediaIds = (bank.mediaIds || []).filter(id => !ids.includes(id));
