@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { generateWaveformDataWithDuration, generateWaveformForClip, clearWaveformCache } from '../utils/waveformGenerator';
+import { generateWaveformDataWithDuration, generateWaveformForClip, generateWaveformData, clearWaveformCache } from '../utils/waveformGenerator';
 
 /**
  * Shared hook for waveform generation across all video editors.
@@ -10,16 +10,19 @@ import { generateWaveformDataWithDuration, generateWaveformForClip, clearWavefor
  *
  * Both are generated independently so both can display simultaneously.
  *
+ * Clips can include a `file` (Blob) property to avoid re-fetching from URL.
+ *
  * @param {Object} options
  * @param {Object|null} options.selectedAudio — the selected audio object (or null)
  * @param {Array} options.clips — array of clip objects (or single-element array for Solo)
  * @param {Function} options.getClipUrl — (clip) => string URL for the clip's video source
- * @returns {{ waveformData: number[], clipWaveforms: Object, waveformSource: string }}
+ * @returns {{ waveformData: number[], clipWaveforms: Object, clipWaveformsLoading: boolean, waveformSource: string }}
  */
 export default function useWaveform({ selectedAudio, clips = [], getClipUrl }) {
   const [waveformData, setWaveformData] = useState([]);
   const [waveformDuration, setWaveformDuration] = useState(0); // Authoritative duration from AudioBuffer
   const [clipWaveforms, setClipWaveforms] = useState({});
+  const [clipWaveformsLoading, setClipWaveformsLoading] = useState(false);
   const [waveformSource, setWaveformSource] = useState('none');
   const mountedRef = useRef(true);
 
@@ -62,28 +65,39 @@ export default function useWaveform({ selectedAudio, clips = [], getClipUrl }) {
   useEffect(() => {
     if (!clips || clips.length === 0) {
       setClipWaveforms({});
+      setClipWaveformsLoading(false);
       return;
     }
 
     let cancelled = false;
+    setClipWaveformsLoading(true);
     (async () => {
       const results = {};
       for (const clip of clips) {
         if (cancelled) return;
-        const url = getClipUrl ? getClipUrl(clip) : (clip?.url || clip?.localUrl);
-        if (!url) continue;
-        const key = clip.id || clip.sourceId || url;
-        // Use clip-duration-aware waveform so same-URL clips show their own audio portion
+        // Prefer local file (Blob) to avoid re-downloading from remote URL
+        const source = clip.file instanceof Blob
+          ? clip.file
+          : (getClipUrl ? getClipUrl(clip) : (clip?.url || clip?.localUrl));
+        if (!source) continue;
+        const key = clip.id || clip.sourceId || (typeof source === 'string' ? source : 'blob');
         const clipDur = clip.duration || 0;
-        const data = clipDur > 0
-          ? await generateWaveformForClip(url, clipDur, 400)
-          : await generateWaveformData(url, 400);
+        let data;
+        if (source instanceof Blob) {
+          // Blob path — use generateWaveformData which handles Blobs directly
+          data = await generateWaveformData(source, 400);
+        } else {
+          data = clipDur > 0
+            ? await generateWaveformForClip(source, clipDur, 400)
+            : await generateWaveformData(source, 400);
+        }
         if (data.length > 0) {
           results[key] = data;
         }
       }
       if (!cancelled && mountedRef.current) {
         setClipWaveforms(results);
+        setClipWaveformsLoading(false);
       }
     })();
     return () => { cancelled = true; };
@@ -100,5 +114,5 @@ export default function useWaveform({ selectedAudio, clips = [], getClipUrl }) {
     else setWaveformSource('none');
   }, [waveformData, clipWaveforms]);
 
-  return { waveformData, waveformDuration, clipWaveforms, waveformSource };
+  return { waveformData, waveformDuration, clipWaveforms, clipWaveformsLoading, waveformSource };
 }

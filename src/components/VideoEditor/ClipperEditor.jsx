@@ -372,10 +372,10 @@ const ClipperEditor = ({
   pxPerSecRef.current = pxPerSec;
   useTimelineZoom(timelineRef, { zoom: timelineScale, setZoom: setTimelineScale });
   const sourceWaveformClips = useMemo(() =>
-    sourceUrl && duration > 0 ? [{ id: 'source', url: sourceUrl, duration }] : [],
-    [sourceUrl, duration]
+    sourceUrl && duration > 0 ? [{ id: 'source', url: sourceUrl, duration, file: sourceFile || undefined }] : [],
+    [sourceUrl, duration, sourceFile]
   );
-  const { clipWaveforms } = useWaveform({
+  const { clipWaveforms, clipWaveformsLoading } = useWaveform({
     selectedAudio: null,
     clips: sourceWaveformClips,
     getClipUrl: () => sourceUrl,
@@ -1300,8 +1300,15 @@ const ClipperEditor = ({
                           const wfData = clipWaveforms?.source || [];
                           if (wfData.length === 0) {
                             return (
-                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <span className="text-[10px] text-neutral-600">No audio</span>
+                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none gap-1.5">
+                                {clipWaveformsLoading ? (
+                                  <>
+                                    <div className="h-3 w-3 animate-spin rounded-full border border-indigo-500 border-t-transparent" />
+                                    <span className="text-[10px] text-indigo-400">Loading waveform...</span>
+                                  </>
+                                ) : (
+                                  <span className="text-[10px] text-neutral-600">No audio</span>
+                                )}
                               </div>
                             );
                           }
