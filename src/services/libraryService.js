@@ -1179,6 +1179,7 @@ export const removeFromMediaBank = (artistId, collectionId, mediaIds, bankId, db
   bank.mediaIds = (bank.mediaIds || []).filter(id => !ids.includes(id));
   // Also remove from niche entirely (mediaIds + all banks) in one atomic write
   if (alsoRemoveFromNiche) {
+    trackCollectionRemoval(collectionId, ids);
     collection.mediaBanks.forEach(b => {
       b.mediaIds = (b.mediaIds || []).filter(id => !ids.includes(id));
     });

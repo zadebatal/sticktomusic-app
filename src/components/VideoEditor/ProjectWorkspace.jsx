@@ -269,10 +269,20 @@ const ProjectWorkspace = ({
               ...(fromRecent?.banks?.[i] || []),
             ])]);
           }
+          // Preserve mediaBanks from localStorage (most recent local source)
+          // Also apply recent removals to mediaBanks
+          let mergedMediaBanks = fromLocal?.mediaBanks || col.mediaBanks || null;
+          if (mergedMediaBanks && removed?.size > 0) {
+            mergedMediaBanks = mergedMediaBanks.map(b => ({
+              ...b,
+              mediaIds: (b.mediaIds || []).filter(id => !removed.has(id)),
+            }));
+          }
           return {
             ...col,
             mediaIds: allMediaIds,
             ...(maxBankLen > 0 ? { banks: mergedBanks } : {}),
+            ...(mergedMediaBanks ? { mediaBanks: mergedMediaBanks } : {}),
           };
         });
 
