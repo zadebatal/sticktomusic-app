@@ -234,43 +234,54 @@ const ProjectLanding = ({
     const project = cols.find(c => c.id === projectId);
     if (!project) return;
 
-    // Mark as pending deletion FIRST to prevent subscription race condition
-    markCollectionPendingDeletion(projectId);
+    try {
+      // Mark as pending deletion FIRST to prevent subscription race condition
+      markCollectionPendingDeletion(projectId);
 
-    const niches = cols.filter(c => c.projectId === projectId);
+      const niches = cols.filter(c => c.projectId === projectId);
 
-    // Cascade-delete all drafts in project niches
-    const content = getCreatedContent(artistId);
-    for (const n of niches) {
-      const nicheDrafts = [...(content.slideshows || []), ...(content.videos || [])].filter(d => d.collectionId === n.id);
-      for (const draft of nicheDrafts) {
-        if (draft.slides) {
-          deleteCreatedSlideshowAsync(db, artistId, draft.id).catch(log.error);
-        } else {
-          softDeleteCreatedVideoAsync(db, artistId, draft.id).catch(log.error);
+      // Mark niches as pending deletion too
+      for (const n of niches) markCollectionPendingDeletion(n.id);
+
+      // Cascade-delete all drafts in project niches
+      const content = getCreatedContent(artistId);
+      for (const n of niches) {
+        const nicheDrafts = [...(content.slideshows || []), ...(content.videos || [])].filter(d => d.collectionId === n.id);
+        for (const draft of nicheDrafts) {
+          if (draft.slides) {
+            await deleteCreatedSlideshowAsync(db, artistId, draft.id).catch(log.error);
+          } else {
+            await softDeleteCreatedVideoAsync(db, artistId, draft.id).catch(log.error);
+          }
         }
       }
+
+      // Delete niches themselves
+      for (const n of niches) {
+        await deleteCollectionAsync(db, artistId, n.id);
+      }
+
+      // Mark that user has explicitly deleted projects (prevents migration re-creation)
+      const remaining = cols.filter(c => c.id !== projectId && c.isProjectRoot);
+      if (remaining.length === 0) {
+        localStorage.setItem(`stm_projects_deleted_${artistId}`, Date.now().toString());
+      }
+
+      // Delete project root via libraryService (handles both localStorage + Firestore)
+      await deleteCollectionAsync(db, artistId, projectId);
+
+      // Clear pending deletion now that Firestore doc is gone
+      clearPendingDeletion(projectId);
+      for (const n of niches) clearPendingDeletion(n.id);
+
+      toastSuccess(`Project "${project.name}" deleted`);
+    } catch (err) {
+      log.error('[ProjectLanding] Delete project failed:', err);
+      toastError(`Failed to delete project: ${err.message}`);
+      // Clear pending markers so items reappear
+      clearPendingDeletion(projectId);
     }
-
-    // Delete niches themselves
-    for (const n of niches) {
-      await deleteCollectionAsync(db, artistId, n.id);
-    }
-
-    // Mark that user has explicitly deleted projects (prevents migration re-creation)
-    const remaining = cols.filter(c => c.id !== projectId && c.isProjectRoot);
-    if (remaining.length === 0) {
-      localStorage.setItem(`stm_projects_deleted_${artistId}`, Date.now().toString());
-    }
-
-    // Delete project root via libraryService (handles both localStorage + Firestore)
-    await deleteCollectionAsync(db, artistId, projectId);
-
-    // Clear pending deletion now that Firestore doc is gone
-    clearPendingDeletion(projectId);
-
-    toastSuccess(`Project "${project.name}" deleted`);
-  }, [artistId, db, toastSuccess]);
+  }, [artistId, db, toastSuccess, toastError]);
 
   // Quick-schedule a draft
   const handleQuickSchedule = useCallback(async () => {
@@ -588,7 +599,10 @@ const ProjectLanding = ({
                       onClick={(e) => {
                         e.stopPropagation();
                         if (window.confirm('Delete this draft?')) {
-                          deleteCreatedSlideshowAsync(db, artistId, draft.id).then(() => {
+                          const deleteFn = isVideo
+                            ? softDeleteCreatedVideoAsync(db, artistId, draft.id)
+                            : deleteCreatedSlideshowAsync(db, artistId, draft.id);
+                          deleteFn.then(() => {
                             toastSuccess('Draft deleted');
                           }).catch(err => {
                             log.error('Delete draft error:', err);

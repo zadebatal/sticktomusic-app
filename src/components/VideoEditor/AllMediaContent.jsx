@@ -32,7 +32,8 @@ const AllMediaContent = ({
     return library.filter(item => (activeNiche.mediaIds || []).includes(item.id));
   }, [activeNiche, library]);
 
-  const scopedMedia = mediaScope === 'niche' ? nicheMedia : projectMedia;
+  // "All Media" scope shows the entire library (not just project pool)
+  const scopedMedia = mediaScope === 'niche' ? nicheMedia : library;
   const scopedImages = useMemo(() => scopedMedia.filter(m => m.type === 'image'), [scopedMedia]);
   const scopedVideos = useMemo(() => scopedMedia.filter(m => m.type === 'video'), [scopedMedia]);
 
@@ -48,7 +49,7 @@ const AllMediaContent = ({
     return scopedVideos.filter(m => (m.name || '').toLowerCase().includes(q));
   }, [scopedVideos, mediaSearch]);
 
-  const projectAudio = useMemo(() => projectMedia.filter(m => m.type === 'audio'), [projectMedia]);
+  const scopedAudio = useMemo(() => scopedMedia.filter(m => m.type === 'audio'), [scopedMedia]);
 
   const formatDuration = (seconds) => {
     if (!Number.isFinite(seconds)) return '';
@@ -65,7 +66,7 @@ const AllMediaContent = ({
           <span className="text-heading-2 font-heading-2 text-[#ffffffff]">All Media</span>
           <Badge variant="neutral">{scopedImages.length} images</Badge>
           <Badge variant="neutral">{scopedVideos.length} videos</Badge>
-          <Badge variant="neutral">{projectAudio.length} audio</Badge>
+          <Badge variant="neutral">{scopedAudio.length} audio</Badge>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="neutral-secondary" size="small" icon={<FeatherUpload />} onClick={onUpload}>
@@ -181,15 +182,15 @@ const AllMediaContent = ({
       )}
 
       {/* Audio section */}
-      {projectAudio.length > 0 && (
+      {scopedAudio.length > 0 && (
         <div className="flex w-full flex-col gap-2 px-8 py-4">
           <div className="flex items-center gap-2">
             <FeatherMusic className="text-indigo-400" style={{ width: 14, height: 14 }} />
             <span className="text-body-bold font-body-bold text-[#ffffffff]">Audio</span>
-            <Badge variant="neutral">{projectAudio.length}</Badge>
+            <Badge variant="neutral">{scopedAudio.length}</Badge>
           </div>
           <div className="flex flex-col gap-1 rounded-lg border border-solid border-neutral-200 bg-[#111118] overflow-hidden">
-            {projectAudio.map(audio => (
+            {scopedAudio.map(audio => (
               <div key={audio.id} className="flex items-center gap-3 px-3 py-2 hover:bg-neutral-100/30 transition-colors">
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-indigo-500/10 flex-none">
                   <FeatherPlay className="text-indigo-400" style={{ width: 11, height: 11 }} />
