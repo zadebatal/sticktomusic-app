@@ -788,14 +788,21 @@ export const saveCollections = (artistId, collections) => {
     // Filter out smart collections before saving
     const userCollections = collections.filter(c => c.type !== COLLECTION_TYPES.SMART);
 
-    // SAFETY GUARD: Never lose collections. If existing localStorage has collections
-    // that are missing from the new data (and aren't pending deletion), preserve them.
+    // SAFETY GUARD: Only preserve RECENT collections (< 2min) that would be lost.
+    // Stale entries (deleted on another device/origin) should not be resurrected.
     const existing = getUserCollections(artistId);
     if (existing.length > 0) {
       const newIds = new Set(userCollections.map(c => c.id));
-      const lost = existing.filter(e => !newIds.has(e.id) && !pendingDeletionIds.has(e.id));
+      const now = Date.now();
+      const lost = existing.filter(e => {
+        if (newIds.has(e.id)) return false;
+        if (pendingDeletionIds.has(e.id)) return false;
+        // Only preserve if recently created/updated (in-flight write)
+        const age = now - new Date(e.createdAt || e.updatedAt || 0).getTime();
+        return age < 2 * 60 * 1000;
+      });
       if (lost.length > 0) {
-        log.warn('[saveCollections] Would lose', lost.length, 'collections, preserving:',
+        log.warn('[saveCollections] Preserving', lost.length, 'recent collections:',
           lost.map(c => `${c.name}(${c.id})`));
         userCollections.push(...lost);
       }
@@ -4271,11 +4278,21 @@ export const subscribeToCollections = (db, artistId, callback) => {
         });
 
         // Include localStorage-only collections not yet in Firestore (in-flight writes)
-        // Also dedup by name for project roots to prevent migration dupes from re-appearing
+        // Only preserve RECENT ones (created < 2min ago) to prevent ghost resurrections
+        // from stale localStorage on other origins (e.g., localhost vs production).
         const firestoreIds = new Set(firestoreCollections.map(c => c.id));
         const mergedNames = new Set(mergedCollections.filter(c => c.isProjectRoot).map(c => (c.name || '').replace(/^@+/, '')));
+        const LOCAL_ONLY_TTL = 2 * 60 * 1000; // 2 minutes
+        const now = Date.now();
         const localOnlyCollections = localCollections.filter(lc => {
           if (firestoreIds.has(lc.id)) return false;
+          if (pendingDeletionIds.has(lc.id)) return false;
+          // Only keep recent localStorage-only items (in-flight writes)
+          const createdAt = new Date(lc.createdAt || lc.updatedAt || 0).getTime();
+          if (now - createdAt > LOCAL_ONLY_TTL) {
+            log('[Collections] Dropping stale localStorage-only collection:', lc.name, lc.id);
+            return false;
+          }
           // Dedup project roots by normalized name
           if (lc.isProjectRoot) {
             const normName = (lc.name || '').replace(/^@+/, '');
@@ -4288,15 +4305,18 @@ export const subscribeToCollections = (db, artistId, callback) => {
           .filter(c => !pendingDeletionIds.has(c.id));
 
         // SAFETY GUARD: Never lose collections during merge.
-        // If a collection exists in localStorage but NOT in the merge result
-        // (and isn't pending deletion), preserve it to prevent data loss.
+        // Only preserve RECENT collections not in the merge result (< 2min old).
+        // Stale entries (deleted on another device/origin) should not be resurrected.
         const mergedIds = new Set(allMerged.map(c => c.id));
-        const lostCollections = localCollections.filter(lc =>
-          !mergedIds.has(lc.id) && !pendingDeletionIds.has(lc.id)
-        );
+        const lostCollections = localCollections.filter(lc => {
+          if (mergedIds.has(lc.id)) return false;
+          if (pendingDeletionIds.has(lc.id)) return false;
+          const age = now - new Date(lc.createdAt || lc.updatedAt || 0).getTime();
+          return age < LOCAL_ONLY_TTL;
+        });
         if (lostCollections.length > 0) {
           log.warn('[Collections] Subscription merge would lose', lostCollections.length,
-            'collections, preserving:', lostCollections.map(c => `${c.name}(${c.id})`));
+            'recent collections, preserving:', lostCollections.map(c => `${c.name}(${c.id})`));
           allMerged = [...allMerged, ...lostCollections];
         }
 
