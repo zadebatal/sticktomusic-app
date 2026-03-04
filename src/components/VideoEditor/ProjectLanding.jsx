@@ -33,8 +33,9 @@ import {
   FeatherPlus, FeatherArrowRight, FeatherImage, FeatherLayers,
   FeatherX, FeatherChevronDown, FeatherZap, FeatherMoreVertical,
   FeatherEdit2, FeatherTrash2, FeatherSend, FeatherClock, FeatherMusic,
-  FeatherUploadCloud,
+  FeatherUploadCloud, FeatherCheck,
 } from '@subframe/core';
+import useMediaMultiSelect from './shared/useMediaMultiSelect';
 import UploadFinishedMediaModal from './UploadFinishedMediaModal';
 import * as SubframeCore from '@subframe/core';
 import { DropdownMenu } from '../../ui/components/DropdownMenu';
@@ -90,6 +91,8 @@ const ProjectLanding = ({
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
   const [isCreating, setIsCreating] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
+  const [isBatchDeleting, setIsBatchDeleting] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
 
   // Subscribe to data
   useEffect(() => {
@@ -159,6 +162,10 @@ const ProjectLanding = ({
   const projects = useMemo(() => {
     return collections.filter(c => c.isProjectRoot === true);
   }, [collections]);
+
+  // Multi-select for project cards
+  const { selectedIds, isDragSelecting, rubberBand, gridRef, gridMouseHandlers, toggleSelect, selectAll, clearSelection } = useMediaMultiSelect(projects);
+  const hasSelection = selectedIds.size > 0;
 
   // Stats per project
   const projectStats = useMemo(() => {
@@ -296,6 +303,24 @@ const ProjectLanding = ({
     }
   }, [artistId, db, toastSuccess, toastError]);
 
+  // Batch delete selected projects
+  const handleBatchDelete = useCallback(async () => {
+    const ids = [...selectedIds];
+    setIsBatchDeleting(true);
+    let deleted = 0;
+    for (const id of ids) {
+      try {
+        await handleDeleteProject(id);
+        deleted++;
+      } catch (err) {
+        log.error('[ProjectLanding] Batch delete failed for', id, err);
+      }
+    }
+    clearSelection();
+    setSelectMode(false);
+    setIsBatchDeleting(false);
+  }, [selectedIds, handleDeleteProject, clearSelection]);
+
   // Quick-schedule a draft
   const handleQuickSchedule = useCallback(async () => {
     if (!previewingDraft || !scheduleDate || !scheduleTime || !db) return;
@@ -372,9 +397,18 @@ const ProjectLanding = ({
       {/* Project Cards */}
       <div className="flex w-full items-center justify-between mt-8">
         <span className="text-heading-2 font-heading-2 text-white">Your Projects</span>
+        {projects.length > 0 && (
+          <Button
+            variant={selectMode ? 'brand-secondary' : 'neutral-tertiary'}
+            size="small"
+            onClick={() => { setSelectMode(m => !m); if (selectMode) clearSelection(); }}
+          >
+            {selectMode ? 'Done' : 'Select'}
+          </Button>
+        )}
       </div>
 
-      <div className="grid w-full grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+      <div className="relative grid w-full grid-cols-1 sm:grid-cols-2 gap-4 mt-4" ref={gridRef} {...gridMouseHandlers} style={{ userSelect: isDragSelecting ? 'none' : undefined }}>
         {projects.length === 0 && !showCreateForm && (
           <div className="col-span-1 sm:col-span-2 flex flex-col items-center justify-center gap-3 py-16 text-center">
             <FeatherLayers className="w-12 h-12 text-zinc-600" />
@@ -391,14 +425,29 @@ const ProjectLanding = ({
         {projects.map(project => {
           const stats = projectStats[project.id] || { nicheCount: 0, draftCount: 0, mediaCount: 0 };
           const isRenaming = renamingProjectId === project.id;
+          const isSelected = selectedIds.has(project.id);
           return (
             <div
               key={project.id}
-              className="flex flex-col items-start gap-4 rounded-lg border border-solid border-neutral-200 bg-neutral-50 px-6 py-5 cursor-pointer hover:border-neutral-600 transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none"
+              data-media-id={project.id}
+              className={`relative flex flex-col items-start gap-4 rounded-lg border border-solid px-6 py-5 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/40 bg-indigo-500/10' : 'border-neutral-200 bg-neutral-50 hover:border-neutral-600'}`}
               tabIndex={0}
               role="button"
-              onClick={() => !isRenaming && onOpenProject(project.id)}
+              onClick={(e) => {
+                if (isRenaming) return;
+                if (selectMode || hasSelection || e.shiftKey || e.metaKey || e.ctrlKey) {
+                  toggleSelect(project.id, e);
+                } else {
+                  onOpenProject(project.id);
+                }
+              }}
             >
+              {/* Selection check indicator */}
+              {isSelected && (
+                <div className="absolute top-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-indigo-500">
+                  <FeatherCheck style={{ width: 14, height: 14, color: '#fff' }} />
+                </div>
+              )}
               <div className="flex w-full items-center gap-3">
                 <div
                   className="flex h-10 w-10 flex-none items-center justify-center rounded-full"
@@ -477,7 +526,49 @@ const ProjectLanding = ({
             </div>
           );
         })}
+        {/* Rubber-band selection overlay */}
+        {rubberBand && (
+          <div
+            className="pointer-events-none absolute border border-indigo-500 bg-indigo-500/15 rounded"
+            style={{
+              position: 'absolute', left: rubberBand.left, top: rubberBand.top,
+              width: rubberBand.width, height: rubberBand.height,
+            }}
+          />
+        )}
       </div>
+
+      {/* Batch action bar */}
+      {hasSelection && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-5 py-3 shadow-2xl">
+          <span className="text-sm font-medium text-white">{selectedIds.size} selected</span>
+          <Button variant="neutral-secondary" size="small" onClick={selectAll}>
+            {selectedIds.size === projects.length ? 'Deselect All' : 'Select All'}
+          </Button>
+          <Button variant="neutral-secondary" size="small" onClick={() => { clearSelection(); setSelectMode(false); }}>
+            Deselect
+          </Button>
+          <Button
+            variant="destructive-primary"
+            size="small"
+            icon={<FeatherTrash2 />}
+            loading={isBatchDeleting}
+            disabled={isBatchDeleting}
+            onClick={() => {
+              const count = selectedIds.size;
+              setConfirmDialog({
+                isOpen: true,
+                title: 'Delete Projects',
+                message: `Delete ${count} project${count !== 1 ? 's' : ''}? Media will be kept.`,
+                confirmLabel: `Delete ${count}`,
+                onConfirm: () => { setConfirmDialog({ isOpen: false }); handleBatchDelete(); },
+              });
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      )}
 
       {/* Upcoming Scheduled Posts */}
       {upcomingPosts.length > 0 && (
