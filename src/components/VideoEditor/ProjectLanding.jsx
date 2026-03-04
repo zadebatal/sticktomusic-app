@@ -343,9 +343,12 @@ const ProjectLanding = ({
     }
     setSelectedProjectIds(new Set());
     setIsBatchDeleting(false);
+    // Force UI refresh from localStorage (subscriptions may lag behind)
+    setCollections(getCollections(artistId));
+    setCreatedContent(getCreatedContent(artistId));
     if (deleted > 0) toastSuccess(`Deleted ${deleted} project${deleted !== 1 ? 's' : ''}`);
     if (lastError) toastError(`${ids.length - deleted} project(s) failed to delete`);
-  }, [deleteProjectCore, toastSuccess, toastError]);
+  }, [deleteProjectCore, toastSuccess, toastError, artistId]);
 
   // Quick-schedule a draft
   const handleQuickSchedule = useCallback(async () => {
