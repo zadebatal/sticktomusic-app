@@ -58,6 +58,7 @@ import {
   getCollections,
   getPipelineBankLabel,
   migrateCollectionBanks,
+  subscribeToCreatedContent,
 } from '../../services/libraryService';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { updateScheduledPost, deletePostsByContentId } from '../../services/scheduledPostsService';
@@ -509,6 +510,7 @@ const VideoStudio = ({
   const [selectedArtist, setSelectedArtist] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [createdContentVersion, setCreatedContentVersion] = useState(0); // Bump to refresh library dashboard
+  const [createdContentState, setCreatedContentState] = useState(() => currentArtistId ? getCreatedContent(currentArtistId) : { videos: [], slideshows: [] });
   const [draftsCollectionFilter, setDraftsCollectionFilter] = useState(null); // Collection filter for drafts view
   const [firestoreContentLoaded, setFirestoreContentLoaded] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null); // Track upload progress
@@ -524,17 +526,16 @@ const VideoStudio = ({
   }, [lateAccountIds]);
 
   // Synthetic category for library-mode ContentLibrary (dashboard)
-  // createdContentVersion triggers re-computation after add/delete/approve/update
+  // Uses createdContentState (from Firestore subscription) instead of localStorage
   const libraryCategory = useMemo(() => {
     if (!USE_LIBRARY_SYSTEM || !currentArtistId) return null;
-    const content = getCreatedContent(currentArtistId);
     return {
       id: 'library-created',
       name: 'Created Content',
-      createdVideos: content.videos || [],
-      slideshows: content.slideshows || [],
+      createdVideos: createdContentState.videos || [],
+      slideshows: createdContentState.slideshows || [],
     };
-  }, [currentArtistId, createdContentVersion]);
+  }, [currentArtistId, createdContentState]);
 
   // Pipeline category for video editor when opened from a pipeline
   const pipelineCategory = useMemo(() => {
@@ -608,23 +609,16 @@ const VideoStudio = ({
       .map(c => ({ id: c.id, name: c.name, contentType: c.contentType || c.formats?.[0]?.id }));
   }, [activePipelineIdForEditor, currentArtistId]);
 
-  // Load created content from Firestore on mount (ensures drafts persist across refreshes)
+  // Subscribe to created content from Firestore (real-time, no localStorage dependency)
   useEffect(() => {
-    if (firestoreContentLoaded || !db || !currentArtistId) return;
-    loadCreatedContentAsync(db, currentArtistId).then(content => {
-      // loadCreatedContentAsync already saves Firestore data to localStorage
-      // Just bump version to trigger useMemo recompute so UI shows the loaded data
-      if (content && (content.slideshows?.length > 0 || content.videos?.length > 0)) {
-        log('[VideoStudio] Loaded created content from Firestore:', content.slideshows?.length, 'slideshows,', content.videos?.length, 'videos');
-      }
+    if (!db || !currentArtistId) return;
+    const unsub = subscribeToCreatedContent(db, currentArtistId, (content) => {
+      setCreatedContentState(content);
       setCreatedContentVersion(v => v + 1);
       setFirestoreContentLoaded(true);
-    }).catch(err => {
-      log.warn('[VideoStudio] Failed to load created content from Firestore:', err);
-      setFirestoreContentLoaded(true);
     });
-  // eslint-disable-next-line
-  }, [db, currentArtistId, firestoreContentLoaded]);
+    return () => unsub && unsub();
+  }, [db, currentArtistId]);
 
   // Default categories for fresh installs
   // accountHandle links category to Late.co account for auto-scheduling
