@@ -253,21 +253,21 @@ const ProjectLanding = ({
     toastSuccess('Project renamed');
   }, [artistId, db, renameValue, toastSuccess]);
 
-  // Delete project (keeps media, removes project root + unlinks niches)
-  const handleDeleteProject = useCallback(async (projectId) => {
+  // Core delete logic (no toast — used by both single delete and batch)
+  const deleteProjectCore = useCallback(async (projectId) => {
     const cols = getUserCollections(artistId);
     const project = cols.find(c => c.id === projectId);
     if (!project) return;
 
+    // Mark as pending deletion FIRST to prevent subscription race condition
+    markCollectionPendingDeletion(projectId);
+
+    const niches = cols.filter(c => c.projectId === projectId);
+
+    // Mark niches as pending deletion too
+    for (const n of niches) markCollectionPendingDeletion(n.id);
+
     try {
-      // Mark as pending deletion FIRST to prevent subscription race condition
-      markCollectionPendingDeletion(projectId);
-
-      const niches = cols.filter(c => c.projectId === projectId);
-
-      // Mark niches as pending deletion too
-      for (const n of niches) markCollectionPendingDeletion(n.id);
-
       // Cascade-delete all drafts in project niches
       const content = getCreatedContent(artistId);
       for (const n of niches) {
@@ -298,30 +298,54 @@ const ProjectLanding = ({
       // Clear pending deletion now that Firestore doc is gone
       clearPendingDeletion(projectId);
       for (const n of niches) clearPendingDeletion(n.id);
-
-      toastSuccess(`Project "${project.name}" deleted`);
     } catch (err) {
       log.error('[ProjectLanding] Delete project failed:', err);
-      toastError(`Failed to delete project: ${err.message}`);
       // Clear pending markers so items reappear
       clearPendingDeletion(projectId);
+      for (const n of niches) clearPendingDeletion(n.id);
+      throw err;
     }
-  }, [artistId, db, toastSuccess, toastError]);
+  }, [artistId, db]);
+
+  // Single delete (from dropdown menu)
+  const handleDeleteProject = useCallback(async (projectId) => {
+    try {
+      await deleteProjectCore(projectId);
+      toastSuccess('Project deleted');
+    } catch (err) {
+      toastError(`Failed to delete project: ${err.message}`);
+    }
+  }, [deleteProjectCore, toastSuccess, toastError]);
+
+  // Ref to avoid stale closure in confirm dialog callback
+  const selectedProjectIdsRef = useRef(selectedProjectIds);
+  selectedProjectIdsRef.current = selectedProjectIds;
 
   // Batch delete selected projects
   const handleBatchDelete = useCallback(async () => {
-    const ids = [...selectedProjectIds];
+    const ids = [...selectedProjectIdsRef.current];
+    if (ids.length === 0) {
+      log.error('[ProjectLanding] Batch delete called with empty selection');
+      return;
+    }
+    log.info('[ProjectLanding] Batch deleting', ids.length, 'projects');
     setIsBatchDeleting(true);
+    let deleted = 0;
+    let lastError = null;
     for (const id of ids) {
       try {
-        await handleDeleteProject(id);
+        await deleteProjectCore(id);
+        deleted++;
       } catch (err) {
+        lastError = err;
         log.error('[ProjectLanding] Batch delete failed for', id, err);
       }
     }
     setSelectedProjectIds(new Set());
     setIsBatchDeleting(false);
-  }, [selectedProjectIds, handleDeleteProject]);
+    if (deleted > 0) toastSuccess(`Deleted ${deleted} project${deleted !== 1 ? 's' : ''}`);
+    if (lastError) toastError(`${ids.length - deleted} project(s) failed to delete`);
+  }, [deleteProjectCore, toastSuccess, toastError]);
 
   // Quick-schedule a draft
   const handleQuickSchedule = useCallback(async () => {
