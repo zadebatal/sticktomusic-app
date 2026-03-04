@@ -572,27 +572,10 @@ export const saveLibrary = (artistId, library) => {
     localStorage.setItem(getLibraryKey(artistId), JSON.stringify(cleanedLibrary));
   } catch (error) {
     if (error?.name === 'QuotaExceededError' || error?.code === 22) {
-      log.warn('[Library] localStorage quota exceeded, attempting cleanup...');
-      try {
-        // Remove old session/temp data to free space
-        const keysToClean = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key?.startsWith('stm_session_') || key?.startsWith('stm_temp_') || key?.startsWith('stm_draft_')) {
-            keysToClean.push(key);
-          }
-        }
-        keysToClean.forEach(k => localStorage.removeItem(k));
-        log('[Library] Cleaned', keysToClean.length, 'temp keys, retrying save...');
-        // Retry save after cleanup
-        const cleanedLibrary = library.map(item => ({
-          ...item, thumbnail: null,
-          url: item.url?.startsWith('blob:') ? null : item.url
-        })).filter(item => item.url);
-        localStorage.setItem(getLibraryKey(artistId), JSON.stringify(cleanedLibrary));
-      } catch (retryError) {
-        log.error('[Library] Save failed even after cleanup. Storage is full:', retryError.message);
-      }
+      // Library is too large for localStorage. Remove it entirely —
+      // Firestore subscription provides real-time data anyway.
+      log.warn('[Library] localStorage quota exceeded — removing library cache. Firestore is source of truth.');
+      try { localStorage.removeItem(getLibraryKey(artistId)); } catch (_) {}
     } else {
       log.error('Error saving library:', error);
     }
@@ -745,10 +728,11 @@ export const getCollections = (artistId) => {
     const data = localStorage.getItem(getCollectionsKey(artistId));
     const userCollections = data ? JSON.parse(data) : [];
 
-    // Deduplicate user collections by id (migration may have created duplicates)
+    // Deduplicate and filter out pending deletions
     const seen = new Set();
     const dedupedCollections = userCollections.filter(col => {
       if (seen.has(col.id)) return false;
+      if (pendingDeletionIds.has(col.id)) return false;
       seen.add(col.id);
       return true;
     });
@@ -787,30 +771,13 @@ export const saveCollections = (artistId, collections) => {
   try {
     // Filter out smart collections before saving
     const userCollections = collections.filter(c => c.type !== COLLECTION_TYPES.SMART);
-
-    // SAFETY GUARD: Only preserve RECENT collections (< 2min) that would be lost.
-    // Stale entries (deleted on another device/origin) should not be resurrected.
-    const existing = getUserCollections(artistId);
-    if (existing.length > 0) {
-      const newIds = new Set(userCollections.map(c => c.id));
-      const now = Date.now();
-      const lost = existing.filter(e => {
-        if (newIds.has(e.id)) return false;
-        if (pendingDeletionIds.has(e.id)) return false;
-        // Only preserve if recently created/updated (in-flight write)
-        const age = now - new Date(e.createdAt || e.updatedAt || 0).getTime();
-        return age < 2 * 60 * 1000;
-      });
-      if (lost.length > 0) {
-        log.warn('[saveCollections] Preserving', lost.length, 'recent collections:',
-          lost.map(c => `${c.name}(${c.id})`));
-        userCollections.push(...lost);
-      }
-    }
-
     localStorage.setItem(getCollectionsKey(artistId), JSON.stringify(userCollections));
   } catch (error) {
-    log.error('Error saving collections:', error);
+    if (error?.name === 'QuotaExceededError' || error?.code === 22) {
+      log.warn('[saveCollections] localStorage quota exceeded — Firestore is source of truth');
+    } else {
+      log.error('Error saving collections:', error);
+    }
   }
 };
 
@@ -2778,74 +2745,9 @@ export const saveCreatedContent = (artistId, content) => {
     localStorage.setItem(getCreatedContentKey(artistId), JSON.stringify(cleanedContent));
   } catch (error) {
     if (error?.name === 'QuotaExceededError' || error?.code === 22) {
-      log.warn('[CreatedContent] localStorage quota exceeded, attempting cleanup...');
-      try {
-        // Remove old session/temp data to free space
-        const keysToClean = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key?.startsWith('stm_session_') || key?.startsWith('stm_temp_') || key?.startsWith('stm_draft_')) {
-            keysToClean.push(key);
-          }
-        }
-        keysToClean.forEach(k => localStorage.removeItem(k));
-        log('[CreatedContent] Cleaned', keysToClean.length, 'temp keys, retrying save...');
-
-        // Retry save after cleanup with even more aggressive cleaning
-        const minimalContent = {
-          videos: (content.videos || []).map(v => ({
-            id: v.id,
-            name: v.name,
-            url: v.url?.startsWith('blob:') ? null : v.url,
-            exportedImages: v.exportedImages || [],
-            status: v.status,
-            createdAt: v.createdAt,
-            updatedAt: v.updatedAt,
-            aspectRatio: v.aspectRatio,
-            duration: v.duration
-          })).filter(v => v.url),
-          slideshows: (content.slideshows || []).map(s => ({
-            id: s.id,
-            name: s.name,
-            aspectRatio: s.aspectRatio,
-            slides: (s.slides || []).map(slide => ({
-              backgroundImage: slide.backgroundImage?.startsWith('blob:') ? null : slide.backgroundImage,
-              textOverlays: slide.textOverlays || [],
-              imageTransform: slide.imageTransform
-            })).filter(slide => slide.backgroundImage),
-            audio: s.audio ? {
-              id: s.audio.id,
-              name: s.audio.name,
-              url: s.audio.url?.startsWith('blob:') ? null : s.audio.url,
-              duration: s.audio.duration
-            } : null,
-            audioStartTime: s.audioStartTime,
-            audioEndTime: s.audioEndTime,
-            exportedImages: s.exportedImages || [],
-            status: s.status,
-            createdAt: s.createdAt,
-            updatedAt: s.updatedAt,
-            collectionId: s.collectionId,
-            collectionName: s.collectionName
-          }))
-        };
-
-        localStorage.setItem(getCreatedContentKey(artistId), JSON.stringify(minimalContent));
-        log('[CreatedContent] Saved with minimal data after cleanup');
-      } catch (retryError) {
-        log.error('[CreatedContent] Save failed even after cleanup. Storage is full:', retryError.message);
-        // Last resort: try to keep only most recent 20 items
-        try {
-          const recentContent = {
-            videos: (content.videos || []).slice(-10).map(v => ({ id: v.id, name: v.name, url: v.url, status: v.status })),
-            slideshows: (content.slideshows || []).slice(-10).map(s => ({ id: s.id, name: s.name, status: s.status }))
-          };
-          localStorage.setItem(getCreatedContentKey(artistId), JSON.stringify(recentContent));
-          log.warn('[CreatedContent] Saved only most recent 20 items due to quota');
-        } catch (finalError) {
-          log.error('[CreatedContent] CRITICAL: Cannot save to localStorage at all:', finalError.message);
-        }
-      }
+      // Content too large for localStorage. Remove cache — Firestore subscription provides data.
+      log.warn('[CreatedContent] localStorage quota exceeded — removing cache. Firestore is source of truth.');
+      try { localStorage.removeItem(getCreatedContentKey(artistId)); } catch (_) {}
     } else {
       log.error('Error saving created content:', error);
     }
@@ -4277,22 +4179,19 @@ export const subscribeToCollections = (db, artistId, callback) => {
           return migrateCollectionBanks(col);
         });
 
-        // Include localStorage-only collections not yet in Firestore (in-flight writes)
-        // Only preserve RECENT ones (created < 2min ago) to prevent ghost resurrections
-        // from stale localStorage on other origins (e.g., localhost vs production).
+        // Firestore is the source of truth. If a collection is NOT in Firestore,
+        // it was either deleted or never synced. Only preserve localStorage-only items
+        // that were created in the last 30 seconds (truly in-flight writes).
         const firestoreIds = new Set(firestoreCollections.map(c => c.id));
         const mergedNames = new Set(mergedCollections.filter(c => c.isProjectRoot).map(c => (c.name || '').replace(/^@+/, '')));
-        const LOCAL_ONLY_TTL = 2 * 60 * 1000; // 2 minutes
+        const IN_FLIGHT_TTL = 30 * 1000; // 30 seconds — just enough for a write to reach Firestore
         const now = Date.now();
         const localOnlyCollections = localCollections.filter(lc => {
           if (firestoreIds.has(lc.id)) return false;
           if (pendingDeletionIds.has(lc.id)) return false;
-          // Only keep recent localStorage-only items (in-flight writes)
+          // Only keep very recent localStorage-only items (actively in-flight writes)
           const createdAt = new Date(lc.createdAt || lc.updatedAt || 0).getTime();
-          if (now - createdAt > LOCAL_ONLY_TTL) {
-            log('[Collections] Dropping stale localStorage-only collection:', lc.name, lc.id);
-            return false;
-          }
+          if (now - createdAt > IN_FLIGHT_TTL) return false;
           // Dedup project roots by normalized name
           if (lc.isProjectRoot) {
             const normName = (lc.name || '').replace(/^@+/, '');
@@ -4303,22 +4202,6 @@ export const subscribeToCollections = (db, artistId, callback) => {
         });
         let allMerged = [...mergedCollections, ...localOnlyCollections]
           .filter(c => !pendingDeletionIds.has(c.id));
-
-        // SAFETY GUARD: Never lose collections during merge.
-        // Only preserve RECENT collections not in the merge result (< 2min old).
-        // Stale entries (deleted on another device/origin) should not be resurrected.
-        const mergedIds = new Set(allMerged.map(c => c.id));
-        const lostCollections = localCollections.filter(lc => {
-          if (mergedIds.has(lc.id)) return false;
-          if (pendingDeletionIds.has(lc.id)) return false;
-          const age = now - new Date(lc.createdAt || lc.updatedAt || 0).getTime();
-          return age < LOCAL_ONLY_TTL;
-        });
-        if (lostCollections.length > 0) {
-          log.warn('[Collections] Subscription merge would lose', lostCollections.length,
-            'recent collections, preserving:', lostCollections.map(c => `${c.name}(${c.id})`));
-          allMerged = [...allMerged, ...lostCollections];
-        }
 
         // SAFETY GUARD: Never reduce a collection's mediaIds count during merge
         // UNLESS the reduction is from an intentional removal (tracked in recentCollectionRemovals).

@@ -324,26 +324,28 @@ const ProjectLanding = ({
   const selectedProjectIdsRef = useRef(selectedProjectIds);
   selectedProjectIdsRef.current = selectedProjectIds;
 
-  // Batch delete selected projects — calls Firestore deleteDoc directly
+  // Batch delete selected projects — deletes from Firestore, updates UI state directly
   const handleBatchDelete = useCallback(async () => {
     const ids = [...selectedProjectIdsRef.current];
     if (ids.length === 0) return;
 
     setIsBatchDeleting(true);
-    // Use component state (not localStorage which may be filtered by pendingDeletionIds)
     const allCols = collections.filter(c => c.type !== 'smart' && !c.id?.startsWith('smart_'));
     let deleted = 0;
+    const allDeletedIds = new Set();
 
-    // Step 1: Delete from Firestore directly (the IDs are known, no lookup needed)
+    // Step 1: Delete from Firestore directly
     for (const projectId of ids) {
       try {
         if (!db) continue;
         markCollectionPendingDeletion(projectId);
+        allDeletedIds.add(projectId);
 
         // Find and delete niches for this project
         const niches = allCols.filter(c => c.projectId === projectId);
         for (const n of niches) {
           markCollectionPendingDeletion(n.id);
+          allDeletedIds.add(n.id);
           const nRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', n.id);
           await deleteDoc(nRef);
           log.info('[BatchDelete] Firestore deleted niche:', n.name, n.id);
@@ -359,29 +361,23 @@ const ProjectLanding = ({
       }
     }
 
-    // Step 2: Clean localStorage — free space first, then write smaller data
-    const deletedIds = new Set(ids);
-    allCols.filter(c => deletedIds.has(c.projectId)).forEach(n => deletedIds.add(n.id));
-    const cleaned = allCols.filter(c => !deletedIds.has(c.id));
-    const collectionsKey = `stm_collections_${artistId}`;
+    // Step 2: Update component state directly (don't rely on localStorage)
+    setCollections(prev => prev.filter(c => !allDeletedIds.has(c.id)));
+
+    // Step 3: Best-effort localStorage cleanup (may fail if quota exceeded — that's OK)
     try {
-      // Free space by removing big keys first
+      const collectionsKey = `stm_collections_${artistId}`;
+      const cleaned = allCols.filter(c => !allDeletedIds.has(c.id));
       localStorage.removeItem(collectionsKey);
-      localStorage.removeItem(`stm_library_${artistId}`);
-      localStorage.removeItem(`stm_created_content_${artistId}`);
-      // Write the smaller collections list
       localStorage.setItem(collectionsKey, JSON.stringify(cleaned));
-      log.info('[BatchDelete] localStorage updated:', cleaned.length, 'collections remaining');
     } catch (e) {
-      log.error('[BatchDelete] localStorage write failed:', e.message);
+      log.warn('[BatchDelete] localStorage write skipped (quota):', e.message);
     }
 
     setSelectedProjectIds(new Set());
     setIsBatchDeleting(false);
-    // Force UI refresh — library/content will re-populate from Firestore subscription
-    setCollections(getCollections(artistId));
     if (deleted > 0) toastSuccess(`Deleted ${deleted} project${deleted !== 1 ? 's' : ''}`);
-  }, [artistId, db, toastSuccess]);
+  }, [artistId, db, collections, toastSuccess]);
 
   // Quick-schedule a draft
   const handleQuickSchedule = useCallback(async () => {
