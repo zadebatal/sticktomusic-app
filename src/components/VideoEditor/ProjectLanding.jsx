@@ -41,6 +41,7 @@ import { DropdownMenu } from '../../ui/components/DropdownMenu';
 import { useToast, ConfirmDialog } from '../ui';
 import useIsMobile from '../../hooks/useIsMobile';
 import log from '../../utils/logger';
+import { doc, deleteDoc } from 'firebase/firestore';
 
 /** Format a scheduledTime ISO string as relative/short time */
 function formatRelativeTime(isoString) {
@@ -323,34 +324,59 @@ const ProjectLanding = ({
   const selectedProjectIdsRef = useRef(selectedProjectIds);
   selectedProjectIdsRef.current = selectedProjectIds;
 
-  // Batch delete selected projects
+  // Batch delete selected projects — calls Firestore deleteDoc directly
   const handleBatchDelete = useCallback(async () => {
     const ids = [...selectedProjectIdsRef.current];
-    if (ids.length === 0) {
-      log.error('[ProjectLanding] Batch delete called with empty selection');
-      return;
-    }
-    log.info('[ProjectLanding] Batch deleting', ids.length, 'projects');
+    if (ids.length === 0) return;
+
     setIsBatchDeleting(true);
+    const cols = getUserCollections(artistId);
     let deleted = 0;
-    let lastError = null;
-    for (const id of ids) {
+
+    for (const projectId of ids) {
       try {
-        await deleteProjectCore(id);
+        const project = cols.find(c => c.id === projectId);
+        if (!project) { log.warn('[BatchDelete] Project not found:', projectId); continue; }
+
+        markCollectionPendingDeletion(projectId);
+        const niches = cols.filter(c => c.projectId === projectId);
+        for (const n of niches) markCollectionPendingDeletion(n.id);
+
+        // Delete niches from Firestore directly
+        for (const n of niches) {
+          if (db) {
+            const nRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', n.id);
+            await deleteDoc(nRef);
+            log.info('[BatchDelete] Firestore deleted niche:', n.name, n.id);
+          }
+        }
+
+        // Delete project root from Firestore directly
+        if (db) {
+          const pRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', projectId);
+          await deleteDoc(pRef);
+          log.info('[BatchDelete] Firestore deleted project:', project.name, projectId);
+        }
+
         deleted++;
       } catch (err) {
-        lastError = err;
-        log.error('[ProjectLanding] Batch delete failed for', id, err);
+        log.error('[BatchDelete] Failed:', projectId, err);
       }
     }
+
+    // Now clean localStorage: remove all deleted IDs
+    const deletedIds = new Set(ids);
+    // Also include niches of deleted projects
+    cols.filter(c => deletedIds.has(c.projectId)).forEach(n => deletedIds.add(n.id));
+    const cleaned = cols.filter(c => !deletedIds.has(c.id));
+    saveCollections(artistId, cleaned);
+
     setSelectedProjectIds(new Set());
     setIsBatchDeleting(false);
-    // Force UI refresh from localStorage (subscriptions may lag behind)
     setCollections(getCollections(artistId));
     setCreatedContent(getCreatedContent(artistId));
     if (deleted > 0) toastSuccess(`Deleted ${deleted} project${deleted !== 1 ? 's' : ''}`);
-    if (lastError) toastError(`${ids.length - deleted} project(s) failed to delete`);
-  }, [deleteProjectCore, toastSuccess, toastError, artistId]);
+  }, [artistId, db, toastSuccess]);
 
   // Quick-schedule a draft
   const handleQuickSchedule = useCallback(async () => {
