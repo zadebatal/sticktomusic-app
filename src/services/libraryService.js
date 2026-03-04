@@ -29,11 +29,49 @@ import log from '../utils/logger';
 
 // ============================================================================
 // PENDING DELETION TRACKING (prevents subscription race conditions)
+// Persisted to localStorage so deleted items don't come back on page refresh.
+// Items are auto-cleaned after 5 minutes (Firestore should have caught up by then).
 // ============================================================================
-const pendingDeletionIds = new Set();
-export const markCollectionPendingDeletion = (id) => pendingDeletionIds.add(id);
-export const clearPendingDeletion = (id) => pendingDeletionIds.delete(id);
-export const isCollectionPendingDeletion = (id) => pendingDeletionIds.has(id);
+const PENDING_DELETION_KEY = 'stm_pending_deletions';
+const PENDING_DELETION_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Hydrate from localStorage on module load
+const _loadPendingDeletions = () => {
+  try {
+    const raw = localStorage.getItem(PENDING_DELETION_KEY);
+    if (!raw) return new Map();
+    const entries = JSON.parse(raw);
+    const now = Date.now();
+    // Filter out expired entries
+    const valid = entries.filter(([, ts]) => now - ts < PENDING_DELETION_TTL);
+    if (valid.length !== entries.length) {
+      localStorage.setItem(PENDING_DELETION_KEY, JSON.stringify(valid));
+    }
+    return new Map(valid);
+  } catch { return new Map(); }
+};
+
+const pendingDeletionMap = _loadPendingDeletions();
+// Compat wrapper: expose as Set-like for existing code
+const pendingDeletionIds = {
+  has: (id) => pendingDeletionMap.has(id),
+  add: () => {}, // no-op, use markCollectionPendingDeletion
+  delete: () => {}, // no-op, use clearPendingDeletion
+};
+
+export const markCollectionPendingDeletion = (id) => {
+  pendingDeletionMap.set(id, Date.now());
+  try {
+    localStorage.setItem(PENDING_DELETION_KEY, JSON.stringify([...pendingDeletionMap]));
+  } catch {}
+};
+export const clearPendingDeletion = (id) => {
+  pendingDeletionMap.delete(id);
+  try {
+    localStorage.setItem(PENDING_DELETION_KEY, JSON.stringify([...pendingDeletionMap]));
+  } catch {}
+};
+export const isCollectionPendingDeletion = (id) => pendingDeletionMap.has(id);
 
 // ============================================================================
 // RECENT COLLECTION WRITES (protects against subscription overwriting fresh data)
