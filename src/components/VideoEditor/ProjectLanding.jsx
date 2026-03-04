@@ -295,12 +295,14 @@ const ProjectLanding = ({
       // Delete project root via libraryService (handles both localStorage + Firestore)
       await deleteCollectionAsync(db, artistId, projectId);
 
-      // Clear pending deletion now that Firestore doc is gone
-      clearPendingDeletion(projectId);
-      for (const n of niches) clearPendingDeletion(n.id);
+      // DO NOT clearPendingDeletion here — the Firestore subscription may not
+      // have received the delete yet. If we clear the pending flag too early,
+      // the subscription's safety guard re-adds the collection from the stale
+      // Firestore snapshot. The pending IDs live in memory and are naturally
+      // cleared on page refresh, by which time Firestore has caught up.
     } catch (err) {
       log.error('[ProjectLanding] Delete project failed:', err);
-      // Clear pending markers so items reappear
+      // Clear pending markers on error so items reappear
       clearPendingDeletion(projectId);
       for (const n of niches) clearPendingDeletion(n.id);
       throw err;
