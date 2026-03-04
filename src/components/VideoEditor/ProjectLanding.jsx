@@ -173,14 +173,30 @@ const ProjectLanding = ({
   }, []);
   const hasSelection = selectedProjectIds.size > 0;
 
-  // Stats per project
+  // Stats per project — computed from component state (not localStorage)
   const projectStats = useMemo(() => {
+    const userCols = collections.filter(c => c.type !== 'smart' && !c.id?.startsWith('smart_'));
     const stats = {};
     projects.forEach(p => {
-      stats[p.id] = getProjectStats(artistId, p.id);
+      const niches = userCols.filter(c => c.projectId === p.id && c.isPipeline);
+      const nicheIds = new Set(niches.map(n => n.id));
+      const draftCount = [
+        ...(createdContent.slideshows || []).filter(s => !s.isTemplate && nicheIds.has(s.collectionId)),
+        ...(createdContent.videos || []).filter(v => nicheIds.has(v.collectionId)),
+      ].length;
+      const nicheFormats = niches.map(n => {
+        const fmt = n.formats?.[0];
+        return fmt?.name || n.name || 'Niche';
+      });
+      stats[p.id] = {
+        nicheCount: niches.length,
+        nicheFormats,
+        draftCount,
+        mediaCount: (p.mediaIds || []).length,
+      };
     });
     return stats;
-  }, [projects, artistId, collections, createdContent]);
+  }, [projects, collections, createdContent]);
 
   // Total drafts
   const totalDrafts = useMemo(() => {
