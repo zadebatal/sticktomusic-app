@@ -461,16 +461,18 @@ const VideoStudio = ({
   // Wrap setCurrentView to also update URL
   const setCurrentView = useCallback((view) => {
     setCurrentViewState(view);
+    // Determine base path from current URL (artist vs operator)
+    const base = location.pathname.startsWith('/artist/') ? '/artist/studio' : '/operator/studio';
     // Update URL based on view
-    let targetPath = '/operator/studio';
-    if (view === 'library') targetPath = '/operator/studio/library';
-    else if (view === 'slideshows') targetPath = '/operator/studio/slideshows';
-    else if (view === 'drafts') targetPath = '/operator/studio/drafts';
-    else if (view === 'media') targetPath = '/operator/studio/media';
-    else if (view === 'scheduling') targetPath = '/operator/studio/scheduling';
-    else if (view === 'workspace') targetPath = '/operator/studio/workspace';
-    else if (view === 'project') targetPath = '/operator/studio/project';
-    else if (view === 'project-wizard') targetPath = '/operator/studio/wizard';
+    let targetPath = base;
+    if (view === 'library') targetPath = `${base}/library`;
+    else if (view === 'slideshows') targetPath = `${base}/slideshows`;
+    else if (view === 'drafts') targetPath = `${base}/drafts`;
+    else if (view === 'media') targetPath = `${base}/media`;
+    else if (view === 'scheduling') targetPath = `${base}/scheduling`;
+    else if (view === 'workspace') targetPath = `${base}/workspace`;
+    else if (view === 'project') targetPath = `${base}/project`;
+    else if (view === 'project-wizard') targetPath = `${base}/wizard`;
     if (location.pathname !== targetPath) {
       navigate(targetPath, { replace: false });
     }
@@ -492,7 +494,7 @@ const VideoStudio = ({
     else if (path.includes('/studio/media')) setCurrentViewState('media');
     else if (path.includes('/studio/library')) setCurrentViewState('library');
     else if (path.includes('/studio/slideshows')) setCurrentViewState('slideshows');
-    else if (path === '/operator/studio') {
+    else if (path === '/operator/studio' || path === '/artist/studio') {
       setCurrentViewState('home');
       // Clear project state so stale IDs don't persist
       setActiveProjectId(null);
@@ -1859,7 +1861,6 @@ const VideoStudio = ({
   const handleCloseSlideshowEditor = useCallback(() => {
     setShowSlideshowEditor(false);
     setEditingSlideshow(null);
-    setPendingTemplateSettings(null);
     // Clear selected images so they don't persist into next editor session
     setSelectedLibraryMedia(prev => ({ ...prev, images: [] }));
   }, []);
