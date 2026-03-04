@@ -364,12 +364,19 @@ const ProjectLanding = ({
       }
     }
 
-    // Now clean localStorage: remove all deleted IDs
+    // Clean localStorage directly — bypass saveCollections safety guards
+    // and free space first (localStorage quota may be full)
     const deletedIds = new Set(ids);
-    // Also include niches of deleted projects
     cols.filter(c => deletedIds.has(c.projectId)).forEach(n => deletedIds.add(n.id));
     const cleaned = cols.filter(c => !deletedIds.has(c.id));
-    saveCollections(artistId, cleaned);
+    const collectionsKey = `stm_collections_${artistId}`;
+    try {
+      localStorage.removeItem(collectionsKey);
+      localStorage.setItem(collectionsKey, JSON.stringify(cleaned));
+      log.info('[BatchDelete] localStorage updated:', cleaned.length, 'collections remaining');
+    } catch (e) {
+      log.error('[BatchDelete] localStorage write failed:', e.message);
+    }
 
     setSelectedProjectIds(new Set());
     setIsBatchDeleting(false);
