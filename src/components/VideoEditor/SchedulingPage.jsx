@@ -1,18 +1,18 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
-  POST_STATUS, PLATFORMS, PLATFORM_LABELS, PLATFORM_COLORS,
-  createScheduledPost, updateScheduledPost, deleteScheduledPost,
-  getScheduledPosts, subscribeToScheduledPosts, reorderPosts,
+  POST_STATUS, PLATFORM_LABELS, PLATFORM_COLORS,
+  updateScheduledPost, deleteScheduledPost,
+  subscribeToScheduledPosts, reorderPosts,
   addManyScheduledPosts
 } from '../../services/scheduledPostsService';
 import { getTemplates, generateFromTemplate } from '../../services/contentTemplateService';
 
 import { useToast, ConfirmDialog } from '../ui';
-import { getCreatedContent, getCollections, getCollectionHashtagBank, getCollectionCaptionBank, getLibrary, getEffectiveHashtags, getProjects, getProjectNiches, getProjectById } from '../../services/libraryService';
+import { getCreatedContent, getCollections, getCollectionHashtagBank, getCollectionCaptionBank, getLibrary, getProjects, getProjectNiches } from '../../services/libraryService';
 import { renderVideo } from '../../services/videoExportService';
 import { exportSlideshowAsImages, generateSlideThumbnail } from '../../services/slideshowExportService';
 import { uploadFile } from '../../services/firebaseStorage';
-import { startPolling, pollOverduePosts } from '../../services/postStatusPolling';
+import { startPolling } from '../../services/postStatusPolling';
 import { getAuth } from 'firebase/auth';
 import log from '../../utils/logger';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -28,7 +28,7 @@ import {
   FeatherList, FeatherCalendar, FeatherChevronDown,
   FeatherTrash2, FeatherX, FeatherUser,
   FeatherGripVertical, FeatherEdit, FeatherEdit2, FeatherSend, FeatherRotateCcw,
-  FeatherLock, FeatherUnlock, FeatherChevronUp, FeatherChevronLeft, FeatherChevronRight, FeatherImage, FeatherMusic,
+  FeatherLock, FeatherUnlock, FeatherChevronUp, FeatherChevronLeft, FeatherChevronRight, FeatherMusic,
   FeatherUploadCloud, FeatherRefreshCw,
 } from '@subframe/core';
 import UploadFinishedMediaModal from './UploadFinishedMediaModal';

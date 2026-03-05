@@ -37,30 +37,8 @@ import useTimelineZoom from '../../hooks/useTimelineZoom';
 import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
 import LyricBankSection from './shared/LyricBankSection';
 import { FeatherAlignLeft, FeatherAlignCenter, FeatherAlignRight } from '@subframe/core';
-
-// Stroke string helpers: parse "0.5px black" ↔ { width: 0.5, color: '#000000' }
-const parseStroke = (str) => {
-  if (!str) return { width: 0.5, color: '#000000' };
-  const match = str.match(/([\d.]+)px\s+(.*)/);
-  if (!match) return { width: 0.5, color: '#000000' };
-  return { width: parseFloat(match[1]) || 0.5, color: match[2] || '#000000' };
-};
-const buildStroke = (width, color) => `${width}px ${color}`;
-
-const AVAILABLE_FONTS = [
-  { name: 'Inter', value: "'Inter', sans-serif" },
-  { name: 'Arial', value: 'Arial, sans-serif' },
-  { name: 'Arial Narrow', value: "'Arial Narrow', Arial, sans-serif" },
-  { name: 'Georgia', value: 'Georgia, serif' },
-  { name: 'Times New Roman', value: "'Times New Roman', serif" },
-  { name: 'Courier New', value: "'Courier New', monospace" },
-  { name: 'Impact', value: 'Impact, sans-serif' },
-  { name: 'Comic Sans', value: "'Comic Sans MS', cursive" },
-  { name: 'Trebuchet', value: "'Trebuchet MS', sans-serif" },
-  { name: 'Verdana', value: 'Verdana, sans-serif' },
-  { name: 'Palatino', value: "'Palatino Linotype', serif" },
-  { name: 'TikTok Sans', value: "'TikTok Sans', sans-serif" }
-];
+import { parseStroke, buildStroke, AVAILABLE_FONTS, makeFieldSetter } from './shared/editorConstants';
+import CloseConfirmOverlay from './shared/CloseConfirmOverlay';
 
 /**
  * MultiClipEditor v1 — "Multi-Clip" video editor mode
@@ -143,47 +121,10 @@ const MultiClipEditor = ({
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
 
-  // Wrapper setters (route through allVideos)
-  const setClips = useCallback((updater) => {
-    setAllVideos(prev => {
-      const copy = [...prev];
-      const current = copy[activeVideoIndex];
-      if (!current) return prev;
-      copy[activeVideoIndex] = {
-        ...current,
-        clips: typeof updater === 'function' ? updater(current.clips || []) : updater
-      };
-      return copy;
-    });
-  }, [activeVideoIndex]);
-
-  const setTextOverlays = useCallback((updater) => {
-    setAllVideos(prev => {
-      const copy = [...prev];
-      const current = copy[activeVideoIndex];
-      if (!current) return prev;
-      copy[activeVideoIndex] = {
-        ...current,
-        textOverlays: typeof updater === 'function'
-          ? updater(current.textOverlays || [])
-          : updater
-      };
-      return copy;
-    });
-  }, [activeVideoIndex]);
-
-  const setWords = useCallback((updater) => {
-    setAllVideos(prev => {
-      const copy = [...prev];
-      const current = copy[activeVideoIndex];
-      if (!current) return prev;
-      copy[activeVideoIndex] = {
-        ...current,
-        words: typeof updater === 'function' ? updater(current.words || []) : updater
-      };
-      return copy;
-    });
-  }, [activeVideoIndex]);
+  // Wrapper setters (route through allVideos via shared factory)
+  const setClips = useMemo(() => makeFieldSetter(setAllVideos, activeVideoIndex, 'clips', []), [activeVideoIndex]);
+  const setTextOverlays = useMemo(() => makeFieldSetter(setAllVideos, activeVideoIndex, 'textOverlays', []), [activeVideoIndex]);
+  const setWords = useMemo(() => makeFieldSetter(setAllVideos, activeVideoIndex, 'words', []), [activeVideoIndex]);
 
   // ── Undo/Redo history ──
   const getHistorySnapshot = useCallback(() => {
@@ -3029,18 +2970,7 @@ const MultiClipEditor = ({
 
         {/* ── Close Confirmation ── */}
         {showCloseConfirm && (
-          <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-[100]">
-            <div className="bg-[#171717] rounded-xl p-6 max-w-[360px] w-full border border-neutral-200">
-              <h3 className="text-[16px] font-semibold mb-2" style={{ color: theme.text.primary }}>Close editor?</h3>
-              <p className="text-[13px] mb-4" style={{ color: theme.text.secondary }}>
-                You have unsaved work. Are you sure you want to close?
-              </p>
-              <div className="flex gap-2 justify-end">
-                <Button variant="neutral-secondary" size="small" onClick={() => setShowCloseConfirm(false)}>Keep Editing</Button>
-                <Button variant="destructive-primary" size="small" onClick={() => { setShowCloseConfirm(false); onClose(); }}>Close Anyway</Button>
-              </div>
-            </div>
-          </div>
+          <CloseConfirmOverlay onKeepEditing={() => setShowCloseConfirm(false)} onClose={() => { setShowCloseConfirm(false); onClose(); }} />
         )}
 
         {/* ── Preset Save Modal ── */}

@@ -305,15 +305,6 @@ export function loadApiKey(service) {
   return keys[service] || null;
 }
 
-/**
- * Clear API key for a service
- */
-export function clearApiKey(service) {
-  const keys = loadFromStorage(STORAGE_KEYS.API_KEYS, {});
-  delete keys[service];
-  return saveToStorage(STORAGE_KEYS.API_KEYS, keys);
-}
-
 // ==================== SETTINGS ====================
 
 /**
@@ -354,37 +345,6 @@ export function loadLyricTemplate(audioSource) {
   return templates[audioSource] || null;
 }
 
-// ==================== UTILITY ====================
-
-/**
- * Clear all stored data
- */
-export function clearAllData() {
-  Object.values(STORAGE_KEYS).forEach(key => {
-    localStorage.removeItem(key);
-  });
-}
-
-/**
- * Get storage usage info
- */
-export function getStorageInfo() {
-  let totalSize = 0;
-  const breakdown = {};
-
-  for (const key of Object.keys(localStorage)) {
-    const size = (localStorage.getItem(key) || '').length * 2; // UTF-16
-    totalSize += size;
-    breakdown[key] = (size / 1024).toFixed(2) + ' KB';
-  }
-
-  return {
-    total: (totalSize / 1024 / 1024).toFixed(2) + ' MB',
-    breakdown,
-    isNearLimit: totalSize > 4 * 1024 * 1024 // Warn if over 4MB (limit is ~5MB)
-  };
-}
-
 /**
  * Clean up storage by removing thumbnails from existing data
  * Call this if quota is exceeded
@@ -421,12 +381,9 @@ export default {
   // Other functions
   saveApiKey,
   loadApiKey,
-  clearApiKey,
   saveSettings,
   loadSettings,
   saveLyricTemplate,
   loadLyricTemplate,
-  clearAllData,
-  getStorageInfo,
   cleanupStorage
 };

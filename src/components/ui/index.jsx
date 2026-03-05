@@ -200,54 +200,6 @@ export const LoadingSpinner = ({ size = 'md', message = 'Loading...' }) => {
   );
 };
 
-// Full page loading overlay
-export const LoadingOverlay = ({ message = 'Loading...' }) => (
-  <div className="fixed inset-0 bg-zinc-950/90 flex items-center justify-center z-50">
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 flex flex-col items-center gap-4">
-      <div className="w-10 h-10 border-2 border-zinc-700 border-t-purple-500 rounded-full animate-spin" />
-      <p className="text-zinc-300">{message}</p>
-    </div>
-  </div>
-);
-
-// ============================================
-// ERROR PANEL
-// ============================================
-export const ErrorPanel = ({
-  title = 'Something went wrong',
-  message = 'An unexpected error occurred.',
-  onRetry,
-  retryLabel = 'Try Again'
-}) => (
-  <div className="bg-red-950/30 border border-red-900/50 rounded-xl p-6 text-center">
-    <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-900/30 flex items-center justify-center">
-      <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-      </svg>
-    </div>
-    <h3 className="text-lg font-semibold text-red-300 mb-2">{title}</h3>
-    <p className="text-sm text-zinc-400 mb-4">{message}</p>
-    {onRetry && (
-      <button
-        onClick={onRetry}
-        className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition"
-      >
-        {retryLabel}
-      </button>
-    )}
-  </div>
-);
-
-// Inline error message
-export const ErrorMessage = ({ message }) => (
-  <p className="text-sm text-red-400 mt-1 flex items-center gap-1">
-    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-    </svg>
-    {message}
-  </p>
-);
-
 // ============================================
 // EMPTY STATE
 // ============================================
@@ -409,37 +361,6 @@ export const StatusPill = ({ status, size = 'sm' }) => {
 };
 
 // ============================================
-// PAGE HEADER
-// ============================================
-export const PageHeader = ({ title, subtitle, actions }) => (
-  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-    <div>
-      <h1 className="text-2xl font-bold text-white">{title}</h1>
-      {subtitle && <p className="text-sm text-zinc-500 mt-1">{subtitle}</p>}
-    </div>
-    {actions && <div className="flex gap-3">{actions}</div>}
-  </div>
-);
-
-// ============================================
-// SECTION HEADER
-// ============================================
-export const SectionHeader = ({ title, action, actionLabel, onAction }) => (
-  <div className="flex justify-between items-center mb-4">
-    <h2 className="text-lg font-semibold text-zinc-200">{title}</h2>
-    {actionLabel && onAction && (
-      <button
-        onClick={onAction}
-        className="text-sm text-purple-400 hover:text-purple-300 transition"
-      >
-        {actionLabel}
-      </button>
-    )}
-    {action}
-  </div>
-);
-
-// ============================================
 // CARD
 // ============================================
 export const Card = ({ children, className = '', padding = 'p-6' }) => (
@@ -447,54 +368,6 @@ export const Card = ({ children, className = '', padding = 'p-6' }) => (
     {children}
   </div>
 );
-
-// ============================================
-// HELPER TEXT (for disabled buttons)
-// ============================================
-export const HelperText = ({ children }) => (
-  <p className="text-xs text-zinc-500 mt-1">{children}</p>
-);
-
-// ============================================
-// BUTTON WITH LOADING
-// ============================================
-export const Button = ({
-  children,
-  onClick,
-  variant = 'primary', // 'primary' | 'secondary' | 'ghost' | 'destructive'
-  size = 'md',
-  disabled = false,
-  loading = false,
-  className = '',
-  ...props
-}) => {
-  const variants = {
-    primary: 'bg-purple-600 hover:bg-purple-500 text-white',
-    secondary: 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300',
-    ghost: 'bg-transparent hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200',
-    destructive: 'bg-red-600 hover:bg-red-500 text-white',
-  };
-
-  const sizes = {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2 text-sm',
-    lg: 'px-6 py-3 text-base',
-  };
-
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled || loading}
-      className={`${variants[variant]} ${sizes[size]} font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 ${className}`}
-      {...props}
-    >
-      {loading && (
-        <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" />
-      )}
-      {children}
-    </button>
-  );
-};
 
 // ============================================
 // SKELETON LOADER
@@ -513,19 +386,3 @@ export const Skeleton = ({ className = '', variant = 'text' }) => {
   );
 };
 
-// ============================================
-// SKELETON CARD
-// ============================================
-export const SkeletonCard = () => (
-  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-    <div className="flex items-center gap-4 mb-4">
-      <Skeleton variant="avatar" />
-      <div className="flex-1 space-y-2">
-        <Skeleton variant="title" />
-        <Skeleton className="w-1/2" />
-      </div>
-    </div>
-    <Skeleton className="mb-2" />
-    <Skeleton className="w-2/3" />
-  </div>
-);

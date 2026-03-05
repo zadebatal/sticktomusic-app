@@ -604,60 +604,7 @@ export const renderPreview = async (videoData, onProgress = () => {}) => {
   return await renderWithCanvas({ ...previewData, duration: previewDuration }, onProgress);
 };
 
-/**
- * Export first frame as thumbnail
- */
-export const exportThumbnail = async (videoData) => {
-  const { clips, cropMode } = videoData;
-
-  if (!clips || clips.length === 0) {
-    throw new Error('No clips to export');
-  }
-
-  const dimensions = {
-    '9:16': { width: 540, height: 960 },
-    '4:3': { width: 540, height: 720 },
-    '1:1': { width: 540, height: 540 }
-  };
-  const { width, height } = dimensions[cropMode] || dimensions['9:16'];
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-
-  // Load first clip - prefer cloud URL over expired blob URLs
-  const localUrl = clips[0].localUrl;
-  const isBlobUrl = localUrl && localUrl.startsWith('blob:');
-  const url = isBlobUrl ? clips[0].url : (localUrl || clips[0].url);
-  const video = await loadVideo(url);
-
-  // Draw frame
-  const videoRatio = video.videoWidth / video.videoHeight;
-  const canvasRatio = width / height;
-
-  let sx, sy, sw, sh;
-  if (videoRatio > canvasRatio) {
-    sh = video.videoHeight;
-    sw = sh * canvasRatio;
-    sx = (video.videoWidth - sw) / 2;
-    sy = 0;
-  } else {
-    sw = video.videoWidth;
-    sh = sw / canvasRatio;
-    sx = 0;
-    sy = (video.videoHeight - sh) / 2;
-  }
-
-  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
-
-  return new Promise((resolve) => {
-    canvas.toBlob(resolve, 'image/jpeg', 0.85);
-  });
-};
-
 export default {
   renderVideo,
-  renderPreview,
-  exportThumbnail
+  renderPreview
 };

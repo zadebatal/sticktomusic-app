@@ -32,14 +32,7 @@ import useUnsavedChanges from './shared/useUnsavedChanges';
 // Stable empty array for fallbacks — prevents new [] reference on every render
 const EMPTY_SLIDES = [];
 
-// Stroke string helpers: parse "0.5px black" ↔ { width: 0.5, color: '#000000' }
-const parseStroke = (str) => {
-  if (!str) return { width: 0.5, color: '#000000' };
-  const match = str.match(/([\d.]+)px\s+(.*)/);
-  if (!match) return { width: 0.5, color: '#000000' };
-  return { width: parseFloat(match[1]) || 0.5, color: match[2] || '#000000' };
-};
-const buildStroke = (width, color) => `${width}px ${color}`;
+import { parseStroke, buildStroke, AVAILABLE_FONTS } from './shared/editorConstants';
 
 const SlideshowEditor = ({
   db = null,
@@ -3950,21 +3943,6 @@ const SlideshowEditor = ({
  * TextEditorPanel - Flowstage-style side panel for text editing
  * Shows all text overlays on slide, allows editing, and pulling from lyric bank
  */
-// Available fonts for text overlays
-const AVAILABLE_FONTS = [
-  { name: 'Inter', value: "'Inter', sans-serif" },
-  { name: 'Arial', value: 'Arial, sans-serif' },
-  { name: 'Arial Narrow', value: "'Arial Narrow', Arial, sans-serif" },
-  { name: 'Georgia', value: 'Georgia, serif' },
-  { name: 'Times New Roman', value: "'Times New Roman', serif" },
-  { name: 'Courier New', value: "'Courier New', monospace" },
-  { name: 'Impact', value: 'Impact, sans-serif' },
-  { name: 'Comic Sans', value: "'Comic Sans MS', cursive" },
-  { name: 'Trebuchet', value: "'Trebuchet MS', sans-serif" },
-  { name: 'Verdana', value: 'Verdana, sans-serif' },
-  { name: 'Palatino', value: "'Palatino Linotype', serif" },
-  { name: 'TikTok Sans', value: "'TikTok Sans', sans-serif" }
-];
 
 const TextEditorPanel = ({
   slide,

@@ -18,12 +18,10 @@ import {
   getTextBankStyle,
   getBankColor,
   MEDIA_TYPES,
-  THUMB_MAX_SIZE,
-  THUMB_QUALITY,
-  THUMB_VERSION,
   subscribeToCollections,
   subscribeToLibrary,
 } from '../../../services/libraryService';
+import { THUMB_MAX_SIZE, THUMB_QUALITY, THUMB_VERSION } from '../../../services/thumbnailService';
 import { uploadFile } from '../../../services/firebaseStorage';
 import { convertImageIfNeeded } from '../../../utils/imageConverter';
 import { runPool } from '../../../utils/uploadPool';

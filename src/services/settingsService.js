@@ -106,13 +106,6 @@ export async function saveSettings(db, artistId, patch) {
 }
 
 /**
- * Save a specific preference (convenience wrapper).
- */
-export async function savePref(db, artistId, category, key, value) {
-  return saveSettings(db, artistId, { [category]: { [key]: value } });
-}
-
-/**
  * Clear cache for an artist (call on artist switch).
  */
 export function clearSettingsCache(artistId) {

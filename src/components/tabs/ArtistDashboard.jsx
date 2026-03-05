@@ -2,7 +2,7 @@ import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { doc, updateDoc } from 'firebase/firestore';
 import { useToast } from '../ui';
 import { getTierForSets, computeSocialSetsUsed, shouldShowPaymentUI } from '../../services/subscriptionService';
-import { PLATFORM_META, getProfileUrl, formatFollowers } from '../../utils/platformUtils';
+import { PLATFORM_META, ALL_PLATFORMS, getProfileUrl, formatFollowers } from '../../utils/platformUtils';
 import { subscribeToScheduledPosts, POST_STATUS, PLATFORM_COLORS } from '../../services/scheduledPostsService';
 import { subscribeToCreatedContent, getProjects, getProjectNiches } from '../../services/libraryService';
 import { getLateProfiles, createLateProfile, getConnectUrl } from '../../services/lateService';
@@ -126,8 +126,6 @@ const ArtistDashboard = ({
   const [showAddForm, setShowAddForm] = useState(false);
   const [newHandle, setNewHandle] = useState('');
   const [newPlatform, setNewPlatform] = useState('tiktok');
-
-  const ALL_PLATFORMS = ['tiktok', 'instagram', 'youtube', 'facebook'];
 
   // Late OAuth connect flow
   const oauthPendingRef = useRef(false);

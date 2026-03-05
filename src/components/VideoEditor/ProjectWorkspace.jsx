@@ -12,8 +12,6 @@ import {
   getCreatedContent,
   deleteCreatedSlideshowAsync,
   softDeleteCreatedVideoAsync,
-  getProjectById,
-  getProjectNiches,
   createNiche,
   addToProjectPool,
   addToCollection,
@@ -31,11 +29,6 @@ import {
   subscribeToCreatedContent,
   FORMAT_TEMPLATES,
   MEDIA_TYPES,
-  getBankColor,
-  THUMB_MAX_SIZE,
-  THUMB_QUALITY,
-  THUMB_VERSION,
-  migrateThumbnails,
   updateProjectCaptionBank,
   updateProjectHashtagBank,
   updateNicheCaptionBank,
@@ -49,6 +42,7 @@ import {
   removeFromProjectPool,
   assignToMediaBank,
 } from '../../services/libraryService';
+import { migrateThumbnails, THUMB_MAX_SIZE, THUMB_QUALITY, THUMB_VERSION } from '../../services/thumbnailService';
 import { uploadFile, uploadFileWithQuota, getMediaDuration } from '../../services/firebaseStorage';
 import { convertImageIfNeeded } from '../../utils/imageConverter';
 import { convertAudioIfNeeded } from '../../utils/audioConverter';
@@ -63,7 +57,7 @@ import {
   FeatherHash, FeatherMessageSquare, FeatherTrash2, FeatherScissors,
   FeatherZap,
 } from '@subframe/core';
-import { useToast, ConfirmDialog } from '../ui';
+import { useToast } from '../ui';
 import SlideshowNicheContent from './SlideshowNicheContent';
 import VideoNicheContent from './VideoNicheContent';
 import FinishedMediaNicheContent from './FinishedMediaNicheContent';
@@ -1775,9 +1769,7 @@ const ImportFromLibraryModal = ({ items: defaultItems, onImport: defaultOnImport
 // ProjectCaptionPage — Captions & Hashtags with Scope Tabs + Platform Rules
 // ═══════════════════════════════════════════════════
 
-const PLATFORM_COLORS_MAP = { instagram: '#E1306C', tiktok: '#00f2ea', youtube: '#FF0000', facebook: '#1877F2' };
-const PLATFORM_NAMES = { instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', facebook: 'Facebook' };
-const ALL_PLATFORMS = ['tiktok', 'instagram', 'youtube', 'facebook'];
+import { ALL_PLATFORMS, PLATFORM_LABELS as PLATFORM_NAMES, PLATFORM_COLORS as PLATFORM_COLORS_MAP } from '../../config/platforms';
 
 // Helper: extract text from caption (supports string | { text, generatedBy, generatedAt })
 const getCaptionText = (cap) => typeof cap === 'string' ? cap : (cap?.text || '');

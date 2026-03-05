@@ -26,32 +26,23 @@ import TextBankPanel from './TextBankPanel';
 import { useToast, ConfirmDialog } from '../ui';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
-import { FeatherX, FeatherTrash2, FeatherPlus, FeatherEye, FeatherCalendar, FeatherFilm, FeatherImage } from '@subframe/core';
+import { FeatherTrash2, FeatherEye, FeatherCalendar, FeatherFilm, FeatherImage } from '@subframe/core';
 import {
   getLibrary,
   getCollections,
-  getUserCollections,
   getCollectionMedia,
-  addToLibrary,
-  addManyToLibrary,
   getCreatedContent,
-  addCreatedVideo,
   addCreatedSlideshow,
   saveCreatedContentAsync,
   getLyrics,
-  addLyrics,
-  updateLyrics,
-  deleteLyrics,
   subscribeToLyrics,
   addLyricsAsync,
   updateLyricsAsync,
   deleteLyricsAsync,
-  getOnboardingStatus,
   incrementUseCount,
   addToCollectionAsync,
   saveCollectionToFirestore,
   MEDIA_TYPES,
-  STARTER_TEMPLATES,
   // Firestore async functions
   subscribeToLibrary,
   subscribeToCollections,
@@ -60,27 +51,20 @@ import {
   removeFromLibraryAsync,
   updateLibraryItemAsync,
   migrateToFirestore,
-  migrateThumbnails,
-  migrateVideoThumbnails,
-  THUMB_VERSION,
   // Dynamic bank system
   migrateCollectionBanks,
   getBankColor,
   getBankLabel,
-  addBankToCollection,
-  MAX_BANKS,
-  // Collection update
-  updateCollection,
   // Text bank functions
   addToTextBank,
   removeFromTextBank,
   updateTextBank,
-  updateVideoTextBank,
   // Created content subscription
   subscribeToCreatedContent,
   getTextBankText,
   getTextBankStyle
 } from '../../services/libraryService';
+import { migrateThumbnails, migrateVideoThumbnails, THUMB_VERSION } from '../../services/thumbnailService';
 import { uploadFile, getMediaDuration } from '../../services/firebaseStorage';
 import log from '../../utils/logger';
 

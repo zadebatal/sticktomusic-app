@@ -15,7 +15,7 @@ import CloudImportButton from './CloudImportButton';
 import useEditorHistory from '../../hooks/useEditorHistory';
 import useWaveform from '../../hooks/useWaveform';
 import { saveApiKey, loadApiKey } from '../../services/storageService';
-import { ErrorPanel, EmptyState as SharedEmptyState, useToast } from '../ui';
+import { EmptyState as SharedEmptyState, useToast } from '../ui';
 import {
   incrementUseCount, getLibrary, getCollections, getLyrics,
   subscribeToLibrary, subscribeToCollections, addToTextBank, MEDIA_TYPES,
@@ -42,15 +42,7 @@ import EditorTopBar from './shared/EditorTopBar';
 import EditorFooter from './shared/EditorFooter';
 import useCollapsibleSections from './shared/useCollapsibleSections';
 import useUnsavedChanges from './shared/useUnsavedChanges';
-
-// Stroke string helpers: parse "0.5px black" ↔ { width: 0.5, color: '#000000' }
-const parseStroke = (str) => {
-  if (!str) return { width: 0.5, color: '#000000' };
-  const match = str.match(/([\d.]+)px\s+(.*)/);
-  if (!match) return { width: 0.5, color: '#000000' };
-  return { width: parseFloat(match[1]) || 0.5, color: match[2] || '#000000' };
-};
-const buildStroke = (width, color) => `${width}px ${color}`;
+import { parseStroke, buildStroke, AVAILABLE_FONTS } from './shared/editorConstants';
 
 // Default text style used for template initialization and recovery fallback
 const DEFAULT_TEXT_STYLE = {
@@ -58,18 +50,6 @@ const DEFAULT_TEXT_STYLE = {
   color: '#ffffff', outline: true, outlineColor: '#000000', textStroke: null,
   textCase: 'default', displayMode: 'word'
 };
-
-const AVAILABLE_FONTS = [
-  { name: 'Inter', value: "'Inter', sans-serif" },
-  { name: 'Arial', value: 'Arial, sans-serif' },
-  { name: 'Arial Narrow', value: "'Arial Narrow', Arial, sans-serif" },
-  { name: 'Georgia', value: 'Georgia, serif' },
-  { name: 'Times New Roman', value: "'Times New Roman', serif" },
-  { name: 'Courier New', value: "'Courier New', monospace" },
-  { name: 'Impact', value: 'Impact, sans-serif' },
-  { name: 'Comic Sans', value: "'Comic Sans MS', cursive" },
-  { name: 'Trebuchet', value: "'Trebuchet MS', sans-serif" },
-];
 
 /**
  * VideoEditorModal - Flowstage-inspired video editor modal
@@ -110,7 +90,6 @@ const VideoEditorModal = ({
 
   // Mobile responsive detection
   const { isMobile } = useIsMobile();
-  const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(false);
 
   // ── Multi-video state (template + generated variations) ──
   // DEFAULT_TEXT_STYLE defined outside component for stable reference

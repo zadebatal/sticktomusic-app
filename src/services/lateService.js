@@ -17,7 +17,6 @@ import log from '../utils/logger';
 
 // Use our authenticated proxy instead of direct Late API
 const LATE_PROXY = '/api/late';
-const STORAGE_KEY = 'late_connected'; // Only store connection status, not token
 
 /**
  * Get Firebase ID token for authenticated requests
@@ -103,38 +102,6 @@ function assertLateAccess(user, operation = 'Late.co operation') {
     const msg = `Permission denied: ${operation} requires operator access`;
     log.error('[LATE SERVICE]', msg);
     throw new Error(msg);
-  }
-}
-
-export function storeLateConnection(connected = true) {
-  try {
-    localStorage.setItem(STORAGE_KEY, connected ? 'true' : 'false');
-    return true;
-  } catch (error) {
-    log.error('Failed to store Late connection status:', error);
-    return false;
-  }
-}
-
-export function getLateToken() {
-  // For backward compatibility - check if connected
-  return isLateConnected() ? 'connected' : null;
-}
-
-export function clearLateToken() {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-    return true;
-  } catch (error) {
-    return false;
-  }
-}
-
-export function isLateConnected() {
-  try {
-    return localStorage.getItem(STORAGE_KEY) === 'true';
-  } catch {
-    return false;
   }
 }
 
@@ -229,43 +196,6 @@ export async function fetchLateAccounts(artistId = null) {
     log.error('Failed to fetch Late accounts:', error);
     throw error;
   }
-}
-
-export async function validateLateToken(artistId = null) {
-  // BUG-026: Operator check for Late token validation
-  const auth = getAuth();
-  assertLateAccess(auth.currentUser, 'validateLateToken');
-
-  // Token validation now happens server-side
-  // This just checks if we can successfully call the proxy for this artist
-  try {
-    await proxyRequest('accounts', 'GET', null, artistId);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export async function connectLate(artistId, lateApiKey = null) {
-  // If lateApiKey provided, save it securely first
-  if (lateApiKey && artistId) {
-    await setArtistLateKey(artistId, lateApiKey);
-  }
-
-  // Verify connection works
-  const isValid = await validateLateToken(artistId);
-  if (!isValid) {
-    throw new Error('Invalid Late API configuration');
-  }
-
-  storeLateConnection(true);
-  const accounts = await fetchLateAccounts(artistId);
-  return { success: true, accounts };
-}
-
-export function disconnectLate() {
-  clearLateToken();
-  return { success: true };
 }
 
 // ============================================

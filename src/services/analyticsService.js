@@ -480,16 +480,6 @@ const getCategoryBreakdownForSong = (videos) => {
 };
 
 /**
- * Clear all analytics data for an artist
- * @param {string} artistId
- */
-export const clearAnalytics = (artistId) => {
-  if (!artistId) return;
-  localStorage.removeItem(getStorageKey(artistId));
-  localStorage.removeItem(getLastSyncKey(artistId));
-};
-
-/**
  * Add mock data for testing (remove in production)
  * @param {string} artistId
  */
@@ -618,6 +608,5 @@ export default {
   getAccountPerformance,
   getTimeSeriesData,
   getSongAnalytics,
-  clearAnalytics,
   addMockData
 };

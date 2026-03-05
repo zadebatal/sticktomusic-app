@@ -59,6 +59,7 @@ import {
   getPipelineBankLabel,
   migrateCollectionBanks,
   subscribeToCreatedContent,
+  removeFromLibraryAsync,
 } from '../../services/libraryService';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { updateScheduledPost, deletePostsByContentId } from '../../services/scheduledPostsService';
@@ -121,8 +122,6 @@ async function loadCategoriesFromFirestore(db, artistId) {
   }
 }
 
-// Feature flag: Set to true to use new Library/Collections system
-const USE_LIBRARY_SYSTEM = true;
 
 /**
  * ErrorBoundary - Catches errors in VideoEditorModal to prevent blank page crashes
@@ -275,13 +274,24 @@ const DraftsView = (props) => {
 
 /**
  * AllMediaView — Three-column layout: Photos, Videos, Audio
+ * Supports click-to-select, shift-click range select, batch delete, individual delete
  */
-const AllMediaView = ({ artistId, onBack }) => {
+const AllMediaView = ({ db, artistId, onBack }) => {
+  const { success: toastSuccess, error: toastError } = useToast();
   const [library, setLibrary] = useState(() => artistId ? getLibrary(artistId) : []);
+  const [selected, setSelected] = useState(new Set());
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
+  const lastClickedRef = useRef(null);
 
   useEffect(() => {
     if (!artistId) return;
     setLibrary(getLibrary(artistId));
+    setSelected(new Set());
+  }, [artistId]);
+
+  // Re-read library after deletes
+  const refreshLibrary = useCallback(() => {
+    if (artistId) setLibrary(getLibrary(artistId));
   }, [artistId]);
 
   const photos = useMemo(() => library.filter(m => m.type === MEDIA_TYPES.IMAGE), [library]);
@@ -289,9 +299,84 @@ const AllMediaView = ({ artistId, onBack }) => {
   const audio = useMemo(() => library.filter(m => m.type === MEDIA_TYPES.AUDIO), [library]);
 
   const getThumb = (item) => {
-    if (item.thumbnailUrl && item.thumbVersion >= 2) return item.thumbnailUrl;
-    return item.url || item.localUrl;
+    if (item.thumbnailUrl) return item.thumbnailUrl;
+    if (item.type !== MEDIA_TYPES.VIDEO) return item.url || item.localUrl;
+    return null; // Videos without thumbnails get a placeholder
   };
+
+  // Click handler with shift-range support
+  const handleItemClick = useCallback((id, items, e) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (e.shiftKey && lastClickedRef.current) {
+        // Range select within the same column
+        const lastIdx = items.findIndex(i => i.id === lastClickedRef.current);
+        const curIdx = items.findIndex(i => i.id === id);
+        if (lastIdx >= 0 && curIdx >= 0) {
+          const [start, end] = lastIdx < curIdx ? [lastIdx, curIdx] : [curIdx, lastIdx];
+          for (let i = start; i <= end; i++) next.add(items[i].id);
+          return next;
+        }
+      }
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+    lastClickedRef.current = id;
+  }, []);
+
+  // Delete single item
+  const handleDelete = useCallback((item) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Media',
+      message: `Delete "${item.name || 'this item'}"? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await removeFromLibraryAsync(db, artistId, item.id);
+          setSelected(prev => { const next = new Set(prev); next.delete(item.id); return next; });
+          refreshLibrary();
+          toastSuccess('Media deleted');
+        } catch (err) {
+          log.error('[AllMedia] Delete failed:', err);
+          toastError('Failed to delete');
+        }
+        setConfirmDialog({ isOpen: false });
+      },
+    });
+  }, [db, artistId, refreshLibrary, toastSuccess, toastError]);
+
+  // Batch delete
+  const handleDeleteSelected = useCallback(() => {
+    if (selected.size === 0) return;
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Selected',
+      message: `Delete ${selected.size} item${selected.size !== 1 ? 's' : ''}? This cannot be undone.`,
+      confirmLabel: 'Delete All',
+      isLoading: false,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isLoading: true }));
+        let deleted = 0;
+        for (const id of selected) {
+          try {
+            await removeFromLibraryAsync(db, artistId, id);
+            deleted++;
+          } catch (err) {
+            log.error('[AllMedia] Batch delete failed:', id, err);
+          }
+        }
+        setSelected(new Set());
+        refreshLibrary();
+        if (deleted > 0) toastSuccess(`Deleted ${deleted} item${deleted !== 1 ? 's' : ''}`);
+        setConfirmDialog({ isOpen: false });
+      },
+    });
+  }, [selected, db, artistId, refreshLibrary, toastSuccess, toastError]);
+
+  const selectAll = useCallback(() => {
+    setSelected(new Set(library.map(i => i.id)));
+  }, [library]);
 
   const Column = ({ title, items, type }) => (
     <div className="flex flex-1 flex-col items-start gap-3 min-w-0">
@@ -299,39 +384,87 @@ const AllMediaView = ({ artistId, onBack }) => {
         <span className="text-body-bold font-body-bold text-[#ffffffff]">{title}</span>
         <span className="text-caption font-caption text-neutral-500">{items.length}</span>
       </div>
-      <div className="flex flex-col gap-2 w-full overflow-y-auto" style={{ maxHeight: 'calc(100vh - 180px)' }}>
+      <div className="flex flex-col gap-2 w-full overflow-y-auto" style={{ maxHeight: 'calc(100vh - 220px)' }}>
         {items.length === 0 && (
           <div className="flex items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-[#1a1a1aff] px-4 py-8">
             <span className="text-caption font-caption text-neutral-500">No {title.toLowerCase()}</span>
           </div>
         )}
         {type === 'audio' ? (
-          items.map(item => (
-            <div key={item.id} className="flex items-center gap-3 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-2.5">
-              <div className="flex h-9 w-9 flex-none items-center justify-center rounded-md bg-indigo-500/10">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          items.map(item => {
+            const isSelected = selected.has(item.id);
+            return (
+              <div
+                key={item.id}
+                className={`group flex items-center gap-3 rounded-lg border border-solid px-3 py-2.5 cursor-pointer transition-colors ${
+                  isSelected ? 'border-indigo-500 bg-indigo-500/10' : 'border-neutral-200 bg-[#1a1a1aff] hover:bg-neutral-100/20'
+                }`}
+                onClick={(e) => handleItemClick(item.id, items, e)}
+              >
+                <div className={`flex h-9 w-9 flex-none items-center justify-center rounded-md ${isSelected ? 'bg-indigo-500/30' : 'bg-indigo-500/10'}`}>
+                  {isSelected
+                    ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                  }
+                </div>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="text-caption font-caption text-neutral-200 truncate">{item.name || 'Untitled'}</span>
+                  {item.duration && <span className="text-caption font-caption text-neutral-500">{Math.round(item.duration)}s</span>}
+                </div>
+                <button
+                  className="flex h-7 w-7 items-center justify-center rounded bg-transparent border-none cursor-pointer text-neutral-600 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400"
+                  onClick={(e) => { e.stopPropagation(); handleDelete(item); }}
+                  title="Delete"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
               </div>
-              <div className="flex flex-col min-w-0">
-                <span className="text-caption font-caption text-neutral-200 truncate">{item.name || 'Untitled'}</span>
-                {item.duration && <span className="text-caption font-caption text-neutral-500">{Math.round(item.duration)}s</span>}
-              </div>
-            </div>
-          ))
+            );
+          })
         ) : (
           <div className="grid grid-cols-3 gap-2 w-full">
-            {items.map(item => (
-              <div key={item.id} className="flex flex-col rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] overflow-hidden">
-                <div className="w-full aspect-square bg-[#171717] relative">
-                  <img src={getThumb(item)} alt="" className="w-full h-full object-cover" loading="lazy" />
-                  {type === 'video' && item.duration && (
-                    <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-[10px] text-white">{Math.round(item.duration)}s</span>
-                  )}
+            {items.map(item => {
+              const isSelected = selected.has(item.id);
+              const thumb = getThumb(item);
+              return (
+                <div
+                  key={item.id}
+                  className={`group flex flex-col rounded-lg border border-solid overflow-hidden cursor-pointer transition-colors ${
+                    isSelected ? 'border-indigo-500' : 'border-neutral-200 hover:border-neutral-100'
+                  }`}
+                  style={{ background: '#1a1a1a' }}
+                  onClick={(e) => handleItemClick(item.id, items, e)}
+                >
+                  <div className="w-full aspect-square bg-[#171717] relative">
+                    {thumb ? (
+                      <img src={thumb} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#525252" strokeWidth="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="10" y1="8" x2="10" y2="16"/><polygon points="15 12 10 8 10 16 15 12"/></svg>
+                      </div>
+                    )}
+                    {type === 'video' && item.duration && (
+                      <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-[10px] text-white">{Math.round(item.duration)}s</span>
+                    )}
+                    {isSelected && (
+                      <div className="absolute inset-0 bg-indigo-500/25 flex items-center justify-center pointer-events-none">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                      </div>
+                    )}
+                    <button
+                      className="absolute top-1 right-1 z-[4] flex h-6 w-6 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
+                      onClick={(e) => { e.stopPropagation(); handleDelete(item); }}
+                      title="Delete"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
+                  </div>
+                  <div className="px-2 py-1.5">
+                    <span className="text-caption font-caption text-neutral-300 truncate block">{item.name || 'Untitled'}</span>
+                  </div>
                 </div>
-                <div className="px-2 py-1.5">
-                  <span className="text-caption font-caption text-neutral-300 truncate block">{item.name || 'Untitled'}</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -345,12 +478,51 @@ const AllMediaView = ({ artistId, onBack }) => {
           <span className="text-heading-2 font-heading-2 text-[#ffffffff]">All Media</span>
           <span className="text-caption font-caption text-neutral-500">{library.length} items</span>
         </div>
+        <div className="flex items-center gap-2">
+          {selected.size > 0 && (
+            <>
+              <span className="text-caption font-caption text-indigo-400">{selected.size} selected</span>
+              <button
+                className="flex items-center gap-1.5 rounded-md bg-red-500/15 border border-red-500/30 px-3 py-1.5 text-caption font-caption text-red-400 cursor-pointer hover:bg-red-500/25 transition-colors"
+                onClick={handleDeleteSelected}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                Delete ({selected.size})
+              </button>
+              <button
+                className="rounded-md border border-neutral-200 bg-transparent px-3 py-1.5 text-caption font-caption text-neutral-400 cursor-pointer hover:text-white transition-colors"
+                onClick={() => setSelected(new Set())}
+              >
+                Deselect
+              </button>
+            </>
+          )}
+          {selected.size === 0 && library.length > 0 && (
+            <button
+              className="rounded-md border border-neutral-200 bg-transparent px-3 py-1.5 text-caption font-caption text-neutral-400 cursor-pointer hover:text-white transition-colors"
+              onClick={selectAll}
+            >
+              Select All
+            </button>
+          )}
+        </div>
       </div>
       <div className="flex w-full gap-6 flex-1 min-h-0">
         <Column title="Photos" items={photos} type="image" />
         <Column title="Videos" items={videos} type="video" />
         <Column title="Audio" items={audio} type="audio" />
       </div>
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        confirmVariant="destructive"
+        isLoading={confirmDialog.isLoading}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ isOpen: false })}
+      />
     </div>
   );
 };
@@ -528,7 +700,7 @@ const VideoStudio = ({
   // Synthetic category for library-mode ContentLibrary (dashboard)
   // Uses createdContentState (from Firestore subscription) instead of localStorage
   const libraryCategory = useMemo(() => {
-    if (!USE_LIBRARY_SYSTEM || !currentArtistId) return null;
+    if (!currentArtistId) return null;
     return {
       id: 'library-created',
       name: 'Created Content',
@@ -831,7 +1003,7 @@ const VideoStudio = ({
   // Auto-setup Music Artist template if onboarding not completed (no modal)
   // Also run idempotent pipeline→project migration
   useEffect(() => {
-    if (USE_LIBRARY_SYSTEM && currentArtistId) {
+    if (currentArtistId) {
       const status = getOnboardingStatus(currentArtistId);
       if (!status.completed) {
         // Auto-complete with Music Artist template
@@ -1126,7 +1298,7 @@ const VideoStudio = ({
 
     // Library mode: save via libraryService when no category is selected
     if (!selectedCategory) {
-      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+      if (currentArtistId) {
         const savedVideo = addCreatedVideo(currentArtistId, {
           ...data,
           id: data.id || `video_${Date.now()}`,
@@ -1455,7 +1627,7 @@ const VideoStudio = ({
   const handleDeleteVideo = useCallback(async (videoId) => {
     // Library mode: soft-delete via libraryService
     if (!selectedCategory) {
-      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+      if (currentArtistId) {
         if (db) {
           softDeleteCreatedVideoAsync(db, currentArtistId, videoId).catch(err =>
             log.warn('[VideoStudio] Firestore video soft-delete failed:', err)
@@ -1649,7 +1821,7 @@ const VideoStudio = ({
   const handleApproveVideo = useCallback((videoId) => {
     // Library mode: toggle approve via libraryService
     if (!selectedCategory) {
-      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+      if (currentArtistId) {
         const content = getCreatedContent(currentArtistId);
         const video = content.videos.find(v => v.id === videoId);
         const newStatus = video?.status === VIDEO_STATUS.APPROVED ? VIDEO_STATUS.DRAFT : VIDEO_STATUS.APPROVED;
@@ -1682,7 +1854,7 @@ const VideoStudio = ({
   const handleUpdateVideo = useCallback((videoId, updates) => {
     // Library mode: update via libraryService
     if (!selectedCategory) {
-      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+      if (currentArtistId) {
         updateCreatedVideo(currentArtistId, videoId, updates);
         setCreatedContentVersion(v => v + 1);
       }
@@ -1913,7 +2085,7 @@ const VideoStudio = ({
 
     // Library mode: save via libraryService (with Firestore sync)
     if (!selectedCategory) {
-      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+      if (currentArtistId) {
         let data = {
           ...slideshowData,
           id: slideshowData.id || `slideshow_${Date.now()}`,
@@ -2112,7 +2284,7 @@ const VideoStudio = ({
   const handleDeleteSlideshow = useCallback((slideshowId) => {
     // Library mode: soft-delete via libraryService
     if (!selectedCategory) {
-      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+      if (currentArtistId) {
         if (db) {
           deleteCreatedSlideshowAsync(db, currentArtistId, slideshowId).catch(log.error);
         } else {
@@ -2157,7 +2329,7 @@ const VideoStudio = ({
   const handleAddLyrics = useCallback(async (lyricsData) => {
     // Library mode: save via libraryService (Firestore + localStorage)
     if (!selectedCategory) {
-      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+      if (currentArtistId) {
         const newEntry = await addLyricsAsync(db, currentArtistId, {
           title: lyricsData.title || 'Untitled Lyrics',
           content: lyricsData.content || '',
@@ -2202,7 +2374,7 @@ const VideoStudio = ({
   const handleUpdateLyrics = useCallback(async (lyricsId, updates) => {
     // Library mode
     if (!selectedCategory) {
-      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+      if (currentArtistId) {
         await updateLyricsAsync(db, currentArtistId, lyricsId, updates);
         // Also update selectedLibraryMedia so the editor sees saved word timings immediately
         setSelectedLibraryMedia(prev => ({
@@ -2239,7 +2411,7 @@ const VideoStudio = ({
   const handleDeleteLyrics = useCallback(async (lyricsId) => {
     // Library mode
     if (!selectedCategory) {
-      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+      if (currentArtistId) {
         await deleteLyricsAsync(db, currentArtistId, lyricsId);
       }
       return;
@@ -2444,7 +2616,7 @@ const VideoStudio = ({
             )}
 
             {/* LIBRARY-BASED MODE: Contextual breadcrumb (sidebar handles top-level nav) */}
-            {USE_LIBRARY_SYSTEM && !selectedCategory && (
+            {!selectedCategory && (
               <>
                 {isMobile ? (
                   /* Mobile: back arrow + current level only */
@@ -2685,7 +2857,7 @@ const VideoStudio = ({
 
       {/* Main Content */}
       <main style={styles.main}>
-        {currentView === 'home' && USE_LIBRARY_SYSTEM && !selectedCategory && (
+        {currentView === 'home' && !selectedCategory && (
           <ProjectLanding
             db={db}
             artistId={currentArtistId}
@@ -2798,7 +2970,7 @@ const VideoStudio = ({
           />
         )}
 
-        {currentView === 'home' && (!USE_LIBRARY_SYSTEM || selectedCategory) && (
+        {currentView === 'home' && selectedCategory && (
           <AestheticHome
             artists={artists}
             isMobile={isMobile}
@@ -2842,7 +3014,7 @@ const VideoStudio = ({
           />
         )}
 
-        {currentView === 'library' && (selectedCategory || (USE_LIBRARY_SYSTEM && libraryCategory)) && (
+        {currentView === 'library' && (selectedCategory || libraryCategory) && (
           <ContentLibrary
             category={selectedCategory || libraryCategory}
             contentType="videos"
@@ -2866,7 +3038,7 @@ const VideoStudio = ({
           />
         )}
 
-        {currentView === 'slideshows' && (selectedCategory || (USE_LIBRARY_SYSTEM && libraryCategory)) && (
+        {currentView === 'slideshows' && (selectedCategory || libraryCategory) && (
           <ContentLibrary
             category={selectedCategory || libraryCategory}
             contentType="slideshows"
@@ -2892,7 +3064,7 @@ const VideoStudio = ({
         )}
 
         {/* Drafts View — swap between video and slideshow drafts */}
-        {currentView === 'drafts' && (selectedCategory || (USE_LIBRARY_SYSTEM && libraryCategory)) && (
+        {currentView === 'drafts' && (selectedCategory || libraryCategory) && (
           <DraftsView
             category={selectedCategory || libraryCategory}
             collectionFilter={draftsCollectionFilter}
@@ -2922,6 +3094,7 @@ const VideoStudio = ({
 
         {currentView === 'media' && (
           <AllMediaView
+            db={db}
             artistId={currentArtistId}
             onBack={() => setCurrentView('home')}
           />
@@ -2959,7 +3132,7 @@ const VideoStudio = ({
       </main>
 
       {/* Editor Modal with ErrorBoundary to prevent blank page crashes */}
-      {showEditor && (selectedCategory || USE_LIBRARY_SYSTEM) && (
+      {showEditor && (
         <EditorErrorBoundary onClose={handleCloseEditor}>
           <VideoEditorModal
             isMobile={isMobile}
@@ -3013,7 +3186,7 @@ const VideoStudio = ({
       )}
 
       {/* Slideshow Editor Modal */}
-      {showSlideshowEditor && (selectedCategory || (USE_LIBRARY_SYSTEM && currentArtistId)) && (
+      {showSlideshowEditor && (selectedCategory || currentArtistId) && (
         <SlideshowEditor
           db={db}
           isMobile={isMobile}

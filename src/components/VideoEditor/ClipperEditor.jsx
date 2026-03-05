@@ -32,7 +32,7 @@ import usePixelTimeline from './shared/usePixelTimeline';
 import useTimelineZoom from '../../hooks/useTimelineZoom';
 import useWaveform from '../../hooks/useWaveform';
 import { uploadFile } from '../../services/firebaseStorage';
-import { addToLibraryAsync, addToLibrary, addToCollection, addToProjectPool, getBankColor } from '../../services/libraryService';
+import { addToLibraryAsync, addToCollection, addToProjectPool, getBankColor } from '../../services/libraryService';
 import { transcribeAudio } from '../../services/whisperService';
 import { analyzeSongStructure } from '../../services/structureAnalysisService';
 import { extractAudioSnippet } from '../../utils/audioSnippet';

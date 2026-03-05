@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import log from '../utils/logger';
+import { PLATFORM_KEYS, PLATFORM_LABELS, PLATFORM_COLORS } from '../config/platforms';
 
 // ── Constants ──
 
@@ -29,26 +30,9 @@ export const POST_STATUS = Object.freeze({
   FAILED: 'failed'
 });
 
-export const PLATFORMS = Object.freeze({
-  INSTAGRAM: 'instagram',
-  TIKTOK: 'tiktok',
-  YOUTUBE: 'youtube',
-  FACEBOOK: 'facebook'
-});
-
-export const PLATFORM_LABELS = Object.freeze({
-  instagram: 'Instagram',
-  tiktok: 'TikTok',
-  youtube: 'YouTube',
-  facebook: 'Facebook'
-});
-
-export const PLATFORM_COLORS = Object.freeze({
-  instagram: '#E1306C',
-  tiktok: '#00f2ea',
-  youtube: '#FF0000',
-  facebook: '#1877F2'
-});
+// Re-export platform constants for backward compat
+export const PLATFORMS = PLATFORM_KEYS;
+export { PLATFORM_LABELS, PLATFORM_COLORS };
 
 // ── Helpers ──
 
@@ -332,51 +316,7 @@ export async function addManyScheduledPosts(db, artistId, posts) {
   return results;
 }
 
-/**
- * Update post status after publishing attempt
- */
-export async function markPostPublished(db, artistId, postId, platformResults) {
-  const allSucceeded = Object.values(platformResults).every(r => !r.error);
-  const status = allSucceeded ? POST_STATUS.POSTED : POST_STATUS.FAILED;
-
-  return updateScheduledPost(db, artistId, postId, {
-    status,
-    postResults: platformResults,
-    postedAt: allSucceeded ? new Date().toISOString() : null
-  });
-}
-
 // ── Bulk scheduling helpers ──
-
-/**
- * Auto-assign scheduled times to posts in queue
- * @param {Array} posts - Posts to schedule
- * @param {Date} startTime - First post time
- * @param {number} intervalMinutes - Minutes between posts
- * @returns {Array} Posts with assigned scheduledTime
- */
-export function assignScheduleTimes(posts, startTime, intervalMinutes) {
-  const start = new Date(startTime);
-  return posts.map((post, index) => ({
-    ...post,
-    scheduledTime: new Date(start.getTime() + index * intervalMinutes * 60 * 1000).toISOString()
-  }));
-}
-
-/**
- * Auto-assign random schedule times
- */
-export function assignRandomScheduleTimes(posts, startTime, minMinutes, maxMinutes) {
-  let current = new Date(startTime);
-  return posts.map(post => {
-    const interval = minMinutes + Math.random() * (maxMinutes - minMinutes);
-    current = new Date(current.getTime() + interval * 60 * 1000);
-    return {
-      ...post,
-      scheduledTime: current.toISOString()
-    };
-  });
-}
 
 // ── localStorage Fallback ──
 
@@ -458,7 +398,4 @@ export default {
   subscribeToScheduledPosts,
   reorderPosts,
   addManyScheduledPosts,
-  markPostPublished,
-  assignScheduleTimes,
-  assignRandomScheduleTimes
 };

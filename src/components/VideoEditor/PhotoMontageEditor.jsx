@@ -42,14 +42,8 @@ import useTimelineZoom from '../../hooks/useTimelineZoom';
 import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
 import LyricBankSection from './shared/LyricBankSection';
 
-// Stroke string helpers: parse "0.5px black" ↔ { width: 0.5, color: '#000000' }
-const parseStroke = (str) => {
-  if (!str) return { width: 0.5, color: '#000000' };
-  const match = str.match(/([\d.]+)px\s+(.*)/);
-  if (!match) return { width: 0.5, color: '#000000' };
-  return { width: parseFloat(match[1]) || 0.5, color: match[2] || '#000000' };
-};
-const buildStroke = (width, color) => `${width}px ${color}`;
+import { parseStroke, buildStroke, AVAILABLE_FONTS, makeFieldSetter } from './shared/editorConstants';
+import CloseConfirmOverlay from './shared/CloseConfirmOverlay';
 
 /**
  * PhotoMontageEditor — Turn photos into a fast-paced video with transitions.
@@ -122,58 +116,11 @@ const PhotoMontageEditor = ({
   const words = activeVideo?.words || [];
   const textStyle = activeVideo?.textStyle || {};
 
-  // Wrapper setters (route through allVideos)
-  const setPhotos = useCallback((updater) => {
-    setAllVideos(prev => {
-      const copy = [...prev];
-      const current = copy[activeVideoIndex];
-      if (!current) return prev;
-      copy[activeVideoIndex] = {
-        ...current,
-        photos: typeof updater === 'function' ? updater(current.photos || []) : updater
-      };
-      return copy;
-    });
-  }, [activeVideoIndex]);
-
-  const setTextOverlays = useCallback((updater) => {
-    setAllVideos(prev => {
-      const copy = [...prev];
-      const current = copy[activeVideoIndex];
-      if (!current) return prev;
-      copy[activeVideoIndex] = {
-        ...current,
-        textOverlays: typeof updater === 'function' ? updater(current.textOverlays || []) : updater
-      };
-      return copy;
-    });
-  }, [activeVideoIndex]);
-
-  const setWords = useCallback((updater) => {
-    setAllVideos(prev => {
-      const copy = [...prev];
-      const current = copy[activeVideoIndex];
-      if (!current) return prev;
-      copy[activeVideoIndex] = {
-        ...current,
-        words: typeof updater === 'function' ? updater(current.words || []) : updater
-      };
-      return copy;
-    });
-  }, [activeVideoIndex]);
-
-  const setTextStyle = useCallback((updater) => {
-    setAllVideos(prev => {
-      const copy = [...prev];
-      const current = copy[activeVideoIndex];
-      if (!current) return prev;
-      copy[activeVideoIndex] = {
-        ...current,
-        textStyle: typeof updater === 'function' ? updater(current.textStyle || {}) : updater
-      };
-      return copy;
-    });
-  }, [activeVideoIndex]);
+  // Wrapper setters (route through allVideos via shared factory)
+  const setPhotos = useMemo(() => makeFieldSetter(setAllVideos, activeVideoIndex, 'photos', []), [activeVideoIndex]);
+  const setTextOverlays = useMemo(() => makeFieldSetter(setAllVideos, activeVideoIndex, 'textOverlays', []), [activeVideoIndex]);
+  const setWords = useMemo(() => makeFieldSetter(setAllVideos, activeVideoIndex, 'words', []), [activeVideoIndex]);
+  const setTextStyle = useMemo(() => makeFieldSetter(setAllVideos, activeVideoIndex, 'textStyle', {}), [activeVideoIndex]);
 
   // ── Footer state ──
   const [isSavingAll, setIsSavingAll] = useState(false);
@@ -275,7 +222,6 @@ const PhotoMontageEditor = ({
 
   // ── Drag reorder ──
   const [dragIndex, setDragIndex] = useState(null);
-  const [dragOverIndex, setDragOverIndex] = useState(null);
 
   // ── Undo/Redo history (route through allVideos) ──
   const getHistorySnapshot = useCallback(() => {
@@ -914,16 +860,14 @@ const PhotoMontageEditor = ({
 
   // ── Drag handlers ──
   const handleDragStart = useCallback((index) => setDragIndex(index), []);
-  const handleDragOver = useCallback((e, index) => {
+  const handleDragOver = useCallback((e) => {
     e.preventDefault();
-    setDragOverIndex(index);
   }, []);
   const handleDrop = useCallback((index) => {
     if (dragIndex !== null && dragIndex !== index) {
       movePhoto(dragIndex, index);
     }
     setDragIndex(null);
-    setDragOverIndex(null);
   }, [dragIndex, movePhoto]);
 
   // ── Text overlay CRUD (matches SoloClipEditor) ──
@@ -1334,17 +1278,6 @@ const PhotoMontageEditor = ({
     { label: '3s', value: 3 },
   ];
 
-  const AVAILABLE_FONTS = [
-    { name: 'Inter', value: "'Inter', sans-serif" },
-    { name: 'Arial', value: 'Arial, sans-serif' },
-    { name: 'Arial Narrow', value: "'Arial Narrow', Arial, sans-serif" },
-    { name: 'Georgia', value: 'Georgia, serif' },
-    { name: 'Times New Roman', value: "'Times New Roman', serif" },
-    { name: 'Impact', value: 'Impact, sans-serif' },
-    { name: 'Trebuchet', value: "'Trebuchet MS', sans-serif" },
-    { name: 'Verdana', value: 'Verdana, sans-serif' },
-    { name: 'TikTok Sans', value: "'TikTok Sans', sans-serif" },
-  ];
 
   const handleAddToTextBank = useCallback((bankNum, text) => {
     const col = category?.id ? collections.find(c => c.id === category.id) : collections[0];
@@ -1502,9 +1435,9 @@ const PhotoMontageEditor = ({
                     key={`${photo.id}_${index}`}
                     draggable
                     onDragStart={() => handleDragStart(index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDragOver={handleDragOver}
                     onDrop={() => handleDrop(index)}
-                    onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
+                    onDragEnd={() => setDragIndex(null)}
                     className="flex items-center gap-2 p-1.5 rounded-md mb-1 border cursor-grab transition-colors"
                     style={{
                       opacity: dragIndex === index ? 0.5 : 1,
@@ -2672,18 +2605,7 @@ const PhotoMontageEditor = ({
 
         {/* ── Close Confirmation ── */}
         {showCloseConfirm && (
-          <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-[100]">
-            <div className="bg-[#171717] rounded-xl p-6 max-w-[360px] w-full border border-neutral-200">
-              <h3 className="text-[16px] font-semibold mb-2" style={{ color: theme.text.primary }}>Close editor?</h3>
-              <p className="text-[13px] mb-4" style={{ color: theme.text.secondary }}>
-                You have unsaved work. Are you sure you want to close?
-              </p>
-              <div className="flex gap-2 justify-end">
-                <Button variant="neutral-secondary" size="small" onClick={() => setShowCloseConfirm(false)}>Keep Editing</Button>
-                <Button variant="destructive-primary" size="small" onClick={() => { setShowCloseConfirm(false); onClose(); }}>Close Anyway</Button>
-              </div>
-            </div>
-          </div>
+          <CloseConfirmOverlay onKeepEditing={() => setShowCloseConfirm(false)} onClose={() => { setShowCloseConfirm(false); onClose(); }} />
         )}
 
         {/* ── Preset Save Modal ── */}

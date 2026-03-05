@@ -13,18 +13,9 @@ import {
   getCollections,
   getUserCollections,
   getCollectionMedia,
-  addToLibrary,
-  removeFromLibrary,
   toggleFavorite,
   createNewCollection,
-  updateCollection,
-  deleteCollection,
-  addToCollection,
-  removeFromCollection,
-  assignToBank,
   removeFromBank,
-  getCollectionBanks,
-  searchLibrary,
   addToTextBank,
   removeFromTextBank,
   updateTextBank,
@@ -34,19 +25,16 @@ import {
   saveTextTemplates,
   MEDIA_TYPES,
   COLLECTION_TYPES,
-  SMART_COLLECTION_IDS,
   addBankToCollection,
   removeBankFromCollection,
   getBankColor,
   getBankLabel,
   migrateCollectionBanks,
-  BANK_COLORS,
   MAX_BANKS,
   // Firestore async functions
   subscribeToLibrary,
   subscribeToCollections,
   saveCollectionToFirestore,
-  deleteCollectionFromFirestore,
   addToLibraryAsync,
   removeFromLibraryAsync,
   addToCollectionAsync,
@@ -54,14 +42,13 @@ import {
   assignToBankAsync,
   updateCollectionAsync,
   deleteCollectionAsync,
-  migrateThumbnails
 } from '../../services/libraryService';
+import { migrateThumbnails } from '../../services/thumbnailService';
 import { uploadFile } from '../../services/firebaseStorage';
 import {
   initGoogleDrive, authenticate as driveAuth, isAuthenticated as isDriveAuth,
   listFiles as driveListFiles, downloadFile as driveDownloadFile,
-  uploadFile as driveUploadFile, ensureAppFolder, openPicker as driveOpenPicker,
-  createFolder as driveCreateFolder, DRIVE_MIME_TYPES
+  uploadFile as driveUploadFile, DRIVE_MIME_TYPES
 } from '../../services/googleDriveService';
 import {
   authenticate as dropboxAuth, isAuthenticated as isDropboxAuth,

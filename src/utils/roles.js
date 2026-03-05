@@ -13,7 +13,7 @@ import log from '../utils/logger';
  * Set REACT_APP_OPERATOR_EMAILS as comma-separated list in production
  */
 const OPERATOR_EMAILS = Object.freeze(
-  (process.env.REACT_APP_OPERATOR_EMAILS || 'zade@sticktomusic.com,zadebatal@gmail.com')
+  (process.env.REACT_APP_OPERATOR_EMAILS || '')
     .split(',')
     .map(email => email.trim().toLowerCase())
     .filter(Boolean)

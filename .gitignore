@@ -23,6 +23,11 @@ node_modules/
 build/
 *.mp4
 
+# Voice Bridge
+voice-bridge/node_modules/
+voice-bridge/.env
+voice-bridge/.temp-*
+
 # Playwright
 e2e/auth/storage-state.json
 e2e/fixtures/test-media/

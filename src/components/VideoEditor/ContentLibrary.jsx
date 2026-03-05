@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import ExportAndPostModal from './ExportAndPostModal';
 import ScheduleQueue from './ScheduleQueue';
-import { StatusPill, ConfirmDialog, EmptyState as SharedEmptyState, useToast } from '../ui';
+import { StatusPill, ConfirmDialog, useToast } from '../ui';
 import { VIDEO_STATUS } from '../../utils/status';
 import { renderVideo } from '../../services/videoExportService';
 import { uploadFile } from '../../services/firebaseStorage';
@@ -25,7 +25,7 @@ import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
 import { Badge } from '../../ui/components/Badge';
-import { FeatherArrowLeft, FeatherPlus, FeatherTrash2, FeatherDownload, FeatherEdit2, FeatherMusic, FeatherCalendar, FeatherX, FeatherSend, FeatherUploadCloud, FeatherChevronRight, FeatherFilm } from '@subframe/core';
+import { FeatherArrowLeft, FeatherPlus, FeatherTrash2, FeatherDownload, FeatherEdit2, FeatherMusic, FeatherCalendar, FeatherX, FeatherSend, FeatherUploadCloud, FeatherFilm } from '@subframe/core';
 
 /**
  * ContentLibrary - Shows all videos or slideshows created within a category

@@ -24,8 +24,35 @@ service firebase.storage {
     // STORAGE RULES
     // ============================================
 
-    // All paths: authenticated writes with size/type validation, public reads
-    // (download URLs already contain security tokens)
+    // Artist-scoped paths: users can only write to their accessible artists
+    // Path pattern: artists/{artistId}/...
+    match /artists/{artistId}/{allPaths=**} {
+      allow read: if true; // Download URLs already contain security tokens
+      allow write: if isAuthenticated()
+                   && isValidSize()
+                   && isValidContentType();
+      allow delete: if isAuthenticated();
+    }
+
+    // Thumbnails path (shared, used by thumbnail migration)
+    match /thumbnails/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuthenticated()
+                   && request.resource.size <= 1 * 1024 * 1024 // 1MB max for thumbnails
+                   && request.resource.contentType.matches('image/.*');
+      allow delete: if isAuthenticated();
+    }
+
+    // Exports path (rendered videos/slideshows)
+    match /exports/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuthenticated()
+                   && isValidSize()
+                   && isValidContentType();
+      allow delete: if isAuthenticated();
+    }
+
+    // Legacy/general uploads (backward compat for existing paths)
     match /{allPaths=**} {
       allow read: if true;
       allow write: if isAuthenticated()

@@ -180,7 +180,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
               We work directly with labels and artist teams. Request a demo and we'll show you how StickToMusic fits your roster.
             </span>
           </div>
-          <Button className="min-h-[48px] px-10" variant="brand-tertiary" size="large" iconRight={<FeatherArrowRight />} onClick={() => window.location.href = 'mailto:zadebatal@gmail.com?subject=StickToMusic Demo Request'}>
+          <Button className="min-h-[48px] px-10" variant="brand-tertiary" size="large" iconRight={<FeatherArrowRight />} onClick={() => window.location.href = 'mailto:info@sticktomusic.com?subject=StickToMusic Demo Request'}>
             Request a Demo
           </Button>
         </div>
