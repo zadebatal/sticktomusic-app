@@ -20,7 +20,8 @@ import log from '../utils/logger';
 
 // ── Constants ──
 
-const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
+const SCOPES =
+  'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
 const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
 
 // These will be set via initGoogleDrive()
@@ -61,11 +62,16 @@ export async function initGoogleDrive(clientId, apiKey) {
   try {
     await window.gapi.client.init({
       apiKey,
-      discoveryDocs: [DISCOVERY_DOC]
+      discoveryDocs: [DISCOVERY_DOC],
     });
   } catch (err) {
     log.error('[GoogleDrive] gapi.client.init failed:', err);
-    const msg = err?.result?.error?.message || err?.error?.message || err?.message || err?.error || JSON.stringify(err);
+    const msg =
+      err?.result?.error?.message ||
+      err?.error?.message ||
+      err?.message ||
+      err?.error ||
+      JSON.stringify(err);
     throw new Error('Drive API init failed: ' + msg);
   }
 
@@ -88,7 +94,7 @@ export async function initGoogleDrive(clientId, apiKey) {
   tokenClient = window.google.accounts.oauth2.initTokenClient({
     client_id: clientId,
     scope: SCOPES,
-    callback: '' // Will be overridden per-call
+    callback: '', // Will be overridden per-call
   });
 
   gisLoaded = true;
@@ -161,7 +167,7 @@ export async function listFiles(folderId = 'root', options = {}) {
 
   const { pageSize = 20, pageToken, mimeType } = options;
   // Validate folderId to prevent query injection (only alphanumeric, hyphens, underscores, or 'root')
-  const safeFolderId = (folderId === 'root' || /^[a-zA-Z0-9_-]+$/.test(folderId)) ? folderId : 'root';
+  const safeFolderId = folderId === 'root' || /^[a-zA-Z0-9_-]+$/.test(folderId) ? folderId : 'root';
   let query = `'${safeFolderId}' in parents and trashed = false`;
   if (mimeType && /^(image|video|audio|application)\/.+$/.test(mimeType)) {
     query += ` and mimeType = '${mimeType}'`;
@@ -169,15 +175,16 @@ export async function listFiles(folderId = 'root', options = {}) {
 
   const response = await window.gapi.client.drive.files.list({
     q: query,
-    fields: 'nextPageToken, files(id, name, mimeType, size, modifiedTime, thumbnailLink, webContentLink)',
+    fields:
+      'nextPageToken, files(id, name, mimeType, size, modifiedTime, thumbnailLink, webContentLink)',
     pageSize,
     pageToken,
-    orderBy: 'modifiedTime desc'
+    orderBy: 'modifiedTime desc',
   });
 
   return {
     files: response.result.files || [],
-    nextPageToken: response.result.nextPageToken
+    nextPageToken: response.result.nextPageToken,
   };
 }
 
@@ -198,15 +205,16 @@ export async function searchFiles(query, options = {}) {
 
   const response = await window.gapi.client.drive.files.list({
     q,
-    fields: 'nextPageToken, files(id, name, mimeType, size, modifiedTime, thumbnailLink, webContentLink)',
+    fields:
+      'nextPageToken, files(id, name, mimeType, size, modifiedTime, thumbnailLink, webContentLink)',
     pageSize,
     pageToken,
-    orderBy: 'modifiedTime desc'
+    orderBy: 'modifiedTime desc',
   });
 
   return {
     files: response.result.files || [],
-    nextPageToken: response.result.nextPageToken
+    nextPageToken: response.result.nextPageToken,
   };
 }
 
@@ -219,7 +227,7 @@ export async function downloadFile(fileId) {
   await ensureAuth();
 
   const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-    headers: { Authorization: `Bearer ${accessToken}` }
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
 
   if (!response.ok) {
@@ -243,18 +251,21 @@ export async function uploadFile(file, name, folderId, mimeType) {
   const metadata = {
     name,
     mimeType,
-    parents: folderId ? [folderId] : undefined
+    parents: folderId ? [folderId] : undefined,
   };
 
   const form = new FormData();
   form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
   form.append('file', file);
 
-  const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,webViewLink', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
-    body: form
-  });
+  const response = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,webViewLink',
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: form,
+    },
+  );
 
   if (!response.ok) {
     throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
@@ -277,12 +288,12 @@ export async function createFolder(name, parentId = null) {
   const metadata = {
     name,
     mimeType: 'application/vnd.google-apps.folder',
-    parents: parentId ? [parentId] : undefined
+    parents: parentId ? [parentId] : undefined,
   };
 
   const response = await window.gapi.client.drive.files.create({
     resource: metadata,
-    fields: 'id, name'
+    fields: 'id, name',
   });
 
   log('[GoogleDrive] Created folder:', response.result.name);
@@ -312,7 +323,7 @@ export async function ensureAppFolder(artistName) {
 
   return {
     rootFolderId: rootFolder.id,
-    artistFolderId: artistFolder.id
+    artistFolderId: artistFolder.id,
   };
 }
 
@@ -323,7 +334,7 @@ async function findFolder(name, parentId) {
   const response = await window.gapi.client.drive.files.list({
     q: `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and '${parentId}' in parents and trashed = false`,
     fields: 'files(id, name)',
-    pageSize: 1
+    pageSize: 1,
   });
 
   return response.result.files?.[0] || null;
@@ -360,13 +371,15 @@ export function openPicker(apiKey, options = {}) {
       .setDeveloperKey(apiKey)
       .setCallback((data) => {
         if (data.action === window.google.picker.Action.PICKED) {
-          resolve(data.docs.map(doc => ({
-            id: doc.id,
-            name: doc.name,
-            mimeType: doc.mimeType,
-            url: doc.url,
-            sizeBytes: doc.sizeBytes
-          })));
+          resolve(
+            data.docs.map((doc) => ({
+              id: doc.id,
+              name: doc.name,
+              mimeType: doc.mimeType,
+              url: doc.url,
+              sizeBytes: doc.sizeBytes,
+            })),
+          );
         } else if (data.action === window.google.picker.Action.CANCEL) {
           resolve([]);
         }
@@ -409,10 +422,14 @@ export async function getDriveSettings(db, artistId) {
 export async function saveDriveSettings(db, artistId, settings) {
   try {
     const docRef = doc(db, 'artists', artistId, 'settings', 'googleDrive');
-    await setDoc(docRef, {
-      ...settings,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
+    await setDoc(
+      docRef,
+      {
+        ...settings,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true },
+    );
     log('[GoogleDrive] Settings saved');
   } catch (error) {
     log('[GoogleDrive] Settings save failed:', error);
@@ -438,7 +455,7 @@ export async function getFileMetadata(fileId) {
 
   const response = await window.gapi.client.drive.files.get({
     fileId,
-    fields: 'id, name, mimeType, size, modifiedTime, thumbnailLink, webContentLink, webViewLink'
+    fields: 'id, name, mimeType, size, modifiedTime, thumbnailLink, webContentLink, webViewLink',
   });
 
   return response.result;
@@ -452,10 +469,18 @@ export const DRIVE_MIME_TYPES = {
   AUDIO: ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/aac', 'audio/mp4'],
   IMAGE: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/tiff'],
   ALL_MEDIA: [
-    'video/mp4', 'video/quicktime', 'video/webm',
-    'audio/mpeg', 'audio/wav', 'audio/ogg',
-    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/tiff'
-  ]
+    'video/mp4',
+    'video/quicktime',
+    'video/webm',
+    'audio/mpeg',
+    'audio/wav',
+    'audio/ogg',
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/tiff',
+  ],
 };
 
 export default {
@@ -473,5 +498,5 @@ export default {
   getDriveSettings,
   saveDriveSettings,
   getFileMetadata,
-  DRIVE_MIME_TYPES
+  DRIVE_MIME_TYPES,
 };

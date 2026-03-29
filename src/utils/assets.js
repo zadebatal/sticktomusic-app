@@ -155,9 +155,9 @@ export function normalizeAssetForPersistence(asset) {
   if (!asset) return asset;
 
   const {
-    file,         // Remove File object
-    localUrl,     // Remove blob URL
-    thumbnail,    // May remove if too large
+    file, // Remove File object
+    localUrl, // Remove blob URL
+    thumbnail, // May remove if too large
     ...rest
   } = asset;
 
@@ -178,7 +178,7 @@ export function normalizeAssetForPersistence(asset) {
 export function normalizeAssetsForPersistence(assets) {
   if (!Array.isArray(assets)) return [];
   return assets
-    .filter(asset => asset.url && isDurableUrl(asset.url)) // Only keep assets with durable URLs
+    .filter((asset) => asset.url && isDurableUrl(asset.url)) // Only keep assets with durable URLs
     .map(normalizeAssetForPersistence);
 }
 
@@ -200,10 +200,13 @@ export function isReadyForPersistence(asset) {
 export function warnIfBlobUrl(asset, operation = 'operation') {
   if (process.env.NODE_ENV === 'development') {
     if (asset?.url && isBlobUrl(asset.url)) {
-      log.warn(`[ASSET WARNING] blob URL detected during ${operation}. This URL will not persist across sessions.`, {
-        url: asset.url,
-        id: asset.id,
-      });
+      log.warn(
+        `[ASSET WARNING] blob URL detected during ${operation}. This URL will not persist across sessions.`,
+        {
+          url: asset.url,
+          id: asset.id,
+        },
+      );
     }
   }
 }

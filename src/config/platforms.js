@@ -17,7 +17,7 @@ export const PLATFORMS = {
     emoji: '🎵',
     hexColor: '#00f2ea',
     urlPattern: (username) => `https://www.tiktok.com/@${username}`,
-    weight: 1.0
+    weight: 1.0,
   },
   instagram: {
     key: 'instagram',
@@ -30,7 +30,7 @@ export const PLATFORMS = {
     emoji: '📸',
     hexColor: '#c13584',
     urlPattern: (username) => `https://www.instagram.com/${username}`,
-    weight: 0.85
+    weight: 0.85,
   },
   facebook: {
     key: 'facebook',
@@ -43,7 +43,7 @@ export const PLATFORMS = {
     emoji: '📘',
     hexColor: '#1877f2',
     urlPattern: (username) => `https://www.facebook.com/${username}`,
-    weight: 0.7
+    weight: 0.7,
   },
   youtube: {
     key: 'youtube',
@@ -56,8 +56,8 @@ export const PLATFORMS = {
     emoji: '▶️',
     hexColor: '#ff0000',
     urlPattern: (username) => `https://www.youtube.com/@${username}`,
-    weight: 0.9
-  }
+    weight: 0.9,
+  },
 };
 
 export const ALL_PLATFORMS = Object.keys(PLATFORMS);
@@ -67,24 +67,29 @@ export const PLATFORM_KEYS = Object.freeze({
   INSTAGRAM: 'instagram',
   TIKTOK: 'tiktok',
   YOUTUBE: 'youtube',
-  FACEBOOK: 'facebook'
+  FACEBOOK: 'facebook',
 });
 
 export const PLATFORM_LABELS = Object.freeze(
-  Object.fromEntries(ALL_PLATFORMS.map(k => [k, PLATFORMS[k].fullName]))
+  Object.fromEntries(ALL_PLATFORMS.map((k) => [k, PLATFORMS[k].fullName])),
 );
 
 export const PLATFORM_COLORS = Object.freeze(
-  Object.fromEntries(ALL_PLATFORMS.map(k => [k, PLATFORMS[k].hexColor]))
+  Object.fromEntries(ALL_PLATFORMS.map((k) => [k, PLATFORMS[k].hexColor])),
 );
 
 // Legacy compat: PLATFORM_META shape used by PagesTab/ArtistDashboard
 export const PLATFORM_META = Object.freeze(
-  Object.fromEntries(ALL_PLATFORMS.map(k => [k, {
-    label: PLATFORMS[k].fullName,
-    icon: PLATFORMS[k].emoji,
-    color: PLATFORMS[k].hexColor
-  }]))
+  Object.fromEntries(
+    ALL_PLATFORMS.map((k) => [
+      k,
+      {
+        label: PLATFORMS[k].fullName,
+        icon: PLATFORMS[k].emoji,
+        color: PLATFORMS[k].hexColor,
+      },
+    ]),
+  ),
 );
 
 /**
@@ -92,11 +97,16 @@ export const PLATFORM_META = Object.freeze(
  */
 export const getPlatformConfig = (platform) => {
   const normalized = (platform || '').toLowerCase().replace('_', '').replace(' ', '');
-  const key = normalized === 'tiktok' ? 'tiktok'
-    : normalized === 'instagram' ? 'instagram'
-    : normalized === 'facebook' ? 'facebook'
-    : normalized === 'youtube' ? 'youtube'
-    : null;
+  const key =
+    normalized === 'tiktok'
+      ? 'tiktok'
+      : normalized === 'instagram'
+        ? 'instagram'
+        : normalized === 'facebook'
+          ? 'facebook'
+          : normalized === 'youtube'
+            ? 'youtube'
+            : null;
   return PLATFORMS[key] || PLATFORMS.tiktok;
 };
 

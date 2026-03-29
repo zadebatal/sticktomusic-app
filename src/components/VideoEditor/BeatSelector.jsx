@@ -8,15 +8,9 @@ import { FeatherX, FeatherCheck } from '@subframe/core';
  * BeatSelector - Select which beats to cut on
  * Shows beats organized by measure with tap-to-select
  */
-const BeatSelector = ({
-  beats = [],
-  bpm = 120,
-  duration = 30,
-  onApply,
-  onCancel
-}) => {
+const BeatSelector = ({ beats = [], bpm = 120, duration = 30, onApply, onCancel }) => {
   const { theme } = useTheme();
-  const styles = getStyles(theme);
+  const styles = useMemo(() => getStyles(theme), [theme]);
   const [selectedBeats, setSelectedBeats] = useState(new Set());
 
   // Organize beats into measures (assuming 4/4 time)
@@ -34,13 +28,13 @@ const BeatSelector = ({
       currentMeasure.push({
         time: beatTime,
         index: i,
-        beatNumber: beatInMeasure
+        beatNumber: beatInMeasure,
       });
 
       if (currentMeasure.length === beatsPerMeasure || i === beats.length - 1) {
         measuresArray.push({
           number: measureIndex,
-          beats: [...currentMeasure]
+          beats: [...currentMeasure],
         });
         currentMeasure = [];
         measureIndex++;
@@ -52,7 +46,7 @@ const BeatSelector = ({
 
   // Toggle beat selection
   const toggleBeat = (beatIndex) => {
-    setSelectedBeats(prev => {
+    setSelectedBeats((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(beatIndex)) {
         newSet.delete(beatIndex);
@@ -103,7 +97,7 @@ const BeatSelector = ({
   const getSelectedBeatTimes = () => {
     return Array.from(selectedBeats)
       .sort((a, b) => a - b)
-      .map(i => beats[i]);
+      .map((i) => beats[i]);
   };
 
   const formatTime = (seconds) => {
@@ -157,16 +151,16 @@ const BeatSelector = ({
               <p>No beats detected yet. Make sure audio is loaded.</p>
             </div>
           ) : (
-            measures.map(measure => (
+            measures.map((measure) => (
               <div key={measure.number} style={styles.measure}>
                 <div style={styles.measureLabel}>Measure {measure.number}</div>
                 <div style={styles.measureBeats}>
-                  {measure.beats.map(beat => (
+                  {measure.beats.map((beat) => (
                     <button
                       key={beat.index}
                       style={{
                         ...styles.beat,
-                        ...(selectedBeats.has(beat.index) ? styles.beatSelected : {})
+                        ...(selectedBeats.has(beat.index) ? styles.beatSelected : {}),
                       }}
                       onClick={() => toggleBeat(beat.index)}
                     >
@@ -182,12 +176,19 @@ const BeatSelector = ({
 
         {/* Footer */}
         <div style={styles.footer}>
-          <span style={styles.beatCount}>
-            {beats.length} beats within duration
-          </span>
+          <span style={styles.beatCount}>{beats.length} beats within duration</span>
           <div style={styles.footerActions}>
-            <Button variant="neutral-secondary" onClick={onCancel}>Cancel</Button>
-            <Button variant="brand-primary" icon={<FeatherCheck />} onClick={() => onApply(getSelectedBeatTimes())} disabled={selectedBeats.size === 0}>Apply {selectedBeats.size} cuts</Button>
+            <Button variant="neutral-secondary" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button
+              variant="brand-primary"
+              icon={<FeatherCheck />}
+              onClick={() => onApply(getSelectedBeatTimes())}
+              disabled={selectedBeats.size === 0}
+            >
+              Apply {selectedBeats.size} cuts
+            </Button>
           </div>
         </div>
       </div>
@@ -204,7 +205,7 @@ const getStyles = (theme) => ({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2000,
-    padding: '20px'
+    padding: '20px',
   },
   modal: {
     width: '100%',
@@ -214,36 +215,36 @@ const getStyles = (theme) => ({
     borderRadius: '16px',
     display: 'flex',
     flexDirection: 'column',
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   header: {
     display: 'flex',
     alignItems: 'flex-start',
     gap: '12px',
     padding: '20px 20px 16px',
-    borderBottom: `1px solid ${theme.bg.elevated}`
+    borderBottom: `1px solid ${theme.bg.elevated}`,
   },
   headerIcon: {
-    fontSize: '24px'
+    fontSize: '24px',
   },
   title: {
     fontSize: '18px',
     fontWeight: '600',
     color: theme.text.primary,
-    margin: '0 0 4px 0'
+    margin: '0 0 4px 0',
   },
   subtitle: {
     fontSize: '14px',
     color: theme.text.muted,
     margin: 0,
-    maxWidth: '400px'
+    maxWidth: '400px',
   },
   presets: {
     display: 'flex',
     flexWrap: 'wrap',
     gap: '8px',
     padding: '16px 20px',
-    borderBottom: `1px solid ${theme.bg.elevated}`
+    borderBottom: `1px solid ${theme.bg.elevated}`,
   },
   preset: {
     padding: '8px 16px',
@@ -254,7 +255,7 @@ const getStyles = (theme) => ({
     fontSize: '13px',
     fontWeight: '500',
     cursor: 'pointer',
-    transition: 'all 0.15s'
+    transition: 'all 0.15s',
   },
   presetActive: {
     padding: '8px 16px',
@@ -264,20 +265,20 @@ const getStyles = (theme) => ({
     color: '#fff',
     fontSize: '13px',
     fontWeight: '500',
-    cursor: 'pointer'
+    cursor: 'pointer',
   },
   beatsContainer: {
     flex: 1,
     overflow: 'auto',
-    padding: '16px 20px'
+    padding: '16px 20px',
   },
   noBeats: {
     textAlign: 'center',
     padding: '40px',
-    color: theme.text.muted
+    color: theme.text.muted,
   },
   measure: {
-    marginBottom: '16px'
+    marginBottom: '16px',
   },
   measureLabel: {
     fontSize: '12px',
@@ -285,12 +286,12 @@ const getStyles = (theme) => ({
     color: theme.text.muted,
     marginBottom: '8px',
     textTransform: 'uppercase',
-    letterSpacing: '0.5px'
+    letterSpacing: '0.5px',
   },
   measureBeats: {
     display: 'flex',
     gap: '8px',
-    flexWrap: 'wrap'
+    flexWrap: 'wrap',
   },
   beat: {
     display: 'flex',
@@ -303,20 +304,20 @@ const getStyles = (theme) => ({
     cursor: 'pointer',
     transition: 'all 0.15s',
     minWidth: '80px',
-    color: theme.text.primary
+    color: theme.text.primary,
   },
   beatSelected: {
     backgroundColor: theme.accent.primary,
     borderColor: theme.accent.primary,
-    color: '#fff'
+    color: '#fff',
   },
   beatNumber: {
     fontSize: '16px',
-    fontWeight: '700'
+    fontWeight: '700',
   },
   beatTime: {
     fontSize: '12px',
-    opacity: 0.7
+    opacity: 0.7,
   },
   footer: {
     display: 'flex',
@@ -324,15 +325,15 @@ const getStyles = (theme) => ({
     justifyContent: 'space-between',
     padding: '16px 20px',
     borderTop: `1px solid ${theme.bg.elevated}`,
-    backgroundColor: theme.bg.page
+    backgroundColor: theme.bg.page,
   },
   beatCount: {
     fontSize: '13px',
-    color: theme.text.muted
+    color: theme.text.muted,
   },
   footerActions: {
     display: 'flex',
-    gap: '8px'
+    gap: '8px',
   },
 });
 

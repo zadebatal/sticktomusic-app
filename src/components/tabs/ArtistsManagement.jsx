@@ -5,9 +5,16 @@ import { Badge } from '../../ui/components/Badge';
 import { TextField } from '../../ui/components/TextField';
 import { DropdownMenu } from '../../ui/components/DropdownMenu';
 import {
-  FeatherPlus, FeatherEdit, FeatherMoreVertical,
-  FeatherTrash, FeatherSettings, FeatherSearch,
-  FeatherFilter, FeatherCheck, FeatherX, FeatherUsers,
+  FeatherPlus,
+  FeatherEdit,
+  FeatherMoreVertical,
+  FeatherTrash,
+  FeatherSettings,
+  FeatherSearch,
+  FeatherFilter,
+  FeatherCheck,
+  FeatherX,
+  FeatherUsers,
   FeatherLoader,
 } from '@subframe/core';
 import { Avatar } from '../../ui/components/Avatar';
@@ -37,8 +44,8 @@ const ArtistsManagement = ({
   // Determine Late.co connection status per artist
   const artistLateStatus = useMemo(() => {
     const map = {};
-    artists.forEach(a => {
-      map[a.id] = latePages.some(p => p.artistId === a.id);
+    artists.forEach((a) => {
+      map[a.id] = latePages.some((p) => p.artistId === a.id);
     });
     return map;
   }, [artists, latePages]);
@@ -47,10 +54,14 @@ const ArtistsManagement = ({
   const getTierBadge = (artist) => {
     const tier = artist.subscriptionTier || artist.tier || 'starter';
     switch (tier.toLowerCase()) {
-      case 'growth': return { variant: 'brand', label: 'Growth' };
-      case 'scale': return { variant: 'warning', label: 'Scale' };
-      case 'sensation': return { variant: 'success', label: 'Sensation' };
-      default: return { variant: 'neutral', label: 'Starter' };
+      case 'growth':
+        return { variant: 'brand', label: 'Growth' };
+      case 'scale':
+        return { variant: 'warning', label: 'Scale' };
+      case 'sensation':
+        return { variant: 'success', label: 'Sensation' };
+      default:
+        return { variant: 'neutral', label: 'Starter' };
     }
   };
 
@@ -59,10 +70,10 @@ const ArtistsManagement = ({
     let result = artists;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      result = result.filter(a => a.name?.toLowerCase().includes(q));
+      result = result.filter((a) => a.name?.toLowerCase().includes(q));
     }
     if (tierFilter !== 'all') {
-      result = result.filter(a => {
+      result = result.filter((a) => {
         const tier = (a.subscriptionTier || a.tier || 'starter').toLowerCase();
         return tier === tierFilter;
       });
@@ -72,15 +83,14 @@ const ArtistsManagement = ({
 
   // Social sets count per artist — count actual connected pages, not the quota
   const getSocialSetsCount = (artist) => {
-    const artistPages = latePages.filter(p => p.artistId === artist.id);
-    const handles = new Set(artistPages.map(p => p.handle).filter(Boolean));
+    const artistPages = latePages.filter((p) => p.artistId === artist.id);
+    const handles = new Set(artistPages.map((p) => p.handle).filter(Boolean));
     return handles.size;
   };
 
   return (
     <div className="flex-1 overflow-auto bg-black px-12 py-8">
       <div className="flex w-full flex-col items-start gap-8">
-
         {/* ═══ HEADER ═══ */}
         <div className="flex w-full items-center justify-between">
           <div className="flex flex-col items-start gap-2">
@@ -113,7 +123,9 @@ const ArtistsManagement = ({
           <SubframeCore.DropdownMenu.Root>
             <SubframeCore.DropdownMenu.Trigger asChild>
               <Button variant="neutral-secondary" icon={<FeatherFilter />}>
-                {tierFilter === 'all' ? 'Filter by tier' : tierFilter.charAt(0).toUpperCase() + tierFilter.slice(1)}
+                {tierFilter === 'all'
+                  ? 'Filter by tier'
+                  : tierFilter.charAt(0).toUpperCase() + tierFilter.slice(1)}
               </Button>
             </SubframeCore.DropdownMenu.Trigger>
             <SubframeCore.DropdownMenu.Portal>
@@ -154,14 +166,19 @@ const ArtistsManagement = ({
                 : 'Add your first artist to get started with content creation.'}
             </span>
             {!searchQuery && tierFilter === 'all' && onAddArtist && (
-              <Button variant="brand-primary" size="medium" icon={<FeatherPlus />} onClick={onAddArtist}>
+              <Button
+                variant="brand-primary"
+                size="medium"
+                icon={<FeatherPlus />}
+                onClick={onAddArtist}
+              >
                 Add Artist
               </Button>
             )}
           </div>
         ) : (
           <div className="grid w-full grid-cols-1 sm:grid-cols-2 gap-6">
-            {filteredArtists.map(artist => {
+            {filteredArtists.map((artist) => {
               const tier = getTierBadge(artist);
               const isActive = artist.status === 'active' || !artist.status;
               const isConnected = artistLateStatus[artist.id];
@@ -177,26 +194,28 @@ const ArtistsManagement = ({
                 >
                   {/* Row 1: Identity */}
                   <div className="flex w-full items-start gap-4">
-                    <Avatar
-                      size="large"
-                      image={artist.photoURL || undefined}
-                      className="flex-none"
-                    >
+                    <Avatar size="large" image={artist.photoURL || undefined} className="flex-none">
                       {(artist.name || '?')[0].toUpperCase()}
                     </Avatar>
                     <div className="flex grow shrink-0 basis-0 flex-col items-start gap-2">
-                      <span className="text-heading-3 font-heading-3 text-[#ffffffff]">{artist.name}</span>
+                      <span className="text-heading-3 font-heading-3 text-[#ffffffff]">
+                        {artist.name}
+                      </span>
                       <div className="flex items-center gap-2">
                         <Badge variant={tier.variant}>{tier.label}</Badge>
                         {isActive ? (
                           <div className="flex items-center gap-1">
                             <FeatherCheck className="text-body font-body text-[#22c55eff]" />
-                            <span className="text-caption font-caption text-neutral-400">Active</span>
+                            <span className="text-caption font-caption text-neutral-400">
+                              Active
+                            </span>
                           </div>
                         ) : (
                           <div className="flex items-center gap-1">
                             <span className="h-2 w-2 rounded-full bg-neutral-400" />
-                            <span className="text-caption font-caption text-neutral-400">Inactive</span>
+                            <span className="text-caption font-caption text-neutral-400">
+                              Inactive
+                            </span>
                           </div>
                         )}
                       </div>
@@ -214,17 +233,28 @@ const ArtistsManagement = ({
                         />
                       </SubframeCore.DropdownMenu.Trigger>
                       <SubframeCore.DropdownMenu.Portal>
-                        <SubframeCore.DropdownMenu.Content side="bottom" align="end" sideOffset={4} asChild>
+                        <SubframeCore.DropdownMenu.Content
+                          side="bottom"
+                          align="end"
+                          sideOffset={4}
+                          asChild
+                        >
                           <DropdownMenu>
                             <DropdownMenu.DropdownItem
                               icon={<FeatherEdit />}
-                              onClick={(e) => { e.stopPropagation(); onEditArtist?.(artist); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEditArtist?.(artist);
+                              }}
                             >
                               Edit Artist
                             </DropdownMenu.DropdownItem>
                             <DropdownMenu.DropdownItem
                               icon={<FeatherSettings />}
-                              onClick={(e) => { e.stopPropagation(); onArtistChange?.(artist.id); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onArtistChange?.(artist.id);
+                              }}
                             >
                               Manage Pages
                             </DropdownMenu.DropdownItem>
@@ -233,7 +263,10 @@ const ArtistsManagement = ({
                                 <DropdownMenu.DropdownDivider />
                                 <DropdownMenu.DropdownItem
                                   icon={<FeatherTrash />}
-                                  onClick={(e) => { e.stopPropagation(); onDeleteArtist?.(artist); }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDeleteArtist?.(artist);
+                                  }}
                                 >
                                   Remove Artist
                                 </DropdownMenu.DropdownItem>
@@ -248,28 +281,41 @@ const ArtistsManagement = ({
                   {/* Row 2: Stats */}
                   <div className="flex w-full items-center justify-between">
                     <div className="flex flex-col items-start gap-1">
-                      <span className="text-caption font-caption text-neutral-400">Social Sets</span>
+                      <span className="text-caption font-caption text-neutral-400">
+                        Social Sets
+                      </span>
                       <span className="text-body-bold font-body-bold text-[#ffffffff]">
                         {getSocialSetsCount(artist)} Sets
                       </span>
                     </div>
                     <div className="flex flex-col items-start gap-1">
-                      <span className="text-caption font-caption text-neutral-400">Late.co Status</span>
+                      <span className="text-caption font-caption text-neutral-400">
+                        Late.co Status
+                      </span>
                       <div className="flex items-center gap-1">
                         {loadingLatePages ? (
                           <>
-                            <FeatherLoader className="text-body font-body text-neutral-400 animate-spin" style={{ width: 14, height: 14 }} />
-                            <span className="text-body-bold font-body-bold text-neutral-400">Checking...</span>
+                            <FeatherLoader
+                              className="text-body font-body text-neutral-400 animate-spin"
+                              style={{ width: 14, height: 14 }}
+                            />
+                            <span className="text-body-bold font-body-bold text-neutral-400">
+                              Checking...
+                            </span>
                           </>
                         ) : isConnected ? (
                           <>
                             <FeatherCheck className="text-body font-body text-[#22c55eff]" />
-                            <span className="text-body-bold font-body-bold text-[#ffffffff]">Connected</span>
+                            <span className="text-body-bold font-body-bold text-[#ffffffff]">
+                              Connected
+                            </span>
                           </>
                         ) : (
                           <>
                             <FeatherX className="text-body font-body text-neutral-400" />
-                            <span className="text-body-bold font-body-bold text-[#ffffffff]">Not Connected</span>
+                            <span className="text-body-bold font-body-bold text-[#ffffffff]">
+                              Not Connected
+                            </span>
                           </>
                         )}
                       </div>
@@ -281,7 +327,10 @@ const ArtistsManagement = ({
                     className="h-10 w-full"
                     variant="neutral-secondary"
                     size="large"
-                    onClick={(e) => { e.stopPropagation(); onArtistChange?.(artist.id); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onArtistChange?.(artist.id);
+                    }}
                   >
                     View Details
                   </Button>

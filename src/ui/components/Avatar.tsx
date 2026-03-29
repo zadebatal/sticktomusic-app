@@ -82,6 +82,7 @@ const AvatarRoot = React.forwardRef<HTMLDivElement, AvatarRootProps>(
               }
             )}
             src={image}
+            referrerPolicy="no-referrer"
           />
         ) : null}
       </div>

@@ -48,7 +48,9 @@ export async function transcribeAudio(audioFileOrUrl, apiKey, onProgress, option
   if (typeof audioFileOrUrl === 'string') {
     // Reject blob URLs - they expire and can't be fetched reliably
     if (audioFileOrUrl.startsWith('blob:')) {
-      throw new Error('Blob URLs are not supported. Please use a direct file upload or a valid HTTP URL.');
+      throw new Error(
+        'Blob URLs are not supported. Please use a direct file upload or a valid HTTP URL.',
+      );
     }
 
     // Must be an HTTP/HTTPS URL
@@ -102,14 +104,14 @@ export async function transcribeAudio(audioFileOrUrl, apiKey, onProgress, option
 
     response = await fetch(PROXY_URL, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${idToken}` },
+      headers: { Authorization: `Bearer ${idToken}` },
       body: formData,
     });
   } else {
     // Direct call with personal key (backwards compatible)
     response = await fetch(OPENAI_API_URL, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}` },
+      headers: { Authorization: `Bearer ${apiKey}` },
       body: formData,
     });
   }
@@ -138,7 +140,7 @@ export async function transcribeAudio(audioFileOrUrl, apiKey, onProgress, option
 
   if (isTrimmed) {
     words = normalizeWordsToTrimRange(globalWords, trimStart, trimEnd, { inputInMs: false });
-    text = words.map(w => w.text).join(' ');
+    text = words.map((w) => w.text).join(' ');
     effectiveDuration = (trimEnd || data.duration) - trimStart;
     onProgress?.(`Filtered to ${words.length} words in trim range`);
   }
@@ -149,23 +151,42 @@ export async function transcribeAudio(audioFileOrUrl, apiKey, onProgress, option
     language: data.language,
     duration: effectiveDuration,
     fullDuration: data.duration,
-    isTrimmed
+    isTrimmed,
   };
 }
 
 export function getStoredApiKey() {
-  try { return localStorage.getItem('openai_api_key'); } catch { return null; }
+  try {
+    // Primary: read from storageService's stm_api_keys (where Settings saves)
+    const keys = JSON.parse(localStorage.getItem('stm_api_keys') || '{}');
+    if (keys.openai) return keys.openai;
+    // Fallback: legacy key location
+    const legacy = localStorage.getItem('openai_api_key');
+    if (legacy) return legacy;
+  } catch {
+    // fall through
+  }
+  // Fallback: env var (for local dev — CRA only exposes REACT_APP_ prefixed vars)
+  return process.env.REACT_APP_OPENAI_API_KEY || null;
 }
 
 export function storeApiKey(apiKey) {
-  try { localStorage.setItem('openai_api_key', apiKey); } catch {}
+  try {
+    // Write to both locations for compatibility
+    const keys = JSON.parse(localStorage.getItem('stm_api_keys') || '{}');
+    keys.openai = apiKey;
+    localStorage.setItem('stm_api_keys', JSON.stringify(keys));
+    localStorage.setItem('openai_api_key', apiKey);
+  } catch {}
 }
 
 export async function validateApiKey(apiKey) {
   try {
     const response = await fetch('https://api.openai.com/v1/models', {
-      headers: { 'Authorization': `Bearer ${apiKey}` },
+      headers: { Authorization: `Bearer ${apiKey}` },
     });
     return response.ok;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }

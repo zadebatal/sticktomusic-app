@@ -15,8 +15,8 @@ import log from '../utils/logger';
 const OPERATOR_EMAILS = Object.freeze(
   (process.env.REACT_APP_OPERATOR_EMAILS || '')
     .split(',')
-    .map(email => email.trim().toLowerCase())
-    .filter(Boolean)
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean),
 );
 
 /**
@@ -152,10 +152,9 @@ export function filterForRole(items, user) {
   }
 
   // Artists only see their own content
-  return items.filter(item =>
-    item.artistId === user.artistId ||
-    item.artistId === user.id ||
-    item.createdBy === user.id
+  return items.filter(
+    (item) =>
+      item.artistId === user.artistId || item.artistId === user.id || item.createdBy === user.id,
   );
 }
 

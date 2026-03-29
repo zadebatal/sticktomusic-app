@@ -63,10 +63,14 @@ const loadImage = (url) => {
  */
 const getCanvasSize = (aspectRatio) => {
   switch (aspectRatio) {
-    case '1:1': return { width: 1080, height: 1080 };
-    case '4:5': return { width: 1080, height: 1350 };
-    case '16:9': return { width: 1920, height: 1080 };
-    default: return { width: 1080, height: 1920 }; // 9:16
+    case '1:1':
+      return { width: 1080, height: 1080 };
+    case '4:5':
+      return { width: 1080, height: 1350 };
+    case '16:9':
+      return { width: 1920, height: 1080 };
+    default:
+      return { width: 1080, height: 1920 }; // 9:16
   }
 };
 
@@ -114,7 +118,18 @@ const drawPhotoWithKenBurns = (ctx, img, progress, effect, canvasW, canvasH) => 
 /**
  * Draw crossfade between two photos
  */
-const drawCrossfade = (ctx, imgA, imgB, fadeProgress, effectA, effectB, progressA, progressB, canvasW, canvasH) => {
+const drawCrossfade = (
+  ctx,
+  imgA,
+  imgB,
+  fadeProgress,
+  effectA,
+  effectB,
+  progressA,
+  progressB,
+  canvasW,
+  canvasH,
+) => {
   // Draw photo A
   ctx.globalAlpha = 1 - fadeProgress;
   drawPhotoWithKenBurns(ctx, imgA, progressA, effectA, canvasW, canvasH);
@@ -175,7 +190,17 @@ const drawPhotoGallery = (ctx, img, canvasW, canvasH) => {
  * @param {Function} onProgress - Progress callback (0-100)
  * @returns {Promise<Blob>} Final MP4 video blob
  */
-export const renderPhotoMontage = async ({ photos, aspectRatio = '9:16', transition = 'cut', kenBurns = true, displayMode = 'cover', audio = null }, onProgress = () => {}) => {
+export const renderPhotoMontage = async (
+  {
+    photos,
+    aspectRatio = '9:16',
+    transition = 'cut',
+    kenBurns = true,
+    displayMode = 'cover',
+    audio = null,
+  },
+  onProgress = () => {},
+) => {
   if (!photos || photos.length === 0) throw new Error('No photos to render');
 
   const FPS = 30;
@@ -184,19 +209,29 @@ export const renderPhotoMontage = async ({ photos, aspectRatio = '9:16', transit
 
   // Phase 1: Load unique images (0-20%) — dedupe URLs for cycling sequences
   onProgress(safeProgress(5));
-  const uniqueUrls = [...new Set(photos.map(p => p.url))];
+  const uniqueUrls = [...new Set(photos.map((p) => p.url))];
   log('[PhotoMontage] Loading', uniqueUrls.length, 'unique images (', photos.length, 'slots)...');
   const imageCache = {};
-  await Promise.all(
+  const imageResults = await Promise.allSettled(
     uniqueUrls.map(async (url, i) => {
-      imageCache[url] = await loadImage(url);
+      const img = await loadImage(url);
+      imageCache[url] = img;
       onProgress(safeProgress(5 + (i / uniqueUrls.length) * 15));
-    })
+      return img;
+    }),
   );
-  const loadedImages = photos.map(p => imageCache[p.url]);
+  const failedCount = imageResults.filter((r) => r.status === 'rejected').length;
+  if (failedCount > 0) {
+    log('[PhotoMontage]', failedCount, 'image(s) failed to load — skipping them');
+  }
+  const loadedImages = photos.map((p) => imageCache[p.url] || null);
 
   // Assign Ken Burns effects (randomized per photo)
-  const effects = photos.map((_, i) => kenBurns ? KB_EFFECTS[i % KB_EFFECTS.length] : { startScale: 1, endScale: 1, startX: 0, startY: 0, endX: 0, endY: 0 });
+  const effects = photos.map((_, i) =>
+    kenBurns
+      ? KB_EFFECTS[i % KB_EFFECTS.length]
+      : { startScale: 1, endScale: 1, startX: 0, startY: 0, endX: 0, endY: 0 },
+  );
 
   // Calculate total duration
   const totalDuration = photos.reduce((sum, p) => sum + (p.duration || 1), 0);
@@ -223,12 +258,14 @@ export const renderPhotoMontage = async ({ photos, aspectRatio = '9:16', transit
 
   // Pick best mime type
   const mimeTypes = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp8', 'video/webm'];
-  const mimeType = mimeTypes.find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+  const mimeType = mimeTypes.find((t) => MediaRecorder.isTypeSupported(t)) || 'video/webm';
   const isNativeMP4 = mimeType.startsWith('video/mp4');
 
   const chunks = [];
   const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 6000000 });
-  recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+  recorder.ondataavailable = (e) => {
+    if (e.data.size > 0) chunks.push(e.data);
+  };
 
   const renderPromise = new Promise((resolve, reject) => {
     recorder.onstop = () => {
@@ -245,13 +282,19 @@ export const renderPhotoMontage = async ({ photos, aspectRatio = '9:16', transit
     const currentTime = frame / FPS;
 
     // Find current photo
-    let currentPhotoIdx = timeline.findIndex(t => currentTime >= t.startTime && currentTime < t.endTime);
+    let currentPhotoIdx = timeline.findIndex(
+      (t) => currentTime >= t.startTime && currentTime < t.endTime,
+    );
     if (currentPhotoIdx === -1) currentPhotoIdx = timeline.length - 1;
 
     const slot = timeline[currentPhotoIdx];
     const localProgress = (currentTime - slot.startTime) / (slot.endTime - slot.startTime);
 
-    if (displayMode === 'gallery') {
+    // Skip frame if image failed to load
+    if (!loadedImages[currentPhotoIdx]) {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvasW, canvasH);
+    } else if (displayMode === 'gallery') {
       // Gallery mode: white bg, contained photo with shadow, no Ken Burns/crossfade
       drawPhotoGallery(ctx, loadedImages[currentPhotoIdx], canvasW, canvasH);
     } else {
@@ -262,15 +305,40 @@ export const renderPhotoMontage = async ({ photos, aspectRatio = '9:16', transit
       if (transition === 'crossfade' && currentPhotoIdx < timeline.length - 1) {
         const timeUntilEnd = slot.endTime - currentTime;
         if (timeUntilEnd < CROSSFADE_DURATION) {
-          const fadeProgress = 1 - (timeUntilEnd / CROSSFADE_DURATION);
+          const fadeProgress = 1 - timeUntilEnd / CROSSFADE_DURATION;
           const nextIdx = currentPhotoIdx + 1;
           const nextLocalProgress = 0;
-          drawCrossfade(ctx, loadedImages[currentPhotoIdx], loadedImages[nextIdx], fadeProgress, effects[currentPhotoIdx], effects[nextIdx], localProgress, nextLocalProgress, canvasW, canvasH);
+          drawCrossfade(
+            ctx,
+            loadedImages[currentPhotoIdx],
+            loadedImages[nextIdx],
+            fadeProgress,
+            effects[currentPhotoIdx],
+            effects[nextIdx],
+            localProgress,
+            nextLocalProgress,
+            canvasW,
+            canvasH,
+          );
         } else {
-          drawPhotoWithKenBurns(ctx, loadedImages[currentPhotoIdx], localProgress, effects[currentPhotoIdx], canvasW, canvasH);
+          drawPhotoWithKenBurns(
+            ctx,
+            loadedImages[currentPhotoIdx],
+            localProgress,
+            effects[currentPhotoIdx],
+            canvasW,
+            canvasH,
+          );
         }
       } else {
-        drawPhotoWithKenBurns(ctx, loadedImages[currentPhotoIdx], localProgress, effects[currentPhotoIdx], canvasW, canvasH);
+        drawPhotoWithKenBurns(
+          ctx,
+          loadedImages[currentPhotoIdx],
+          localProgress,
+          effects[currentPhotoIdx],
+          canvasW,
+          canvasH,
+        );
       }
     }
 
@@ -283,7 +351,7 @@ export const renderPhotoMontage = async ({ photos, aspectRatio = '9:16', transit
 
     // Yield to browser — faster than real-time but non-blocking
     if (frame % 5 === 0) {
-      await new Promise(r => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, 0));
     }
   }
 
@@ -302,7 +370,7 @@ export const renderPhotoMontage = async ({ photos, aspectRatio = '9:16', transit
     let ffmpegArgs = ['-i', `input.${inputExt}`];
 
     // Add audio if present
-    const hasAudio = !!(audio?.url);
+    const hasAudio = !!audio?.url;
     if (hasAudio) {
       const audioResp = await fetch(audio.url);
       const audioBuf = await audioResp.arrayBuffer();
@@ -312,11 +380,16 @@ export const renderPhotoMontage = async ({ photos, aspectRatio = '9:16', transit
     }
 
     ffmpegArgs.push(
-      '-c:v', 'libx264',
-      '-preset', 'ultrafast',
-      '-crf', '28',
-      '-pix_fmt', 'yuv420p',
-      '-r', '30'
+      '-c:v',
+      'libx264',
+      '-preset',
+      'ultrafast',
+      '-crf',
+      '28',
+      '-pix_fmt',
+      'yuv420p',
+      '-r',
+      '30',
     );
 
     if (hasAudio) {
@@ -334,7 +407,13 @@ export const renderPhotoMontage = async ({ photos, aspectRatio = '9:16', transit
     // Clean up
     await ffmpeg.deleteFile(`input.${inputExt}`);
     await ffmpeg.deleteFile('output.mp4');
-    if (hasAudio) { try { await ffmpeg.deleteFile('audio.mp3'); } catch (e) { /* ignore */ } }
+    if (hasAudio) {
+      try {
+        await ffmpeg.deleteFile('audio.mp3');
+      } catch (e) {
+        /* ignore */
+      }
+    }
 
     onProgress(100);
     log('[PhotoMontage] Final MP4:', (finalBlob.size / 1024 / 1024).toFixed(2), 'MB');

@@ -1,19 +1,25 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import * as Sentry from '@sentry/react';
 import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 import App from './App.jsx';
 import ErrorBoundary from './components/ErrorBoundary';
 
-// Initialize Sentry error monitoring (only if DSN is configured)
+// React Grab — hover + Cmd+C to copy element context for Claude Code (dev only)
+if (process.env.NODE_ENV === 'development') {
+  import('react-grab');
+}
+
+// Initialize Sentry error monitoring lazily (only if DSN is configured)
 if (process.env.REACT_APP_SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.REACT_APP_SENTRY_DSN,
-    environment: process.env.NODE_ENV,
-    tracesSampleRate: 0.1,
-    replaysSessionSampleRate: 0,
-    replaysOnErrorSampleRate: 1.0,
+  import('@sentry/react').then((Sentry) => {
+    Sentry.init({
+      dsn: process.env.REACT_APP_SENTRY_DSN,
+      environment: process.env.NODE_ENV,
+      tracesSampleRate: 0.1,
+      replaysSessionSampleRate: 0,
+      replaysOnErrorSampleRate: 1.0,
+    });
   });
 }
 
@@ -25,5 +31,5 @@ root.render(
         <App />
       </BrowserRouter>
     </ErrorBoundary>
-  </React.StrictMode>
+  </React.StrictMode>,
 );

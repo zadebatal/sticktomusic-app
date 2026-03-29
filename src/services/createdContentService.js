@@ -6,8 +6,16 @@
  */
 
 import {
-  collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  writeBatch, onSnapshot, serverTimestamp
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  writeBatch,
+  onSnapshot,
+  serverTimestamp,
 } from 'firebase/firestore';
 import log from '../utils/logger';
 
@@ -28,7 +36,7 @@ export const createCreatedVideo = ({
   cropMode = 'cover',
   duration = 0,
   bpm = null,
-  collectionId = null
+  collectionId = null,
 }) => {
   const now = new Date().toISOString();
   return {
@@ -50,7 +58,7 @@ export const createCreatedVideo = ({
     postedTo: [],
     scheduledPostId: null,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 };
 
@@ -59,12 +67,12 @@ export const createCreatedSlideshow = ({
   slides = [],
   audio = null,
   cropMode = '9:16',
-  collectionId = null
+  collectionId = null,
 }) => {
   if (!slides || slides.length === 0) {
     throw new Error('Slideshow must have at least one slide');
   }
-  if (slides.some(s => !s.backgroundImage)) {
+  if (slides.some((s) => !s.backgroundImage)) {
     log.warn('[Library] Some slides missing background images');
   }
 
@@ -83,7 +91,7 @@ export const createCreatedSlideshow = ({
     postedTo: [],
     scheduledPostId: null,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 };
 
@@ -95,7 +103,9 @@ const trackLocallyDeletedContent = (artistId, itemId) => {
     const ids = JSON.parse(localStorage.getItem(key) || '[]');
     if (!ids.includes(itemId)) ids.push(itemId);
     localStorage.setItem(key, JSON.stringify(ids));
-  } catch (e) { /* ignore */ }
+  } catch (e) {
+    /* ignore */
+  }
 };
 
 export const getAndClearLocallyDeletedContent = (artistId) => {
@@ -104,7 +114,9 @@ export const getAndClearLocallyDeletedContent = (artistId) => {
     const ids = JSON.parse(localStorage.getItem(key) || '[]');
     if (ids.length > 0) localStorage.removeItem(key);
     return ids;
-  } catch (e) { return []; }
+  } catch (e) {
+    return [];
+  }
 };
 
 // ── localStorage CRUD ──
@@ -115,7 +127,7 @@ export const getCreatedContent = (artistId) => {
     const content = data ? JSON.parse(data) : { videos: [], slideshows: [] };
     if (content.slideshows?.length > 0) {
       const seen = new Map();
-      content.slideshows.forEach(s => {
+      content.slideshows.forEach((s) => {
         if (!seen.has(s.id) || (s.updatedAt && s.updatedAt > (seen.get(s.id).updatedAt || ''))) {
           seen.set(s.id, s);
         }
@@ -135,39 +147,49 @@ export const getCreatedContent = (artistId) => {
 export const saveCreatedContent = (artistId, content) => {
   try {
     const cleanedContent = {
-      videos: (content.videos || []).map(v => ({
+      videos: (content.videos || []).map((v) => ({
         ...v,
-        thumbnail: v.thumbnail?.startsWith('blob:') ? null : (v.thumbnail || null),
-        clips: (v.clips || []).map(c => ({
-          ...c,
-          file: undefined,
-          localUrl: undefined,
-          url: c.url?.startsWith('blob:') ? null : c.url,
-          thumbnail: c.thumbnail?.startsWith('blob:') ? null : (c.thumbnail || null),
-          thumbnailUrl: c.thumbnailUrl || null
-        })).filter(c => c.url)
+        thumbnail: v.thumbnail?.startsWith('blob:') ? null : v.thumbnail || null,
+        clips: (v.clips || [])
+          .map((c) => ({
+            ...c,
+            file: undefined,
+            localUrl: undefined,
+            url: c.url?.startsWith('blob:') ? null : c.url,
+            thumbnail: c.thumbnail?.startsWith('blob:') ? null : c.thumbnail || null,
+            thumbnailUrl: c.thumbnailUrl || null,
+          }))
+          .filter((c) => c.url),
       })),
-      slideshows: (content.slideshows || []).map(s => ({
+      slideshows: (content.slideshows || []).map((s) => ({
         ...s,
-        thumbnail: s.thumbnail?.startsWith('blob:') ? null : (s.thumbnail || null),
-        audio: s.audio ? {
-          ...s.audio,
-          file: undefined,
-          localUrl: undefined,
-          url: s.audio.url?.startsWith('blob:') ? null : s.audio.url
-        } : null,
-        slides: (s.slides || []).map(slide => ({
+        thumbnail: s.thumbnail?.startsWith('blob:') ? null : s.thumbnail || null,
+        audio: s.audio
+          ? {
+              ...s.audio,
+              file: undefined,
+              localUrl: undefined,
+              url: s.audio.url?.startsWith('blob:') ? null : s.audio.url,
+            }
+          : null,
+        slides: (s.slides || []).map((slide) => ({
           ...slide,
-          backgroundImage: slide.backgroundImage?.startsWith('blob:') ? null : slide.backgroundImage
-        }))
-      }))
+          backgroundImage: slide.backgroundImage?.startsWith('blob:')
+            ? null
+            : slide.backgroundImage,
+        })),
+      })),
     };
 
     localStorage.setItem(getCreatedContentKey(artistId), JSON.stringify(cleanedContent));
   } catch (error) {
     if (error?.name === 'QuotaExceededError' || error?.code === 22) {
-      log.warn('[CreatedContent] localStorage quota exceeded — removing cache. Firestore is source of truth.');
-      try { localStorage.removeItem(getCreatedContentKey(artistId)); } catch (_) {}
+      log.warn(
+        '[CreatedContent] localStorage quota exceeded — removing cache. Firestore is source of truth.',
+      );
+      try {
+        localStorage.removeItem(getCreatedContentKey(artistId));
+      } catch (_) {}
     } else {
       log.error('Error saving created content:', error);
     }
@@ -184,13 +206,13 @@ export const addCreatedVideo = (artistId, videoData) => {
 
 export const updateCreatedVideo = (artistId, videoId, updates) => {
   const content = getCreatedContent(artistId);
-  const index = content.videos.findIndex(v => v.id === videoId);
+  const index = content.videos.findIndex((v) => v.id === videoId);
   if (index === -1) return null;
 
   content.videos[index] = {
     ...content.videos[index],
     ...updates,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 
   saveCreatedContent(artistId, content);
@@ -199,7 +221,7 @@ export const updateCreatedVideo = (artistId, videoId, updates) => {
 
 export const deleteCreatedVideo = (artistId, videoId) => {
   const content = getCreatedContent(artistId);
-  const filtered = content.videos.filter(v => v.id !== videoId);
+  const filtered = content.videos.filter((v) => v.id !== videoId);
   if (filtered.length === content.videos.length) return false;
 
   content.videos = filtered;
@@ -210,10 +232,16 @@ export const deleteCreatedVideo = (artistId, videoId) => {
 
 export const addCreatedSlideshow = (artistId, slideshowData) => {
   const content = getCreatedContent(artistId);
-  const newSlideshow = slideshowData.id ? { type: 'slideshow', ...slideshowData } : createCreatedSlideshow(slideshowData);
-  const existingIndex = content.slideshows.findIndex(s => s.id === newSlideshow.id);
+  const newSlideshow = slideshowData.id
+    ? { type: 'slideshow', ...slideshowData }
+    : createCreatedSlideshow(slideshowData);
+  const existingIndex = content.slideshows.findIndex((s) => s.id === newSlideshow.id);
   if (existingIndex >= 0) {
-    content.slideshows[existingIndex] = { ...content.slideshows[existingIndex], ...newSlideshow, updatedAt: new Date().toISOString() };
+    content.slideshows[existingIndex] = {
+      ...content.slideshows[existingIndex],
+      ...newSlideshow,
+      updatedAt: new Date().toISOString(),
+    };
   } else {
     content.slideshows.push(newSlideshow);
   }
@@ -223,14 +251,18 @@ export const addCreatedSlideshow = (artistId, slideshowData) => {
 
 export const addCreatedSlideshowsBatch = (artistId, slideshowsData) => {
   const content = getCreatedContent(artistId);
-  const newSlideshows = slideshowsData.map(data =>
-    data.id ? { type: 'slideshow', ...data } : createCreatedSlideshow(data)
+  const newSlideshows = slideshowsData.map((data) =>
+    data.id ? { type: 'slideshow', ...data } : createCreatedSlideshow(data),
   );
 
-  newSlideshows.forEach(newSlideshow => {
-    const existingIndex = content.slideshows.findIndex(s => s.id === newSlideshow.id);
+  newSlideshows.forEach((newSlideshow) => {
+    const existingIndex = content.slideshows.findIndex((s) => s.id === newSlideshow.id);
     if (existingIndex >= 0) {
-      content.slideshows[existingIndex] = { ...content.slideshows[existingIndex], ...newSlideshow, updatedAt: new Date().toISOString() };
+      content.slideshows[existingIndex] = {
+        ...content.slideshows[existingIndex],
+        ...newSlideshow,
+        updatedAt: new Date().toISOString(),
+      };
     } else {
       content.slideshows.push(newSlideshow);
     }
@@ -242,13 +274,13 @@ export const addCreatedSlideshowsBatch = (artistId, slideshowsData) => {
 
 export const updateCreatedSlideshow = (artistId, slideshowId, updates) => {
   const content = getCreatedContent(artistId);
-  const index = content.slideshows.findIndex(s => s.id === slideshowId);
+  const index = content.slideshows.findIndex((s) => s.id === slideshowId);
   if (index === -1) return null;
 
   content.slideshows[index] = {
     ...content.slideshows[index],
     ...updates,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 
   saveCreatedContent(artistId, content);
@@ -257,7 +289,7 @@ export const updateCreatedSlideshow = (artistId, slideshowId, updates) => {
 
 export const deleteCreatedSlideshow = (artistId, slideshowId) => {
   const content = getCreatedContent(artistId);
-  const filtered = content.slideshows.filter(s => s.id !== slideshowId);
+  const filtered = content.slideshows.filter((s) => s.id !== slideshowId);
   if (filtered.length === content.slideshows.length) return false;
 
   content.slideshows = filtered;
@@ -273,62 +305,84 @@ export const saveCreatedContentAsync = async (db, artistId, content) => {
   try {
     const batch = writeBatch(db);
 
-    (content.videos || []).forEach(video => {
+    (content.videos || []).forEach((video) => {
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', video.id);
-      const cleanedClips = (video.clips || []).map(c => {
-        const { file, localUrl, ...clipData } = c;
-        const cleaned = {
-          ...clipData,
-          url: c.url?.startsWith('blob:') ? null : c.url,
-          thumbnail: c.thumbnail?.startsWith('blob:') ? null : (c.thumbnail || null),
-          thumbnailUrl: c.thumbnailUrl || null
-        };
-        Object.keys(cleaned).forEach(key => {
-          if (cleaned[key] === undefined) delete cleaned[key];
-        });
-        return cleaned;
-      }).filter(c => c.url);
+      const cleanedClips = (video.clips || [])
+        .map((c) => {
+          const { file, localUrl, ...clipData } = c;
+          const cleaned = {
+            ...clipData,
+            url: c.url?.startsWith('blob:') ? null : c.url,
+            thumbnail: c.thumbnail?.startsWith('blob:') ? null : c.thumbnail || null,
+            thumbnailUrl: c.thumbnailUrl || null,
+          };
+          Object.keys(cleaned).forEach((key) => {
+            if (cleaned[key] === undefined) delete cleaned[key];
+          });
+          return cleaned;
+        })
+        .filter((c) => c.url);
 
-      batch.set(docRef, {
-        ...video,
-        type: 'video',
-        thumbnail: video.thumbnail?.startsWith('blob:') ? null : (video.thumbnail || null),
-        clips: cleanedClips,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      batch.set(
+        docRef,
+        {
+          ...video,
+          type: 'video',
+          thumbnail: video.thumbnail?.startsWith('blob:') ? null : video.thumbnail || null,
+          clips: cleanedClips,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
     });
 
-    (content.slideshows || []).forEach(slideshow => {
-      const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', slideshow.id);
+    (content.slideshows || []).forEach((slideshow) => {
+      const docRef = doc(
+        db,
+        'artists',
+        artistId,
+        'library',
+        'data',
+        'createdContent',
+        slideshow.id,
+      );
       let cleanedAudio = null;
       if (slideshow.audio) {
         const { file, localUrl, ...audioData } = slideshow.audio;
         cleanedAudio = {
           ...audioData,
-          url: slideshow.audio.url?.startsWith('blob:') ? null : slideshow.audio.url
+          url: slideshow.audio.url?.startsWith('blob:') ? null : slideshow.audio.url,
         };
-        Object.keys(cleanedAudio).forEach(key => {
+        Object.keys(cleanedAudio).forEach((key) => {
           if (cleanedAudio[key] === undefined) delete cleanedAudio[key];
         });
         if (!cleanedAudio.url) cleanedAudio = null;
       }
 
-      batch.set(docRef, {
-        ...slideshow,
-        type: 'slideshow',
-        thumbnail: slideshow.thumbnail?.startsWith('blob:') ? null : (slideshow.thumbnail || null),
-        audio: cleanedAudio,
-        slides: (slideshow.slides || []).map(slide => ({
-          ...slide,
-          backgroundImage: slide.backgroundImage?.startsWith('blob:') ? null : slide.backgroundImage
-        })),
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      batch.set(
+        docRef,
+        {
+          ...slideshow,
+          type: 'slideshow',
+          thumbnail: slideshow.thumbnail?.startsWith('blob:') ? null : slideshow.thumbnail || null,
+          audio: cleanedAudio,
+          slides: (slideshow.slides || []).map((slide) => ({
+            ...slide,
+            backgroundImage: slide.backgroundImage?.startsWith('blob:')
+              ? null
+              : slide.backgroundImage,
+          })),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
     });
 
     await batch.commit();
-    log('[Library] Created content saved to Firestore:',
-      `${content.videos?.length || 0} videos, ${content.slideshows?.length || 0} slideshows`);
+    log(
+      '[Library] Created content saved to Firestore:',
+      `${content.videos?.length || 0} videos, ${content.slideshows?.length || 0} slideshows`,
+    );
   } catch (error) {
     log.error('[Library] Firestore save created content failed:', error.message);
   }
@@ -344,7 +398,7 @@ export const loadCreatedContentAsync = async (db, artistId) => {
       const oldData = oldDoc.data();
       const content = {
         videos: oldData.videos || [],
-        slideshows: oldData.slideshows || []
+        slideshows: oldData.slideshows || [],
       };
 
       log('[Library] Migrating created content from old path to new structure...');
@@ -369,16 +423,16 @@ export const loadCreatedContentAsync = async (db, artistId) => {
 
     const pendingDeletes = new Set(getAndClearLocallyDeletedContent(artistId));
     if (pendingDeletes.size > 0) {
-      snapshot.docs.forEach(d => {
+      snapshot.docs.forEach((d) => {
         if (pendingDeletes.has(d.id) && !d.data().deletedAt) {
-          updateDoc(d.ref, { deletedAt: serverTimestamp() }).catch(err =>
-            log.error('[Library] Reconcile soft-delete in load:', err)
+          updateDoc(d.ref, { deletedAt: serverTimestamp() }).catch((err) =>
+            log.error('[Library] Reconcile soft-delete in load:', err),
           );
         }
       });
     }
 
-    snapshot.docs.forEach(doc => {
+    snapshot.docs.forEach((doc) => {
       const data = doc.data();
       if (data.deletedAt || pendingDeletes.has(doc.id)) return;
       const type = data.type || (data.slides ? 'slideshow' : data.clips ? 'video' : null);
@@ -417,24 +471,26 @@ export const subscribeToCreatedContent = (db, artistId, callback) => {
     if (cleaned.audio) {
       const { file, localUrl, ...audioData } = cleaned.audio;
       cleaned.audio = audioData;
-      Object.keys(cleaned.audio).forEach(key => {
+      Object.keys(cleaned.audio).forEach((key) => {
         if (cleaned.audio[key] === undefined) delete cleaned.audio[key];
       });
       if (!cleaned.audio.url) cleaned.audio = null;
     }
 
     if (cleaned.clips) {
-      cleaned.clips = cleaned.clips.map(clip => {
-        const { file, localUrl, thumbnail, ...clipData } = clip;
-        const cleanedClip = clipData;
-        Object.keys(cleanedClip).forEach(key => {
-          if (cleanedClip[key] === undefined) delete cleanedClip[key];
-        });
-        return cleanedClip;
-      }).filter(c => c.url);
+      cleaned.clips = cleaned.clips
+        .map((clip) => {
+          const { file, localUrl, thumbnail, ...clipData } = clip;
+          const cleanedClip = clipData;
+          Object.keys(cleanedClip).forEach((key) => {
+            if (cleanedClip[key] === undefined) delete cleanedClip[key];
+          });
+          return cleanedClip;
+        })
+        .filter((c) => c.url);
     }
 
-    Object.keys(cleaned).forEach(key => {
+    Object.keys(cleaned).forEach((key) => {
       if (cleaned[key] === undefined) delete cleaned[key];
     });
 
@@ -446,42 +502,49 @@ export const subscribeToCreatedContent = (db, artistId, callback) => {
   loadCreatedContentAsync(db, artistId).then(() => {
     if (cancelled) return;
     const collectionRef = collection(db, 'artists', artistId, 'library', 'data', 'createdContent');
-    unsubscribeSnapshot = onSnapshot(collectionRef, (snapshot) => {
-      const pendingDeletes = new Set(getAndClearLocallyDeletedContent(artistId));
+    unsubscribeSnapshot = onSnapshot(
+      collectionRef,
+      (snapshot) => {
+        const pendingDeletes = new Set(getAndClearLocallyDeletedContent(artistId));
 
-      if (pendingDeletes.size > 0) {
-        snapshot.docs.forEach(d => {
-          if (pendingDeletes.has(d.id) && !d.data().deletedAt) {
-            updateDoc(d.ref, { deletedAt: serverTimestamp() }).catch(err =>
-              log.error('[Library] Reconcile soft-delete failed:', err)
-            );
+        if (pendingDeletes.size > 0) {
+          snapshot.docs.forEach((d) => {
+            if (pendingDeletes.has(d.id) && !d.data().deletedAt) {
+              updateDoc(d.ref, { deletedAt: serverTimestamp() }).catch((err) =>
+                log.error('[Library] Reconcile soft-delete failed:', err),
+              );
+            }
+          });
+        }
+
+        const videos = [];
+        const slideshows = [];
+
+        snapshot.docs.forEach((doc) => {
+          const data = cleanLoadedData(doc.data());
+          if (data.deletedAt || pendingDeletes.has(doc.id)) return;
+          const type = data.type || (data.slides ? 'slideshow' : data.clips ? 'video' : null);
+          if (type === 'video') {
+            videos.push({ ...data, type: 'video' });
+          } else if (type === 'slideshow') {
+            slideshows.push({ ...data, type: 'slideshow' });
           }
         });
-      }
 
-      const videos = [];
-      const slideshows = [];
-
-      snapshot.docs.forEach(doc => {
-        const data = cleanLoadedData(doc.data());
-        if (data.deletedAt || pendingDeletes.has(doc.id)) return;
-        const type = data.type || (data.slides ? 'slideshow' : data.clips ? 'video' : null);
-        if (type === 'video') {
-          videos.push({ ...data, type: 'video' });
-        } else if (type === 'slideshow') {
-          slideshows.push({ ...data, type: 'slideshow' });
-        }
-      });
-
-      const content = { videos, slideshows };
-      saveCreatedContent(artistId, content);
-      callback(content);
-    }, (error) => {
-      log.error('[Library] Created content subscription error:', error);
-    });
+        const content = { videos, slideshows };
+        saveCreatedContent(artistId, content);
+        callback(content);
+      },
+      (error) => {
+        log.error('[Library] Created content subscription error:', error);
+      },
+    );
   });
 
-  return () => { cancelled = true; if (unsubscribeSnapshot) unsubscribeSnapshot(); };
+  return () => {
+    cancelled = true;
+    if (unsubscribeSnapshot) unsubscribeSnapshot();
+  };
 };
 
 export const addCreatedSlideshowAsync = async (db, artistId, slideshowData) => {
@@ -545,11 +608,11 @@ export const restoreCreatedContentAsync = async (db, artistId, itemId) => {
     const content = getCreatedContent(artistId);
 
     if (type === 'video') {
-      if (!content.videos.find(v => v.id === itemId)) {
+      if (!content.videos.find((v) => v.id === itemId)) {
         content.videos.push({ ...cleanData, type: 'video' });
       }
     } else {
-      if (!content.slideshows.find(s => s.id === itemId)) {
+      if (!content.slideshows.find((s) => s.id === itemId)) {
         content.slideshows.push({ ...cleanData, type: 'slideshow' });
       }
     }
@@ -571,7 +634,7 @@ export const getDeletedContentAsync = async (db, artistId) => {
     const videos = [];
     const slideshows = [];
 
-    snapshot.docs.forEach(d => {
+    snapshot.docs.forEach((d) => {
       const data = d.data();
       if (!data.deletedAt) return;
       const type = data.type || (data.clips ? 'video' : 'slideshow');
@@ -619,15 +682,23 @@ export const addCreatedSlideshowsBatchAsync = async (db, artistId, slideshowsDat
 
 export const markContentScheduled = (artistId, contentId, scheduledPostId) => {
   const content = getCreatedContent(artistId);
-  const videoIdx = content.videos.findIndex(v => v.id === contentId);
+  const videoIdx = content.videos.findIndex((v) => v.id === contentId);
   if (videoIdx >= 0) {
-    content.videos[videoIdx] = { ...content.videos[videoIdx], scheduledPostId, updatedAt: new Date().toISOString() };
+    content.videos[videoIdx] = {
+      ...content.videos[videoIdx],
+      scheduledPostId,
+      updatedAt: new Date().toISOString(),
+    };
     saveCreatedContent(artistId, content);
     return true;
   }
-  const slideshowIdx = content.slideshows.findIndex(s => s.id === contentId);
+  const slideshowIdx = content.slideshows.findIndex((s) => s.id === contentId);
   if (slideshowIdx >= 0) {
-    content.slideshows[slideshowIdx] = { ...content.slideshows[slideshowIdx], scheduledPostId, updatedAt: new Date().toISOString() };
+    content.slideshows[slideshowIdx] = {
+      ...content.slideshows[slideshowIdx],
+      scheduledPostId,
+      updatedAt: new Date().toISOString(),
+    };
     saveCreatedContent(artistId, content);
     return true;
   }

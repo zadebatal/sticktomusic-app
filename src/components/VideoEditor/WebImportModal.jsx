@@ -19,7 +19,12 @@ import {
 import { getBankColor, getBankLabel } from '../../services/libraryService';
 import log from '../../utils/logger';
 
-const STATES = { INPUT: 'input', ANALYZING: 'analyzing', PREVIEW: 'preview', IMPORTING: 'importing' };
+const STATES = {
+  INPUT: 'input',
+  ANALYZING: 'analyzing',
+  PREVIEW: 'preview',
+  IMPORTING: 'importing',
+};
 
 const PLATFORM_COLORS = {
   YouTube: '#ff0000',
@@ -80,9 +85,12 @@ const WebImportModal = ({
     }
   }, [url]);
 
-  const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Enter') handleAnalyze();
-  }, [handleAnalyze]);
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (e.key === 'Enter') handleAnalyze();
+    },
+    [handleAnalyze],
+  );
 
   const handleImport = useCallback(async () => {
     abortRef.current = false;
@@ -90,16 +98,22 @@ const WebImportModal = ({
     setImportProgress({ status: 'Starting download...', progress: 0 });
 
     try {
-      const { jobId } = await startDownload(url.trim(), artistId, metadata?.type === 'gallery' ? maxItems : undefined, audioOnly);
+      const { jobId } = await startDownload(
+        url.trim(),
+        artistId,
+        metadata?.type === 'gallery' ? maxItems : undefined,
+        audioOnly,
+      );
 
       const files = await pollUntilComplete(jobId, (status) => {
         if (abortRef.current) return;
-        const statusText = {
-          pending: 'Waiting to start...',
-          downloading: audioOnly ? 'Extracting audio...' : 'Downloading media...',
-          uploading: `Uploading to storage... ${status.progress}%`,
-          complete: 'Complete!',
-        }[status.status] || status.status;
+        const statusText =
+          {
+            pending: 'Waiting to start...',
+            downloading: audioOnly ? 'Extracting audio...' : 'Downloading media...',
+            uploading: `Uploading to storage... ${status.progress}%`,
+            complete: 'Complete!',
+          }[status.status] || status.status;
         setImportProgress({ status: statusText, progress: status.progress || 0 });
       });
 
@@ -128,8 +142,14 @@ const WebImportModal = ({
         setError(null);
         setState(STATES.ANALYZING);
         analyzeUrl(pasted.trim())
-          .then(data => { setMetadata(data); setState(STATES.PREVIEW); })
-          .catch(err => { setError(err.message); setState(STATES.INPUT); });
+          .then((data) => {
+            setMetadata(data);
+            setState(STATES.PREVIEW);
+          })
+          .catch((err) => {
+            setError(err.message);
+            setState(STATES.INPUT);
+          });
       }, 0);
     }
   }, []);
@@ -142,20 +162,21 @@ const WebImportModal = ({
       {/* Modal */}
       <div
         className="relative z-10 flex w-full max-w-lg flex-col rounded-xl border border-neutral-200 bg-[#111111] shadow-2xl"
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
           <div className="flex items-center gap-2">
             <FeatherLink className="text-neutral-400" style={{ width: 18, height: 18 }} />
-            <span className="text-body-bold font-body-bold text-[#ffffffff]">{audioOnly ? 'Import Audio from URL' : 'Import from Web'}</span>
+            <span className="text-body-bold font-body-bold text-[#ffffffff]">
+              {audioOnly ? 'Import Audio from URL' : 'Import from Web'}
+            </span>
           </div>
           <IconButton icon={<FeatherX />} size="small" onClick={handleClose} />
         </div>
 
         {/* Body */}
         <div className="flex flex-col gap-4 px-5 py-5">
-
           {/* STATE: INPUT */}
           {state === STATES.INPUT && (
             <>
@@ -166,7 +187,10 @@ const WebImportModal = ({
                     ref={inputRef}
                     type="url"
                     value={url}
-                    onChange={e => { setUrl(e.target.value); setError(null); }}
+                    onChange={(e) => {
+                      setUrl(e.target.value);
+                      setError(null);
+                    }}
                     onKeyDown={handleKeyDown}
                     onPaste={handlePaste}
                     placeholder="https://youtube.com/watch?v=..."
@@ -187,22 +211,29 @@ const WebImportModal = ({
                       className="h-2 w-2 rounded-full"
                       style={{ backgroundColor: PLATFORM_COLORS[platform.name] || '#6366f1' }}
                     />
-                    <span className="text-caption font-caption text-neutral-400">{platform.name}</span>
+                    <span className="text-caption font-caption text-neutral-400">
+                      {platform.name}
+                    </span>
                   </div>
                 )}
               </div>
 
               {error && (
                 <div className="flex items-start gap-2 rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2.5">
-                  <FeatherAlertCircle className="mt-0.5 flex-none text-red-400" style={{ width: 14, height: 14 }} />
+                  <FeatherAlertCircle
+                    className="mt-0.5 flex-none text-red-400"
+                    style={{ width: 14, height: 14 }}
+                  />
                   <span className="text-caption font-caption text-red-300">{error}</span>
                 </div>
               )}
 
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <span className="text-caption font-caption text-neutral-500">Supported:</span>
-                {['YouTube', 'TikTok', 'Pinterest', 'Instagram', 'Twitter/X'].map(name => (
-                  <Badge key={name} variant="neutral">{name}</Badge>
+                {['YouTube', 'TikTok', 'Pinterest', 'Instagram', 'Twitter/X'].map((name) => (
+                  <Badge key={name} variant="neutral">
+                    {name}
+                  </Badge>
                 ))}
               </div>
             </>
@@ -213,9 +244,7 @@ const WebImportModal = ({
             <div className="flex flex-col items-center gap-4 py-8">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
               <span className="text-body font-body text-neutral-300">Analyzing URL...</span>
-              {platform && (
-                <Badge>{platform.name}</Badge>
-              )}
+              {platform && <Badge>{platform.name}</Badge>}
             </div>
           )}
 
@@ -241,20 +270,29 @@ const WebImportModal = ({
                   </span>
                   <div className="flex items-center gap-2">
                     <Badge
-                      style={PLATFORM_COLORS[metadata.platform] ? {
-                        backgroundColor: PLATFORM_COLORS[metadata.platform] + '22',
-                        color: PLATFORM_COLORS[metadata.platform],
-                        borderColor: PLATFORM_COLORS[metadata.platform] + '44',
-                      } : undefined}
+                      style={
+                        PLATFORM_COLORS[metadata.platform]
+                          ? {
+                              backgroundColor: PLATFORM_COLORS[metadata.platform] + '22',
+                              color: PLATFORM_COLORS[metadata.platform],
+                              borderColor: PLATFORM_COLORS[metadata.platform] + '44',
+                            }
+                          : undefined
+                      }
                     >
                       {metadata.platform}
                     </Badge>
                     <span className="text-caption font-caption text-neutral-400">
-                      {metadata.type === 'video' ? '1 video' : metadata.itemCount < 0 ? 'images' : `${metadata.itemCount}${metadata.itemCount >= 100 ? '+' : ''} image${metadata.itemCount !== 1 ? 's' : ''}`}
+                      {metadata.type === 'video'
+                        ? '1 video'
+                        : metadata.itemCount < 0
+                          ? 'images'
+                          : `${metadata.itemCount}${metadata.itemCount >= 100 ? '+' : ''} image${metadata.itemCount !== 1 ? 's' : ''}`}
                     </span>
                     {metadata.duration && (
                       <span className="text-caption font-caption text-neutral-500">
-                        {Math.floor(metadata.duration / 60)}:{String(Math.floor(metadata.duration % 60)).padStart(2, '0')}
+                        {Math.floor(metadata.duration / 60)}:
+                        {String(Math.floor(metadata.duration % 60)).padStart(2, '0')}
                       </span>
                     )}
                   </div>
@@ -264,14 +302,18 @@ const WebImportModal = ({
               {/* Audio note */}
               {audioOnly && (
                 <div className="flex items-center gap-2 rounded-lg border border-indigo-900/40 bg-indigo-950/20 px-3 py-2">
-                  <span className="text-caption font-caption text-indigo-300">Audio will be extracted as MP3 from this video</span>
+                  <span className="text-caption font-caption text-indigo-300">
+                    Audio will be extracted as MP3 from this video
+                  </span>
                 </div>
               )}
 
               {/* Bank selector */}
               {!audioOnly && bankCount > 1 && (
                 <div className="flex flex-col gap-2">
-                  <label className="text-caption font-caption text-neutral-400">Add to slide bank</label>
+                  <label className="text-caption font-caption text-neutral-400">
+                    Add to slide bank
+                  </label>
                   <div className="flex flex-wrap gap-2">
                     {Array.from({ length: bankCount }, (_, i) => {
                       const color = getBankColor(i);
@@ -300,41 +342,63 @@ const WebImportModal = ({
               )}
 
               {/* Download cap — for galleries with many or unknown items */}
-              {metadata.type === 'gallery' && (metadata.itemCount > 10 || metadata.itemCount < 0) && (
-                <div className="flex flex-col gap-2">
-                  <label className="text-caption font-caption text-neutral-400">How many to import?</label>
-                  <div className="flex flex-wrap gap-2">
-                    {(metadata.itemCount < 0 ? [50, 100, 150] : [10, 30, 50, 100]).map(cap => (
-                      <button
-                        key={cap}
-                        onClick={() => setMaxItems(cap)}
-                        className={`rounded-lg border px-3 py-2 text-caption font-caption transition-colors cursor-pointer ${
-                          maxItems === cap
-                            ? 'border-indigo-500 bg-indigo-500/10 text-[#ffffffff]'
-                            : 'border-neutral-200 bg-transparent text-neutral-400 hover:border-neutral-600'
-                        }`}
-                      >
-                        {cap} images
-                      </button>
-                    ))}
+              {metadata.type === 'gallery' &&
+                (metadata.itemCount > 10 || metadata.itemCount < 0) && (
+                  <div className="flex flex-col gap-2">
+                    <label className="text-caption font-caption text-neutral-400">
+                      How many to import?
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {(metadata.itemCount < 0 ? [50, 100, 150] : [10, 30, 50, 100]).map((cap) => (
+                        <button
+                          key={cap}
+                          onClick={() => setMaxItems(cap)}
+                          className={`rounded-lg border px-3 py-2 text-caption font-caption transition-colors cursor-pointer ${
+                            maxItems === cap
+                              ? 'border-indigo-500 bg-indigo-500/10 text-[#ffffffff]'
+                              : 'border-neutral-200 bg-transparent text-neutral-400 hover:border-neutral-600'
+                          }`}
+                        >
+                          {cap} images
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {error && (
                 <div className="flex items-start gap-2 rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2.5">
-                  <FeatherAlertCircle className="mt-0.5 flex-none text-red-400" style={{ width: 14, height: 14 }} />
+                  <FeatherAlertCircle
+                    className="mt-0.5 flex-none text-red-400"
+                    style={{ width: 14, height: 14 }}
+                  />
                   <span className="text-caption font-caption text-red-300">{error}</span>
                 </div>
               )}
 
               {/* Actions */}
               <div className="flex items-center justify-end gap-3 pt-2">
-                <Button variant="neutral-secondary" size="medium" onClick={() => { setState(STATES.INPUT); setMetadata(null); setError(null); }}>
+                <Button
+                  variant="neutral-secondary"
+                  size="medium"
+                  onClick={() => {
+                    setState(STATES.INPUT);
+                    setMetadata(null);
+                    setError(null);
+                  }}
+                >
                   Back
                 </Button>
-                <Button variant="brand-primary" size="medium" icon={<FeatherDownload />} onClick={handleImport} disabled={metadata.type !== 'video' && metadata.itemCount === 0}>
-                  {audioOnly ? 'Extract Audio' : `Import ${metadata.type === 'video' ? 'Video' : `${metadata.itemCount < 0 || metadata.itemCount > 10 ? maxItems : metadata.itemCount} Images`}`}
+                <Button
+                  variant="brand-primary"
+                  size="medium"
+                  icon={<FeatherDownload />}
+                  onClick={handleImport}
+                  disabled={metadata.type !== 'video' && metadata.itemCount === 0}
+                >
+                  {audioOnly
+                    ? 'Extract Audio'
+                    : `Import ${metadata.type === 'video' ? 'Video' : `${metadata.itemCount < 0 || metadata.itemCount > 10 ? maxItems : metadata.itemCount} Images`}`}
                 </Button>
               </div>
             </>
@@ -352,7 +416,10 @@ const WebImportModal = ({
                   <div className="w-48 h-1.5 rounded-full bg-neutral-100 overflow-hidden">
                     <div
                       className="h-full rounded-full bg-indigo-500"
-                      style={{ width: `${importProgress.progress}%`, transition: 'width 0.3s ease' }}
+                      style={{
+                        width: `${importProgress.progress}%`,
+                        transition: 'width 0.3s ease',
+                      }}
                     />
                   </div>
                 )}

@@ -16,7 +16,7 @@ export const isAudioFile = (file) => {
   const type = (file.type || '').toLowerCase();
   if (type.startsWith('audio/')) return true;
   const name = (file.name || '').toLowerCase();
-  return AUDIO_EXTENSIONS.some(ext => name.endsWith(ext)) || name.endsWith('.mp3');
+  return AUDIO_EXTENSIONS.some((ext) => name.endsWith(ext)) || name.endsWith('.mp3');
 };
 
 /**
@@ -28,7 +28,7 @@ export const needsAudioConversion = (file) => {
   if (type === 'audio/mpeg' || type === 'audio/mp3') return false;
   if (type.startsWith('audio/')) return true;
   const name = (file.name || '').toLowerCase();
-  return AUDIO_EXTENSIONS.some(ext => name.endsWith(ext));
+  return AUDIO_EXTENSIONS.some((ext) => name.endsWith(ext));
 };
 
 /**
@@ -58,7 +58,7 @@ async function encodeMP3(buffer) {
       const int16 = new Int16Array(length);
       for (let j = 0; j < length; j++) {
         const s = Math.max(-1, Math.min(1, floatData[offset + j]));
-        int16[j] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        int16[j] = s < 0 ? s * 0x8000 : s * 0x7fff;
       }
       return int16;
     };
@@ -68,9 +68,7 @@ async function encodeMP3(buffer) {
       encoded = encoder.encodeBuffer(toInt16(channelData[0], i, sampleChunkSize));
     } else {
       const left = toInt16(channelData[0], i, sampleChunkSize);
-      const right = channelData.length > 1
-        ? toInt16(channelData[1], i, sampleChunkSize)
-        : left;
+      const right = channelData.length > 1 ? toInt16(channelData[1], i, sampleChunkSize) : left;
       encoded = encoder.encodeBuffer(left, right);
     }
     if (encoded.length > 0) mp3Data.push(encoded);

@@ -46,13 +46,20 @@ import {
 import { migrateThumbnails } from '../../services/thumbnailService';
 import { uploadFile } from '../../services/firebaseStorage';
 import {
-  initGoogleDrive, authenticate as driveAuth, isAuthenticated as isDriveAuth,
-  listFiles as driveListFiles, downloadFile as driveDownloadFile,
-  uploadFile as driveUploadFile, DRIVE_MIME_TYPES
+  initGoogleDrive,
+  authenticate as driveAuth,
+  isAuthenticated as isDriveAuth,
+  listFiles as driveListFiles,
+  downloadFile as driveDownloadFile,
+  uploadFile as driveUploadFile,
+  DRIVE_MIME_TYPES,
 } from '../../services/googleDriveService';
 import {
-  authenticate as dropboxAuth, isAuthenticated as isDropboxAuth,
-  listFiles as dropboxListFiles, downloadFile as dropboxDownloadFile, detectMediaType
+  authenticate as dropboxAuth,
+  isAuthenticated as isDropboxAuth,
+  listFiles as dropboxListFiles,
+  downloadFile as dropboxDownloadFile,
+  detectMediaType,
 } from '../../services/dropboxService';
 import { useToast } from '../ui';
 import useIsMobile from '../../hooks/useIsMobile';
@@ -77,7 +84,7 @@ const LibraryBrowser = ({
   isMobile: isMobileProp = false,
   compact = false,
   refreshTrigger = 0, // Increment to force refresh
-  extraToolbarContent = null // Extra content to render next to Upload button
+  extraToolbarContent = null, // Extra content to render next to Upload button
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
@@ -93,9 +100,9 @@ const LibraryBrowser = ({
   // Map mode prop ('videos', 'images', 'audio', 'all') to MEDIA_TYPES values ('video', 'image', 'audio')
   const modeToMediaType = (m) => {
     if (m === 'all' || !m) return null;
-    if (m === 'videos') return MEDIA_TYPES.VIDEO;   // 'video'
-    if (m === 'images') return MEDIA_TYPES.IMAGE;   // 'image'
-    if (m === 'audio') return MEDIA_TYPES.AUDIO;    // 'audio'
+    if (m === 'videos') return MEDIA_TYPES.VIDEO; // 'video'
+    if (m === 'images') return MEDIA_TYPES.IMAGE; // 'image'
+    if (m === 'audio') return MEDIA_TYPES.AUDIO; // 'audio'
     return m; // fallback
   };
   const [filterType, setFilterType] = useState(modeToMediaType(mode));
@@ -162,7 +169,14 @@ const LibraryBrowser = ({
   useEffect(() => {
     if (!artistId) return;
 
-    log('[LibraryBrowser] Loading data for artist:', artistId, 'refreshTrigger:', refreshTrigger, 'db:', !!db);
+    log(
+      '[LibraryBrowser] Loading data for artist:',
+      artistId,
+      'refreshTrigger:',
+      refreshTrigger,
+      'db:',
+      !!db,
+    );
 
     // Instant load from localStorage cache (no network wait)
     const cachedLibrary = getLibrary(artistId);
@@ -172,7 +186,7 @@ const LibraryBrowser = ({
 
     // Build a cache map for merging thumbnailUrl (localStorage may have it, Firestore may not)
     const thumbCache = new Map();
-    cachedLibrary.forEach(item => {
+    cachedLibrary.forEach((item) => {
       if (item.thumbnailUrl) thumbCache.set(item.id, item.thumbnailUrl);
     });
 
@@ -180,34 +194,47 @@ const LibraryBrowser = ({
 
     if (db) {
       // Firestore real-time subscription syncs in background
-      unsubscribes.push(subscribeToLibrary(db, artistId, (items) => {
-        // Merge: preserve thumbnailUrl from localStorage if Firestore doesn't have it
-        const merged = items.map(item => {
-          if (!item.thumbnailUrl && thumbCache.has(item.id)) {
-            return { ...item, thumbnailUrl: thumbCache.get(item.id) };
-          }
-          // Update cache with any new thumbnailUrl from Firestore
-          if (item.thumbnailUrl) thumbCache.set(item.id, item.thumbnailUrl);
-          return item;
-        });
+      unsubscribes.push(
+        subscribeToLibrary(db, artistId, (items) => {
+          // Merge: preserve thumbnailUrl from localStorage if Firestore doesn't have it
+          const merged = items.map((item) => {
+            if (!item.thumbnailUrl && thumbCache.has(item.id)) {
+              return { ...item, thumbnailUrl: thumbCache.get(item.id) };
+            }
+            // Update cache with any new thumbnailUrl from Firestore
+            if (item.thumbnailUrl) thumbCache.set(item.id, item.thumbnailUrl);
+            return item;
+          });
 
-        const withThumbs = merged.filter(i => i.thumbnailUrl).length;
-        log('[LibraryBrowser] Firestore sync:', merged.length, 'items,', withThumbs, 'have thumbnails');
-        // Debug: log a sample thumbnail URL to verify they're valid
-        const sampleThumb = merged.find(i => i.thumbnailUrl && i.type === 'video');
-        if (sampleThumb) log('[LibraryBrowser] Sample video thumbnail URL:', sampleThumb.thumbnailUrl);
+          const withThumbs = merged.filter((i) => i.thumbnailUrl).length;
+          log(
+            '[LibraryBrowser] Firestore sync:',
+            merged.length,
+            'items,',
+            withThumbs,
+            'have thumbnails',
+          );
+          // Debug: log a sample thumbnail URL to verify they're valid
+          const sampleThumb = merged.find((i) => i.thumbnailUrl && i.type === 'video');
+          if (sampleThumb)
+            log('[LibraryBrowser] Sample video thumbnail URL:', sampleThumb.thumbnailUrl);
 
-        setLibrary(merged);
-        try { saveLibrary(artistId, merged); } catch (e) {}
-      }));
+          setLibrary(merged);
+          try {
+            saveLibrary(artistId, merged);
+          } catch (e) {}
+        }),
+      );
 
-      unsubscribes.push(subscribeToCollections(db, artistId, (cols) => {
-        log('[LibraryBrowser] Firestore sync:', cols.length, 'collections');
-        setCollections(cols);
-      }));
+      unsubscribes.push(
+        subscribeToCollections(db, artistId, (cols) => {
+          log('[LibraryBrowser] Firestore sync:', cols.length, 'collections');
+          setCollections(cols);
+        }),
+      );
     }
 
-    return () => unsubscribes.forEach(unsub => unsub());
+    return () => unsubscribes.forEach((unsub) => unsub());
   }, [db, artistId, refreshTrigger]);
 
   // Background thumbnail migration for existing images without thumbnails
@@ -220,7 +247,7 @@ const LibraryBrowser = ({
     const versionKey = `stm_libthumb_v${THUMB_VERSION}_${artistId}`;
     if (localStorage.getItem(versionKey)) return;
 
-    const imageItems = library.filter(item => item.type === 'image' && item.url);
+    const imageItems = library.filter((item) => item.type === 'image' && item.url);
     if (imageItems.length === 0) return;
     thumbMigrationRef.current = true;
 
@@ -241,7 +268,7 @@ const LibraryBrowser = ({
       }
     }, 3000);
     return () => clearTimeout(timer);
-  // eslint-disable-next-line
+    // eslint-disable-next-line
   }, [library, artistId]);
 
   const loadData = () => {
@@ -260,7 +287,9 @@ const LibraryBrowser = ({
   const syncCollection = (collectionId) => {
     if (!db || !collectionId) return;
     const cols = getCollections(artistId);
-    const col = cols.find(c => c.id === collectionId && c.type !== 'smart' && !c.id?.startsWith('smart_'));
+    const col = cols.find(
+      (c) => c.id === collectionId && c.type !== 'smart' && !c.id?.startsWith('smart_'),
+    );
     if (col) {
       saveCollectionToFirestore(db, artistId, col).catch(log.error);
     }
@@ -279,9 +308,9 @@ const LibraryBrowser = ({
       } else {
         // Collection returned no items from localStorage - try in-memory library
         const cols = collections.length > 0 ? collections : getCollections(artistId);
-        const col = cols.find(c => c.id === activeView);
+        const col = cols.find((c) => c.id === activeView);
         if (col?.mediaIds?.length > 0) {
-          results = library.filter(item => col.mediaIds.includes(item.id));
+          results = library.filter((item) => col.mediaIds.includes(item.id));
         } else {
           // Collection has no items — show empty so user can drag items in
           results = [];
@@ -297,9 +326,9 @@ const LibraryBrowser = ({
       } else if (library.length > 0) {
         // Collection returned no items - try to filter in-memory library by collection's mediaIds
         const cols = collections.length > 0 ? collections : getCollections(artistId);
-        const col = cols.find(c => c.id === pullFromCollection);
+        const col = cols.find((c) => c.id === pullFromCollection);
         if (col?.mediaIds?.length > 0) {
-          results = library.filter(item => col.mediaIds.includes(item.id));
+          results = library.filter((item) => col.mediaIds.includes(item.id));
         }
         // If collection has no mediaIds or is empty, keep results as full library
         // (results was set to [...library] at line above — don't filter to empty)
@@ -308,15 +337,16 @@ const LibraryBrowser = ({
 
     // Apply type filter
     if (filterType) {
-      results = results.filter(item => item.type === filterType);
+      results = results.filter((item) => item.type === filterType);
     }
 
     // Apply search query
     if (searchQuery) {
       const lowerQuery = searchQuery.toLowerCase();
-      results = results.filter(item =>
-        item.name?.toLowerCase().includes(lowerQuery) ||
-        item.tags?.some(tag => tag.toLowerCase().includes(lowerQuery))
+      results = results.filter(
+        (item) =>
+          item.name?.toLowerCase().includes(lowerQuery) ||
+          item.tags?.some((tag) => tag.toLowerCase().includes(lowerQuery)),
       );
     }
 
@@ -339,14 +369,25 @@ const LibraryBrowser = ({
     }
 
     return results;
-  }, [library, collections, artistId, activeView, searchQuery, sortBy, filterType, pullFromCollection]);
+  }, [
+    library,
+    collections,
+    artistId,
+    activeView,
+    searchQuery,
+    sortBy,
+    filterType,
+    pullFromCollection,
+  ]);
 
   const displayedMedia = getDisplayedMedia();
 
   // Determine if we're in a user collection (not library, favorites, or smart collection)
-  const isUserCollectionView = activeView !== 'library' && activeView !== 'collections'
-    && !activeView.startsWith('smart_')
-    && collections.some(c => c.id === activeView && c.type !== COLLECTION_TYPES.SMART);
+  const isUserCollectionView =
+    activeView !== 'library' &&
+    activeView !== 'collections' &&
+    !activeView.startsWith('smart_') &&
+    collections.some((c) => c.id === activeView && c.type !== COLLECTION_TYPES.SMART);
 
   // Show video text banks in right column when viewing a video collection
   const videoTextBanksAvailable = isUserCollectionView && mode === 'videos';
@@ -356,16 +397,16 @@ const LibraryBrowser = ({
   // so it stays in sync with Firestore subscription data
   const collectionBanks = (() => {
     if (!isUserCollectionView || mode === 'audio' || mode === 'videos') return null;
-    const col = collections.find(c => c.id === activeView);
+    const col = collections.find((c) => c.id === activeView);
     if (!col) return null;
     const migrated = migrateCollectionBanks(col);
-    const allMedia = library.filter(item => (migrated.mediaIds || []).includes(item.id));
+    const allMedia = library.filter((item) => (migrated.mediaIds || []).includes(item.id));
     const allAssigned = new Set();
-    const banks = (migrated.banks || [[], []]).map(bankIds => {
-      (bankIds || []).forEach(id => allAssigned.add(id));
-      return allMedia.filter(item => (bankIds || []).includes(item.id));
+    const banks = (migrated.banks || [[], []]).map((bankIds) => {
+      (bankIds || []).forEach((id) => allAssigned.add(id));
+      return allMedia.filter((item) => (bankIds || []).includes(item.id));
     });
-    return { banks, unassigned: allMedia.filter(item => !allAssigned.has(item.id)) };
+    return { banks, unassigned: allMedia.filter((item) => !allAssigned.has(item.id)) };
   })();
 
   // Handle drop onto a bank zone
@@ -386,16 +427,20 @@ const LibraryBrowser = ({
     if (dragIds.length > 0) {
       assignToBankAsync(db, artistId, activeView, dragIds, bankIndex);
       loadData();
-      toastSuccess(`Added ${dragIds.length} item${dragIds.length > 1 ? 's' : ''} to ${getBankLabel(bankIndex)}`);
+      toastSuccess(
+        `Added ${dragIds.length} item${dragIds.length > 1 ? 's' : ''} to ${getBankLabel(bankIndex)}`,
+      );
       setDraggedItem(null);
       return;
     }
 
     // Handle file drops from desktop (images or audio)
     const droppedFiles = Array.from(e.dataTransfer.files || []);
-    const mediaFiles = droppedFiles.filter(f =>
-      f.type.startsWith('image/') || f.type.startsWith('audio/') ||
-      /\.(heic|heif|tif|tiff|m4a|wav|aif|aiff|mp3|ogg|flac|aac)$/i.test(f.name)
+    const mediaFiles = droppedFiles.filter(
+      (f) =>
+        f.type.startsWith('image/') ||
+        f.type.startsWith('audio/') ||
+        /\.(heic|heif|tif|tiff|m4a|wav|aif|aiff|mp3|ogg|flac|aac)$/i.test(f.name),
     );
     if (mediaFiles.length > 0) {
       uploadFiles(mediaFiles, { targetBankIndex: bankIndex });
@@ -415,7 +460,8 @@ const LibraryBrowser = ({
   const handleGridMouseDown = (e) => {
     if (!allowMultiSelect) return;
     // Don't interfere with buttons, inputs, or context menu items
-    if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select')) return;
+    if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select'))
+      return;
     // Only respond to left mouse button
     if (e.button !== 0) return;
     // If mouse is on a card that is already selected AND draggable, let native drag handle it
@@ -461,17 +507,19 @@ const LibraryBrowser = ({
         // Suppress the click event that will fire after mouseup to prevent
         // handleMediaClick from undoing the multi-select with exclusive mode
         justDragSelectedRef.current = true;
-        setTimeout(() => { justDragSelectedRef.current = false; }, 50);
+        setTimeout(() => {
+          justDragSelectedRef.current = false;
+        }, 50);
 
         const selectionRect = {
           left: Math.min(start.x, end.x),
           top: Math.min(start.y, end.y),
           right: Math.max(start.x, end.x),
-          bottom: Math.max(start.y, end.y)
+          bottom: Math.max(start.y, end.y),
         };
 
         const newSelection = [];
-        displayedMediaRef.current.forEach(media => {
+        displayedMediaRef.current.forEach((media) => {
           const el = mediaCardRefs.current[media.id];
           if (!el) return;
           const rect = el.getBoundingClientRect();
@@ -486,7 +534,9 @@ const LibraryBrowser = ({
         });
 
         if (onSelectMedia && newSelection.length > 0) {
-          const items = newSelection.map(id => displayedMediaRef.current.find(m => m.id === id)).filter(Boolean);
+          const items = newSelection
+            .map((id) => displayedMediaRef.current.find((m) => m.id === id))
+            .filter(Boolean);
           if (items.length > 0) {
             onSelectMedia(items[0], { replaceAll: items });
           }
@@ -530,7 +580,7 @@ const LibraryBrowser = ({
 
         try {
           const thumbnail = canvas.toDataURL('image/jpeg', 0.7);
-          setThumbnailCache(prev => ({ ...prev, [mediaId]: thumbnail }));
+          setThumbnailCache((prev) => ({ ...prev, [mediaId]: thumbnail }));
           resolve(thumbnail);
         } catch (e) {
           resolve(null);
@@ -565,7 +615,8 @@ const LibraryBrowser = ({
         // Determine media type
         let type;
         if (file.type.startsWith('video/')) type = MEDIA_TYPES.VIDEO;
-        else if (file.type.startsWith('image/') || isHeicFile(rawFile) || isTiffFile(rawFile)) type = MEDIA_TYPES.IMAGE;
+        else if (file.type.startsWith('image/') || isHeicFile(rawFile) || isTiffFile(rawFile))
+          type = MEDIA_TYPES.IMAGE;
         else if (file.type.startsWith('audio/') || isAudioFile(rawFile)) type = MEDIA_TYPES.AUDIO;
         else return null;
 
@@ -591,7 +642,8 @@ const LibraryBrowser = ({
               if (type === MEDIA_TYPES.VIDEO) {
                 width = mediaEl.videoWidth;
                 height = mediaEl.videoHeight;
-                hasEmbeddedAudio = mediaEl.mozHasAudio ||
+                hasEmbeddedAudio =
+                  mediaEl.mozHasAudio ||
                   Boolean(mediaEl.webkitAudioDecodedByteCount) ||
                   Boolean(mediaEl.audioTracks?.length);
               }
@@ -618,15 +670,22 @@ const LibraryBrowser = ({
           // Generate tiny thumbnail (50px max, minimal quality for grid previews)
           try {
             const maxThumbSize = 50;
-            const scale = Math.min(1, maxThumbSize / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+            const scale = Math.min(
+              1,
+              maxThumbSize / Math.max(img.naturalWidth || 1, img.naturalHeight || 1),
+            );
             const canvas = document.createElement('canvas');
             canvas.width = Math.round((img.naturalWidth || 50) * scale);
             canvas.height = Math.round((img.naturalHeight || 50) * scale);
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.2));
+            const thumbBlob = await new Promise((resolve) =>
+              canvas.toBlob(resolve, 'image/jpeg', 0.2),
+            );
             if (thumbBlob) {
-              const thumbFile = new File([thumbBlob], `thumb_${file.name}.jpg`, { type: 'image/jpeg' });
+              const thumbFile = new File([thumbBlob], `thumb_${file.name}.jpg`, {
+                type: 'image/jpeg',
+              });
               const thumbResult = await uploadFile(thumbFile, 'thumbnails');
               thumbnailUrl = thumbResult.url;
             }
@@ -649,8 +708,8 @@ const LibraryBrowser = ({
           hasEmbeddedAudio,
           metadata: {
             fileSize: file.size,
-            mimeType: file.type
-          }
+            mimeType: file.type,
+          },
         });
         log('[LibraryBrowser] Added to library:', newItem);
         return newItem;
@@ -660,7 +719,7 @@ const LibraryBrowser = ({
         concurrency: 5,
         onProgress: (completed, total) => {
           setUploadProgress(Math.min(Math.round((completed / total) * 100), 99));
-        }
+        },
       });
 
       if (errors.length > 0) {
@@ -670,11 +729,13 @@ const LibraryBrowser = ({
 
       // If targeting a bank, assign uploaded items to it
       if (targetBankIndex != null && activeView && activeView !== 'library') {
-        const uploadedIds = results.filter(Boolean).map(item => item.id);
+        const uploadedIds = results.filter(Boolean).map((item) => item.id);
         if (uploadedIds.length > 0) {
           try {
             await assignToBankAsync(db, artistId, activeView, uploadedIds, targetBankIndex);
-            toastSuccess(`Uploaded & added ${uploadedIds.length} image${uploadedIds.length > 1 ? 's' : ''} to ${getBankLabel(targetBankIndex)}`);
+            toastSuccess(
+              `Uploaded & added ${uploadedIds.length} image${uploadedIds.length > 1 ? 's' : ''} to ${getBankLabel(targetBankIndex)}`,
+            );
           } catch (err) {
             log.error('[LibraryBrowser] Bank assignment failed:', err);
             toastError(`Upload succeeded but bank assignment failed`);
@@ -711,7 +772,7 @@ const LibraryBrowser = ({
   const handleMediaClick = (media, e) => {
     // Skip click if a drag-select just completed (prevents undoing multi-select)
     if (justDragSelectedRef.current) return;
-    const clickedIndex = displayedMedia.findIndex(m => m.id === media.id);
+    const clickedIndex = displayedMedia.findIndex((m) => m.id === media.id);
     const isMetaKey = e?.metaKey || e?.ctrlKey;
 
     if (e?.shiftKey && allowMultiSelect && lastClickedIndexRef.current !== null && onSelectMedia) {
@@ -747,8 +808,10 @@ const LibraryBrowser = ({
   const [showDeleteModal, setShowDeleteModal] = useState(null); // { mediaId, collectionId? }
 
   const handleDelete = async (mediaId) => {
-    const isInCollectionView = activeView !== 'library' && activeView !== 'favorites'
-      && !collections.find(c => c.id === activeView && c.type === COLLECTION_TYPES.SMART);
+    const isInCollectionView =
+      activeView !== 'library' &&
+      activeView !== 'favorites' &&
+      !collections.find((c) => c.id === activeView && c.type === COLLECTION_TYPES.SMART);
 
     if (isInCollectionView) {
       // Show smart delete modal
@@ -764,7 +827,12 @@ const LibraryBrowser = ({
   // Bulk delete selected items
   const handleBulkDelete = async () => {
     if (selectedMediaIds.length === 0) return;
-    if (!window.confirm(`Delete ${selectedMediaIds.length} item${selectedMediaIds.length > 1 ? 's' : ''} from your library? This cannot be undone.`)) return;
+    if (
+      !window.confirm(
+        `Delete ${selectedMediaIds.length} item${selectedMediaIds.length > 1 ? 's' : ''} from your library? This cannot be undone.`,
+      )
+    )
+      return;
     for (const id of selectedMediaIds) {
       await removeFromLibraryAsync(db, artistId, id);
     }
@@ -790,26 +858,34 @@ const LibraryBrowser = ({
   const handleCreateCollection = () => {
     if (!newCollectionName.trim()) return;
 
-    const newCol = createNewCollection(artistId, {
-      name: newCollectionName.trim(),
-      description: ''
-    }, db);
+    const newCol = createNewCollection(
+      artistId,
+      {
+        name: newCollectionName.trim(),
+        description: '',
+      },
+      db,
+    );
 
     setNewCollectionName('');
     setShowNewCollectionModal(false);
     loadData();
     // Sync new collection to Firestore — read it back from localStorage since createNewCollection returns void
     const updatedCols = getCollections(artistId);
-    const created = updatedCols.find(c => c.name === newCollectionName.trim() && c.type !== 'smart');
+    const created = updatedCols.find(
+      (c) => c.name === newCollectionName.trim() && c.type !== 'smart',
+    );
     if (created) syncCollection(created.id);
   };
 
   // Handle delete collection
   const handleDeleteCollection = (collectionId) => {
-    const collection = collections.find(c => c.id === collectionId);
+    const collection = collections.find((c) => c.id === collectionId);
     if (!collection) return;
 
-    if (window.confirm(`Delete "${collection.name}" collection? Media will remain in your library.`)) {
+    if (
+      window.confirm(`Delete "${collection.name}" collection? Media will remain in your library.`)
+    ) {
       deleteCollectionAsync(db, artistId, collectionId);
       if (activeView === collectionId) {
         setActiveView('library');
@@ -829,7 +905,7 @@ const LibraryBrowser = ({
   const handleDragStart = (e, media) => {
     // If this item is selected and there are multiple selected, drag all of them
     const isSelected = selectedMediaIds.includes(media.id);
-    const dragIds = (isSelected && selectedMediaIds.length > 1) ? selectedMediaIds : [media.id];
+    const dragIds = isSelected && selectedMediaIds.length > 1 ? selectedMediaIds : [media.id];
 
     setDraggedItem(media);
     e.dataTransfer.effectAllowed = 'copy';
@@ -839,7 +915,8 @@ const LibraryBrowser = ({
     if (dragIds.length > 1) {
       const badge = document.createElement('div');
       badge.textContent = `${dragIds.length} items`;
-      badge.style.cssText = 'position:fixed;top:-100px;padding:6px 12px;background:#6366f1;color:#fff;border-radius:8px;font-size:13px;font-weight:600;';
+      badge.style.cssText =
+        'position:fixed;top:-100px;padding:6px 12px;background:#6366f1;color:#fff;border-radius:8px;font-size:13px;font-weight:600;';
       document.body.appendChild(badge);
       e.dataTransfer.setDragImage(badge, 40, 20);
       setTimeout(() => document.body.removeChild(badge), 0);
@@ -883,17 +960,21 @@ const LibraryBrowser = ({
     setContextMenu({
       x: isMobile ? 0 : e.clientX,
       y: isMobile ? 0 : e.clientY,
-      media
+      media,
     });
   };
 
   // Get accept types for file input
   const getAcceptTypes = () => {
     switch (mode) {
-      case 'videos': return 'video/*';
-      case 'images': return 'image/*,.heic,.heif,.tif,.tiff';
-      case 'audio': return 'audio/*,.m4a,.wav,.aif,.aiff';
-      default: return 'video/*,image/*,.heic,.heif,.tif,.tiff,audio/*,.m4a,.wav,.aif,.aiff';
+      case 'videos':
+        return 'video/*';
+      case 'images':
+        return 'image/*,.heic,.heif,.tif,.tiff,.dng';
+      case 'audio':
+        return 'audio/*,.m4a,.wav,.aif,.aiff';
+      default:
+        return 'video/*,image/*,.heic,.heif,.tif,.tiff,.dng,audio/*,.m4a,.wav,.aif,.aiff';
     }
   };
 
@@ -904,7 +985,7 @@ const LibraryBrowser = ({
       height: '100%',
       backgroundColor: theme.bg.page,
       color: theme.text.primary,
-      overflow: 'hidden'
+      overflow: 'hidden',
     },
     header: {
       padding: compact ? '12px 16px' : '16px 20px',
@@ -912,7 +993,7 @@ const LibraryBrowser = ({
       display: 'flex',
       flexDirection: isMobile ? 'column' : 'row',
       gap: '12px',
-      alignItems: isMobile ? 'stretch' : 'center'
+      alignItems: isMobile ? 'stretch' : 'center',
     },
     searchBar: {
       flex: 1,
@@ -921,7 +1002,7 @@ const LibraryBrowser = ({
       gap: '8px',
       backgroundColor: theme.hover.bg,
       borderRadius: '8px',
-      padding: '8px 12px'
+      padding: '8px 12px',
     },
     searchInput: {
       flex: 1,
@@ -929,13 +1010,13 @@ const LibraryBrowser = ({
       border: 'none',
       color: theme.text.primary,
       fontSize: '14px',
-      outline: 'none'
+      outline: 'none',
     },
     controls: {
       display: 'flex',
       gap: '8px',
       alignItems: 'center',
-      ...(isMobile ? { flexWrap: 'wrap', justifyContent: 'flex-end' } : {})
+      ...(isMobile ? { flexWrap: 'wrap', justifyContent: 'flex-end' } : {}),
     },
     select: {
       backgroundColor: theme.hover.bg,
@@ -945,7 +1026,7 @@ const LibraryBrowser = ({
       padding: '8px 12px',
       fontSize: '13px',
       cursor: 'pointer',
-      outline: 'none'
+      outline: 'none',
     },
     uploadButton: {
       display: 'flex',
@@ -959,131 +1040,143 @@ const LibraryBrowser = ({
       fontSize: '14px',
       fontWeight: '500',
       cursor: 'pointer',
-      transition: 'background-color 0.2s'
+      transition: 'background-color 0.2s',
     },
     body: {
       display: 'flex',
       flexDirection: isMobile ? 'column' : 'row',
       flex: 1,
-      overflow: 'hidden'
+      overflow: 'hidden',
     },
-    sidebar: isMobile ? {
-      width: '100%',
-      borderBottom: `1px solid ${theme.border.subtle}`,
-      padding: '8px 12px',
-      overflowX: 'auto',
-      overflowY: 'hidden',
-      display: 'flex',
-      flexDirection: 'row',
-      gap: '8px',
-      alignItems: 'center',
-      flexShrink: 0,
-      WebkitOverflowScrolling: 'touch',
-      msOverflowStyle: 'none',
-      scrollbarWidth: 'none'
-    } : {
-      width: '200px',
-      borderRight: `1px solid ${theme.border.subtle}`,
-      padding: '12px',
-      overflowY: 'auto',
-      display: 'block'
-    },
-    sidebarSection: isMobile ? {
-      display: 'flex',
-      flexDirection: 'row',
-      gap: '6px',
-      alignItems: 'center',
-      flexShrink: 0
-    } : {
-      marginBottom: '20px'
-    },
-    sidebarTitle: isMobile ? {
-      display: 'none'
-    } : {
-      fontSize: '11px',
-      fontWeight: '600',
-      color: theme.text.muted,
-      textTransform: 'uppercase',
-      letterSpacing: '1px',
-      marginBottom: '8px',
-      padding: '0 8px'
-    },
-    sidebarItem: isMobile ? {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px',
-      padding: '6px 12px',
-      borderRadius: '20px',
-      cursor: 'pointer',
-      fontSize: '13px',
-      color: theme.text.secondary,
-      whiteSpace: 'nowrap',
-      flexShrink: 0,
-      border: `1px solid ${theme.border.subtle}`,
-      minHeight: '36px',
-      transition: 'all 0.2s'
-    } : {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      padding: '8px 12px',
-      borderRadius: '6px',
-      cursor: 'pointer',
-      fontSize: '14px',
-      color: theme.text.secondary,
-      transition: 'all 0.2s'
-    },
-    sidebarItemActive: isMobile ? {
-      backgroundColor: `${theme.accent.primary}4d`,
-      color: theme.text.primary,
-      borderColor: `${theme.accent.primary}99`
-    } : {
-      backgroundColor: `${theme.accent.primary}33`,
-      color: theme.text.primary
-    },
+    sidebar: isMobile
+      ? {
+          width: '100%',
+          borderBottom: `1px solid ${theme.border.subtle}`,
+          padding: '8px 12px',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          display: 'flex',
+          flexDirection: 'row',
+          gap: '8px',
+          alignItems: 'center',
+          flexShrink: 0,
+          WebkitOverflowScrolling: 'touch',
+          msOverflowStyle: 'none',
+          scrollbarWidth: 'none',
+        }
+      : {
+          width: '200px',
+          borderRight: `1px solid ${theme.border.subtle}`,
+          padding: '12px',
+          overflowY: 'auto',
+          display: 'block',
+        },
+    sidebarSection: isMobile
+      ? {
+          display: 'flex',
+          flexDirection: 'row',
+          gap: '6px',
+          alignItems: 'center',
+          flexShrink: 0,
+        }
+      : {
+          marginBottom: '20px',
+        },
+    sidebarTitle: isMobile
+      ? {
+          display: 'none',
+        }
+      : {
+          fontSize: '11px',
+          fontWeight: '600',
+          color: theme.text.muted,
+          textTransform: 'uppercase',
+          letterSpacing: '1px',
+          marginBottom: '8px',
+          padding: '0 8px',
+        },
+    sidebarItem: isMobile
+      ? {
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '6px 12px',
+          borderRadius: '20px',
+          cursor: 'pointer',
+          fontSize: '13px',
+          color: theme.text.secondary,
+          whiteSpace: 'nowrap',
+          flexShrink: 0,
+          border: `1px solid ${theme.border.subtle}`,
+          minHeight: '36px',
+          transition: 'all 0.2s',
+        }
+      : {
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '8px 12px',
+          borderRadius: '6px',
+          cursor: 'pointer',
+          fontSize: '14px',
+          color: theme.text.secondary,
+          transition: 'all 0.2s',
+        },
+    sidebarItemActive: isMobile
+      ? {
+          backgroundColor: `${theme.accent.primary}4d`,
+          color: theme.text.primary,
+          borderColor: `${theme.accent.primary}99`,
+        }
+      : {
+          backgroundColor: `${theme.accent.primary}33`,
+          color: theme.text.primary,
+        },
     sidebarItemIcon: {
-      fontSize: isMobile ? '14px' : '16px'
+      fontSize: isMobile ? '14px' : '16px',
     },
-    addCollectionButton: isMobile ? {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '4px',
-      padding: '6px 12px',
-      color: theme.text.muted,
-      fontSize: '12px',
-      cursor: 'pointer',
-      borderRadius: '20px',
-      border: `1px dashed ${theme.text.muted}`,
-      whiteSpace: 'nowrap',
-      flexShrink: 0,
-      minHeight: '36px',
-      transition: 'all 0.2s'
-    } : {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px',
-      padding: '8px 12px',
-      color: theme.text.muted,
-      fontSize: '13px',
-      cursor: 'pointer',
-      borderRadius: '6px',
-      transition: 'all 0.2s'
-    },
+    addCollectionButton: isMobile
+      ? {
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '6px 12px',
+          color: theme.text.muted,
+          fontSize: '12px',
+          cursor: 'pointer',
+          borderRadius: '20px',
+          border: `1px dashed ${theme.text.muted}`,
+          whiteSpace: 'nowrap',
+          flexShrink: 0,
+          minHeight: '36px',
+          transition: 'all 0.2s',
+        }
+      : {
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '8px 12px',
+          color: theme.text.muted,
+          fontSize: '13px',
+          cursor: 'pointer',
+          borderRadius: '6px',
+          transition: 'all 0.2s',
+        },
     content: {
       flex: 1,
       padding: compact ? '12px' : '16px',
-      overflowY: 'auto'
+      overflowY: 'auto',
     },
     mediaGrid: {
       display: 'grid',
       gridTemplateColumns: isMobile
         ? 'repeat(3, 1fr)'
         : `repeat(auto-fill, minmax(${compact ? '100px' : '140px'}, 1fr))`,
-      gap: isMobile ? '6px' : (compact ? '8px' : '12px'),
+      gap: isMobile ? '6px' : compact ? '8px' : '12px',
       userSelect: 'none',
       WebkitUserSelect: 'none',
       minHeight: '100%',
-      alignContent: 'start'
+      alignContent: 'start',
     },
     mediaCard: {
       position: 'relative',
@@ -1100,7 +1193,7 @@ const LibraryBrowser = ({
       transition: 'all 0.15s ease',
       userSelect: 'none',
       WebkitUserSelect: 'none',
-      WebkitTapHighlightColor: 'transparent'
+      WebkitTapHighlightColor: 'transparent',
     },
     mediaThumbnail: {
       position: 'absolute',
@@ -1109,7 +1202,7 @@ const LibraryBrowser = ({
       width: '100%',
       height: '100%',
       objectFit: 'cover',
-      pointerEvents: 'none' // Prevent img/video from intercepting drag-select
+      pointerEvents: 'none', // Prevent img/video from intercepting drag-select
     },
     mediaOverlay: {
       position: 'absolute',
@@ -1120,18 +1213,18 @@ const LibraryBrowser = ({
       background: `linear-gradient(transparent, ${theme.overlay.heavy})`,
       display: 'flex',
       flexDirection: 'column',
-      gap: '4px'
+      gap: '4px',
     },
     mediaName: {
       fontSize: '11px',
       color: theme.text.primary,
       overflow: 'hidden',
       textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap'
+      whiteSpace: 'nowrap',
     },
     mediaMeta: {
       fontSize: '10px',
-      color: theme.text.muted
+      color: theme.text.muted,
     },
     mediaTypeIcon: {
       position: 'absolute',
@@ -1140,7 +1233,7 @@ const LibraryBrowser = ({
       fontSize: '16px',
       backgroundColor: theme.overlay.light,
       borderRadius: '4px',
-      padding: '4px'
+      padding: '4px',
     },
     favoriteButton: {
       position: 'absolute',
@@ -1152,7 +1245,7 @@ const LibraryBrowser = ({
       borderRadius: '4px',
       padding: '4px',
       border: 'none',
-      transition: 'transform 0.2s'
+      transition: 'transform 0.2s',
     },
     emptyState: {
       display: 'flex',
@@ -1161,14 +1254,14 @@ const LibraryBrowser = ({
       justifyContent: 'center',
       height: '100%',
       gap: '16px',
-      color: theme.text.muted
+      color: theme.text.muted,
     },
     emptyIcon: {
-      fontSize: '48px'
+      fontSize: '48px',
     },
     emptyText: {
       fontSize: '16px',
-      textAlign: 'center'
+      textAlign: 'center',
     },
     uploadOverlay: {
       position: 'absolute',
@@ -1182,46 +1275,48 @@ const LibraryBrowser = ({
       alignItems: 'center',
       justifyContent: 'center',
       gap: '16px',
-      zIndex: 100
+      zIndex: 100,
     },
     progressBar: {
       width: '240px',
       height: '6px',
       backgroundColor: theme.border.subtle,
       borderRadius: '3px',
-      overflow: 'hidden'
+      overflow: 'hidden',
     },
     progressFill: {
       height: '100%',
       background: `linear-gradient(90deg, ${theme.accent.primary}, ${theme.accent.hover})`,
       borderRadius: '3px',
-      transition: 'width 0.3s ease'
+      transition: 'width 0.3s ease',
     },
-    contextMenu: isMobile ? {
-      position: 'fixed',
-      left: '50%',
-      top: '50%',
-      transform: 'translate(-50%, -50%)',
-      backgroundColor: theme.bg.surface,
-      border: `1px solid ${theme.border.subtle}`,
-      borderRadius: '12px',
-      padding: '8px 0',
-      width: '85vw',
-      maxWidth: '320px',
-      maxHeight: '70vh',
-      overflowY: 'auto',
-      zIndex: 10000,
-      boxShadow: theme.shadow
-    } : {
-      position: 'fixed',
-      backgroundColor: theme.bg.surface,
-      border: `1px solid ${theme.border.subtle}`,
-      borderRadius: '8px',
-      padding: '8px 0',
-      minWidth: '180px',
-      zIndex: 10000,
-      boxShadow: theme.shadow
-    },
+    contextMenu: isMobile
+      ? {
+          position: 'fixed',
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          backgroundColor: theme.bg.surface,
+          border: `1px solid ${theme.border.subtle}`,
+          borderRadius: '12px',
+          padding: '8px 0',
+          width: '85vw',
+          maxWidth: '320px',
+          maxHeight: '70vh',
+          overflowY: 'auto',
+          zIndex: 10000,
+          boxShadow: theme.shadow,
+        }
+      : {
+          position: 'fixed',
+          backgroundColor: theme.bg.surface,
+          border: `1px solid ${theme.border.subtle}`,
+          borderRadius: '8px',
+          padding: '8px 0',
+          minWidth: '180px',
+          zIndex: 10000,
+          boxShadow: theme.shadow,
+        },
     contextMenuItem: {
       padding: isMobile ? '14px 16px' : '10px 16px',
       fontSize: '14px',
@@ -1231,12 +1326,12 @@ const LibraryBrowser = ({
       alignItems: 'center',
       gap: '10px',
       minHeight: isMobile ? '44px' : undefined,
-      transition: 'background-color 0.2s'
+      transition: 'background-color 0.2s',
     },
     contextMenuDivider: {
       height: '1px',
       backgroundColor: theme.border.subtle,
-      margin: '8px 0'
+      margin: '8px 0',
     },
     modal: {
       position: 'fixed',
@@ -1248,19 +1343,19 @@ const LibraryBrowser = ({
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 10001
+      zIndex: 10001,
     },
     modalContent: {
       backgroundColor: theme.bg.surface,
       borderRadius: '12px',
       padding: '24px',
       width: '90%',
-      maxWidth: '400px'
+      maxWidth: '400px',
     },
     modalTitle: {
       fontSize: '18px',
       fontWeight: '600',
-      marginBottom: '16px'
+      marginBottom: '16px',
     },
     modalInput: {
       width: '100%',
@@ -1271,12 +1366,12 @@ const LibraryBrowser = ({
       color: theme.text.primary,
       fontSize: '14px',
       outline: 'none',
-      marginBottom: '16px'
+      marginBottom: '16px',
     },
     modalButtons: {
       display: 'flex',
       gap: '12px',
-      justifyContent: 'flex-end'
+      justifyContent: 'flex-end',
     },
     modalButton: {
       padding: '10px 20px',
@@ -1284,7 +1379,7 @@ const LibraryBrowser = ({
       fontSize: '14px',
       fontWeight: '500',
       cursor: 'pointer',
-      transition: 'all 0.2s'
+      transition: 'all 0.2s',
     },
     audioPlaceholder: {
       display: 'flex',
@@ -1293,7 +1388,7 @@ const LibraryBrowser = ({
       width: '100%',
       height: '100%',
       background: `linear-gradient(135deg, ${theme.bg.input} 0%, ${theme.bg.surface} 100%)`,
-      fontSize: '32px'
+      fontSize: '32px',
     },
     videoPlaceholder: {
       position: 'absolute',
@@ -1306,17 +1401,21 @@ const LibraryBrowser = ({
       justifyContent: 'center',
       background: `linear-gradient(135deg, ${theme.bg.input} 0%, ${theme.bg.page} 100%)`,
       fontSize: '28px',
-      pointerEvents: 'none'
-    }
+      pointerEvents: 'none',
+    },
   };
 
   // Get type icon
   const getTypeIcon = (type) => {
     switch (type) {
-      case MEDIA_TYPES.VIDEO: return '🎬';
-      case MEDIA_TYPES.IMAGE: return '🖼️';
-      case MEDIA_TYPES.AUDIO: return '🎵';
-      default: return '📁';
+      case MEDIA_TYPES.VIDEO:
+        return '🎬';
+      case MEDIA_TYPES.IMAGE:
+        return '🖼️';
+      case MEDIA_TYPES.AUDIO:
+        return '🎵';
+      default:
+        return '📁';
     }
   };
 
@@ -1343,7 +1442,20 @@ const LibraryBrowser = ({
     if (diffHrs < 24) return `${diffHrs}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
     if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     const yr = date.getFullYear();
     const short = `${months[date.getMonth()]} ${date.getDate()}`;
     return yr === now.getFullYear() ? short : `${short}, ${yr}`;
@@ -1356,7 +1468,8 @@ const LibraryBrowser = ({
     let currentGroup = null;
     const now = new Date();
     const todayStr = now.toDateString();
-    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toDateString();
 
     const getGroupLabel = (isoDate) => {
@@ -1369,12 +1482,25 @@ const LibraryBrowser = ({
       const diffDays = Math.floor((now - d) / 86400000);
       if (diffDays < 7) return 'This Week';
       if (diffDays < 30) return 'This Month';
-      const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      const months = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ];
       const yr = d.getFullYear();
       return yr === now.getFullYear() ? months[d.getMonth()] : `${months[d.getMonth()]} ${yr}`;
     };
 
-    items.forEach(item => {
+    items.forEach((item) => {
       const label = getGroupLabel(item.createdAt);
       if (label !== currentKey) {
         currentKey = label;
@@ -1388,7 +1514,7 @@ const LibraryBrowser = ({
 
   // Bank-specific handlers
   const handleToggleBankSelect = (bank, mediaId) => {
-    setSelectedBankItems(prev => {
+    setSelectedBankItems((prev) => {
       const newSet = new Set(prev[bank]);
       if (newSet.has(mediaId)) newSet.delete(mediaId);
       else newSet.add(mediaId);
@@ -1399,26 +1525,26 @@ const LibraryBrowser = ({
   const handleSelectAllBank = (bankIndex) => {
     const items = collectionBanks?.banks?.[bankIndex];
     if (!items) return;
-    setSelectedBankItems(prev => ({ ...prev, [bankIndex]: new Set(items.map(m => m.id)) }));
+    setSelectedBankItems((prev) => ({ ...prev, [bankIndex]: new Set(items.map((m) => m.id)) }));
   };
 
   const handleRemoveFromBank = (bankIndex, mediaIds) => {
     if (!mediaIds || mediaIds.length === 0) return;
     removeFromBank(artistId, activeView, mediaIds, db);
-    setSelectedBankItems(prev => ({ ...prev, [bankIndex]: new Set() }));
+    setSelectedBankItems((prev) => ({ ...prev, [bankIndex]: new Set() }));
     loadData();
     syncCollection(activeView);
   };
 
   // Filter collections to only show ones that have items matching current mode
-  const filteredCollections = collections.filter(c => {
+  const filteredCollections = collections.filter((c) => {
     // Always show smart collections
     if (c.type === 'smart' || c.id?.startsWith('smart_')) return true;
     // For user collections, check if they have any matching media
     if (!filterType || !c.mediaIds?.length) return true;
     // Check if any media in this collection matches the current type filter
-    const collectionMedia = library.filter(item => c.mediaIds.includes(item.id));
-    return collectionMedia.some(item => item.type === filterType) || collectionMedia.length === 0;
+    const collectionMedia = library.filter((item) => c.mediaIds.includes(item.id));
+    return collectionMedia.some((item) => item.type === filterType) || collectionMedia.length === 0;
   });
 
   // Handle collection rename
@@ -1481,7 +1607,7 @@ const LibraryBrowser = ({
         .setCallback((data) => {
           if (data.action === window.google.picker.Action.PICKED && data.docs?.[0]) {
             const folder = data.docs[0];
-            const col = collections.find(c => c.id === activeView);
+            const col = collections.find((c) => c.id === activeView);
             if (col) {
               const updated = {
                 ...col,
@@ -1489,8 +1615,8 @@ const LibraryBrowser = ({
                   folderId: folder.id,
                   folderName: folder.name,
                   linkedAt: new Date().toISOString(),
-                  linkedBy: 'current_user'
-                }
+                  linkedBy: 'current_user',
+                },
               };
               updateCollectionAsync(db, artistId, activeView, { linkedDrive: updated.linkedDrive });
               loadData();
@@ -1508,7 +1634,7 @@ const LibraryBrowser = ({
   // Import files from linked Drive folder into this collection
   const handleDriveImport = async () => {
     setShowCloudMenu(false);
-    const col = collections.find(c => c.id === activeView);
+    const col = collections.find((c) => c.id === activeView);
     if (!col?.linkedDrive?.folderId) {
       toastError('No Drive folder linked to this collection');
       return;
@@ -1518,10 +1644,10 @@ const LibraryBrowser = ({
     setDriveImporting(true);
     try {
       const result = await driveListFiles(col.linkedDrive.folderId, {
-        pageSize: 100
+        pageSize: 100,
       });
-      const mediaFiles = result.files.filter(f =>
-        DRIVE_MIME_TYPES.ALL_MEDIA.includes(f.mimeType)
+      const mediaFiles = result.files.filter((f) =>
+        DRIVE_MIME_TYPES.ALL_MEDIA.includes(f.mimeType),
       );
 
       if (mediaFiles.length === 0) {
@@ -1539,14 +1665,17 @@ const LibraryBrowser = ({
           const localFile = new File([blob], file.name, { type: file.mimeType });
           const { url } = await uploadFile(localFile, 'library');
 
-          const mediaType = file.mimeType.startsWith('video/') ? 'video' :
-                           file.mimeType.startsWith('audio/') ? 'audio' : 'image';
+          const mediaType = file.mimeType.startsWith('video/')
+            ? 'video'
+            : file.mimeType.startsWith('audio/')
+              ? 'audio'
+              : 'image';
 
           const added = await addToLibraryAsync(db, artistId, {
             type: mediaType,
             name: file.name,
             url,
-            metadata: { mimeType: file.mimeType, fileSize: file.size, driveFileId: file.id }
+            metadata: { mimeType: file.mimeType, fileSize: file.size, driveFileId: file.id },
           });
 
           if (added?.id) {
@@ -1571,15 +1700,15 @@ const LibraryBrowser = ({
   // Export collection media to linked Drive folder
   const handleDriveExport = async () => {
     setShowCloudMenu(false);
-    const col = collections.find(c => c.id === activeView);
+    const col = collections.find((c) => c.id === activeView);
     if (!col?.linkedDrive?.folderId) {
       toastError('No Drive folder linked to this collection');
       return;
     }
     if (!(await ensureDriveAuth())) return;
 
-    const collectionMedia = library.filter(item =>
-      (col.mediaIds || []).includes(item.id) && item.url
+    const collectionMedia = library.filter(
+      (item) => (col.mediaIds || []).includes(item.id) && item.url,
     );
 
     if (collectionMedia.length === 0) {
@@ -1631,15 +1760,17 @@ const LibraryBrowser = ({
           overflow: 'hidden',
           cursor: 'pointer',
           transition: 'all 0.15s ease',
-          ...(isSelected ? {
-            border: `2px solid ${color.primary}`,
-            backgroundColor: `${color.bg}`
-          } : {
-            border: '1px solid transparent'
-          })
+          ...(isSelected
+            ? {
+                border: `2px solid ${color.primary}`,
+                backgroundColor: `${color.bg}`,
+              }
+            : {
+                border: '1px solid transparent',
+              }),
         }}
         onClick={() => {
-          setSelectedBankItems(prev => {
+          setSelectedBankItems((prev) => {
             const bankSet = new Set(prev[bank] || []);
             if (bankSet.has(media.id)) bankSet.delete(media.id);
             else bankSet.add(media.id);
@@ -1658,22 +1789,45 @@ const LibraryBrowser = ({
         }}
       >
         {isSelected && (
-          <div style={{
-            position: 'absolute', inset: 0,
-            backgroundColor: `${color.primary}33`,
-            zIndex: 1, pointerEvents: 'none', borderRadius: '7px'
-          }}>
-            <div style={{
-              position: 'absolute', bottom: '6px', right: '6px',
-              width: '18px', height: '18px',
-              backgroundColor: color.primary, borderRadius: '50%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '11px', color: '#fff', fontWeight: 'bold'
-            }}>✓</div>
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: `${color.primary}33`,
+              zIndex: 1,
+              pointerEvents: 'none',
+              borderRadius: '7px',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                bottom: '6px',
+                right: '6px',
+                width: '18px',
+                height: '18px',
+                backgroundColor: color.primary,
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '11px',
+                color: '#fff',
+                fontWeight: 'bold',
+              }}
+            >
+              ✓
+            </div>
           </div>
         )}
         {media.type === MEDIA_TYPES.IMAGE && (
-          <img src={media.thumbnailUrl || media.url} alt={media.name} style={styles.mediaThumbnail} loading="lazy" decoding="async" />
+          <img
+            src={media.thumbnailUrl || media.url}
+            alt={media.name}
+            style={styles.mediaThumbnail}
+            loading="lazy"
+            decoding="async"
+          />
         )}
         {media.type === MEDIA_TYPES.VIDEO && (
           <>
@@ -1685,7 +1839,9 @@ const LibraryBrowser = ({
                 style={styles.mediaThumbnail}
                 loading="lazy"
                 decoding="async"
-                onError={(e) => { e.target.style.display = 'none'; }}
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
               />
             )}
           </>
@@ -1712,10 +1868,10 @@ const LibraryBrowser = ({
             justifyContent: 'center',
             padding: '0',
             zIndex: 2,
-            transition: 'background-color 0.2s'
+            transition: 'background-color 0.2s',
           }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.9)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.7)'}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.9)')}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.7)')}
           title="Remove from bank"
         >
           ×
@@ -1728,11 +1884,13 @@ const LibraryBrowser = ({
   const renderMediaCard = (media, isSelected) => (
     <div
       key={media.id}
-      ref={el => { if (el) mediaCardRefs.current[media.id] = el; }}
+      ref={(el) => {
+        if (el) mediaCardRefs.current[media.id] = el;
+      }}
       data-media-id={media.id}
       style={{
         ...styles.mediaCard,
-        ...(isSelected ? { border: `1px solid ${theme.accent.primary}80` } : {})
+        ...(isSelected ? { border: `1px solid ${theme.accent.primary}80` } : {}),
       }}
       onClick={(e) => handleMediaClick(media, e)}
       onContextMenu={(e) => handleContextMenu(e, media)}
@@ -1750,18 +1908,35 @@ const LibraryBrowser = ({
       }}
     >
       {isSelected && (
-        <div style={{
-          position: 'absolute', inset: 0,
-          backgroundColor: `${theme.accent.primary}33`,
-          zIndex: 1, pointerEvents: 'none', borderRadius: '7px'
-        }}>
-          <div style={{
-            position: 'absolute', bottom: '6px', right: '6px',
-            width: '18px', height: '18px',
-            backgroundColor: theme.accent.primary, borderRadius: '50%',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '11px', color: '#fff', fontWeight: 'bold'
-          }}>✓</div>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundColor: `${theme.accent.primary}33`,
+            zIndex: 1,
+            pointerEvents: 'none',
+            borderRadius: '7px',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '6px',
+              right: '6px',
+              width: '18px',
+              height: '18px',
+              backgroundColor: theme.accent.primary,
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '11px',
+              color: '#fff',
+              fontWeight: 'bold',
+            }}
+          >
+            ✓
+          </div>
         </div>
       )}
       {media.type === MEDIA_TYPES.VIDEO && (
@@ -1774,45 +1949,53 @@ const LibraryBrowser = ({
               style={styles.mediaThumbnail}
               loading="lazy"
               decoding="async"
-              onError={(e) => { e.target.style.display = 'none'; }}
+              onError={(e) => {
+                e.target.style.display = 'none';
+              }}
             />
           )}
         </>
       )}
       {media.type === MEDIA_TYPES.IMAGE && (
-        <img src={media.thumbnailUrl || media.url} alt={media.name} style={styles.mediaThumbnail} loading="lazy" decoding="async" />
+        <img
+          src={media.thumbnailUrl || media.url}
+          alt={media.name}
+          style={styles.mediaThumbnail}
+          loading="lazy"
+          decoding="async"
+        />
       )}
-      {media.type === MEDIA_TYPES.AUDIO && (
-        <div style={styles.audioPlaceholder}>🎵</div>
-      )}
+      {media.type === MEDIA_TYPES.AUDIO && <div style={styles.audioPlaceholder}>🎵</div>}
       <div style={styles.mediaTypeIcon}>{getTypeIcon(media.type)}</div>
       {/* Date added badge */}
       {formatDateAdded(media.createdAt) && (
-        <div style={{
-          position: 'absolute',
-          top: '6px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          backgroundColor: theme.overlay.light,
-          backdropFilter: 'blur(4px)',
-          WebkitBackdropFilter: 'blur(4px)',
-          borderRadius: '10px',
-          padding: '2px 7px',
-          fontSize: '9px',
-          fontWeight: 500,
-          color: theme.text.secondary,
-          whiteSpace: 'nowrap',
-          pointerEvents: 'none',
-          zIndex: 2,
-          letterSpacing: '0.2px'
-        }}>
+        <div
+          style={{
+            position: 'absolute',
+            top: '6px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: theme.overlay.light,
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+            borderRadius: '10px',
+            padding: '2px 7px',
+            fontSize: '9px',
+            fontWeight: 500,
+            color: theme.text.secondary,
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+            zIndex: 2,
+            letterSpacing: '0.2px',
+          }}
+        >
           {formatDateAdded(media.createdAt)}
         </div>
       )}
       <button
         style={{
           ...styles.favoriteButton,
-          color: media.isFavorite ? '#fbbf24' : theme.text.muted
+          color: media.isFavorite ? '#fbbf24' : theme.text.muted,
         }}
         onClick={(e) => handleToggleFavorite(media.id, e)}
       >
@@ -1857,11 +2040,7 @@ const LibraryBrowser = ({
             </select>
           )}
 
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            style={styles.select}
-          >
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={styles.select}>
             <option value="newest">Newest</option>
             <option value="oldest">Oldest</option>
             <option value="name">Name</option>
@@ -1872,11 +2051,16 @@ const LibraryBrowser = ({
             <button
               onClick={handleBulkDelete}
               style={{
-                display: 'flex', alignItems: 'center', gap: '4px',
-                padding: '4px 10px', borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 10px',
+                borderRadius: '6px',
                 border: '1px solid rgba(239,68,68,0.4)',
                 backgroundColor: 'rgba(239,68,68,0.1)',
-                color: '#ef4444', fontSize: '12px', cursor: 'pointer'
+                color: '#ef4444',
+                fontSize: '12px',
+                cursor: 'pointer',
               }}
             >
               🗑 Delete {selectedMediaIds.length}
@@ -1885,14 +2069,19 @@ const LibraryBrowser = ({
 
           {extraToolbarContent}
 
-          <label style={{...styles.uploadButton, ...(isMobile ? { padding: '10px 16px', minHeight: '44px' } : {})}}>
+          <label
+            style={{
+              ...styles.uploadButton,
+              ...(isMobile ? { padding: '10px 16px', minHeight: '44px' } : {}),
+            }}
+          >
             <span>⬆️</span>
             <span>{isMobile ? 'Add' : 'Upload'}</span>
             <input
               ref={fileInputRef}
               type="file"
               multiple
-              accept={isMobile ? 'image/*,video/*,.heic,.heif,.tif,.tiff' : getAcceptTypes()}
+              accept={isMobile ? 'image/*,video/*,.heic,.heif,.tif,.tiff,.dng' : getAcceptTypes()}
               {...(isMobile ? { capture: 'environment' } : {})}
               onChange={handleFileUpload}
               style={{ display: 'none' }}
@@ -1912,9 +2101,12 @@ const LibraryBrowser = ({
               <div
                 style={{
                   ...styles.sidebarItem,
-                  ...(activeView === 'library' ? styles.sidebarItemActive : {})
+                  ...(activeView === 'library' ? styles.sidebarItemActive : {}),
                 }}
-                onClick={() => { setActiveView('library'); onCollectionChange?.(null); }}
+                onClick={() => {
+                  setActiveView('library');
+                  onCollectionChange?.(null);
+                }}
               >
                 <span style={styles.sidebarItemIcon}>📚</span>
                 <span>All Media</span>
@@ -1925,19 +2117,21 @@ const LibraryBrowser = ({
             <div style={styles.sidebarSection}>
               <div style={styles.sidebarTitle}>Collections</div>
               {filteredCollections
-                .filter(c => c.type !== COLLECTION_TYPES.SMART)
-                .map(collection => (
+                .filter((c) => c.type !== COLLECTION_TYPES.SMART)
+                .map((collection) => (
                   <div
                     key={collection.id}
                     style={{
                       ...styles.sidebarItem,
                       ...(activeView === collection.id ? styles.sidebarItemActive : {}),
-                      ...(dragOverCollection === collection.id ? {
-                        backgroundColor: `${theme.accent.primary}40`,
-                        border: `1px dashed ${theme.accent.primary}99`,
-                        transform: 'scale(1.02)',
-                        transition: 'all 0.15s ease'
-                      } : {})
+                      ...(dragOverCollection === collection.id
+                        ? {
+                            backgroundColor: `${theme.accent.primary}40`,
+                            border: `1px dashed ${theme.accent.primary}99`,
+                            transform: 'scale(1.02)',
+                            transition: 'all 0.15s ease',
+                          }
+                        : {}),
                     }}
                     onClick={() => {
                       if (renamingCollectionId !== collection.id) {
@@ -1952,17 +2146,26 @@ const LibraryBrowser = ({
                     onDragLeave={() => setDragOverCollection(null)}
                     onDrop={(e) => handleDropOnCollection(e, collection.id)}
                     onMouseEnter={(e) => {
-                      if (renamingCollectionId !== collection.id && dragOverCollection !== collection.id) {
+                      if (
+                        renamingCollectionId !== collection.id &&
+                        dragOverCollection !== collection.id
+                      ) {
                         e.currentTarget.style.backgroundColor = `${theme.accent.primary}1a`;
                       }
                     }}
                     onMouseLeave={(e) => {
-                      if (activeView !== collection.id && renamingCollectionId !== collection.id && dragOverCollection !== collection.id) {
+                      if (
+                        activeView !== collection.id &&
+                        renamingCollectionId !== collection.id &&
+                        dragOverCollection !== collection.id
+                      ) {
                         e.currentTarget.style.backgroundColor = 'transparent';
                       }
                     }}
                   >
-                    <span style={styles.sidebarItemIcon}>{dragOverCollection === collection.id ? '📂' : '📁'}</span>
+                    <span style={styles.sidebarItemIcon}>
+                      {dragOverCollection === collection.id ? '📂' : '📁'}
+                    </span>
                     {renamingCollectionId === collection.id ? (
                       <input
                         type="text"
@@ -1994,7 +2197,7 @@ const LibraryBrowser = ({
                           color: theme.text.primary,
                           padding: '4px 8px',
                           fontSize: '14px',
-                          outline: 'none'
+                          outline: 'none',
                         }}
                         autoFocus
                       />
@@ -2002,31 +2205,41 @@ const LibraryBrowser = ({
                       <span style={{ flex: 1 }}>{collection.name}</span>
                     )}
                     {!isMobile && (
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {renamingCollectionId !== collection.id && (
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        {renamingCollectionId !== collection.id && (
+                          <span
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRenamingCollectionId(collection.id);
+                              setRenameText(collection.name);
+                            }}
+                            style={{
+                              opacity: 0.5,
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                              padding: '0 2px',
+                            }}
+                            title="Rename"
+                          >
+                            ✎
+                          </span>
+                        )}
                         <span
                           onClick={(e) => {
                             e.stopPropagation();
-                            setRenamingCollectionId(collection.id);
-                            setRenameText(collection.name);
+                            handleDeleteCollection(collection.id);
                           }}
-                          style={{ opacity: 0.5, fontSize: '12px', cursor: 'pointer', padding: '0 2px' }}
-                          title="Rename"
+                          style={{
+                            opacity: 0.5,
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            padding: '0 2px',
+                          }}
+                          title="Delete"
                         >
-                          ✎
+                          ✕
                         </span>
-                      )}
-                      <span
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteCollection(collection.id);
-                        }}
-                        style={{ opacity: 0.5, fontSize: '12px', cursor: 'pointer', padding: '0 2px' }}
-                        title="Delete"
-                      >
-                        ✕
-                      </span>
-                    </div>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -2034,8 +2247,8 @@ const LibraryBrowser = ({
               <div
                 style={styles.addCollectionButton}
                 onClick={() => setShowNewCollectionModal(true)}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.hover.bg}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = theme.hover.bg)}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
               >
                 <span>+</span>
                 <span>New Collection</span>
@@ -2046,15 +2259,18 @@ const LibraryBrowser = ({
             <div style={styles.sidebarSection}>
               <div style={styles.sidebarTitle}>Smart Collections</div>
               {filteredCollections
-                .filter(c => c.type === COLLECTION_TYPES.SMART)
-                .map(collection => (
+                .filter((c) => c.type === COLLECTION_TYPES.SMART)
+                .map((collection) => (
                   <div
                     key={collection.id}
                     style={{
                       ...styles.sidebarItem,
-                      ...(activeView === collection.id ? styles.sidebarItemActive : {})
+                      ...(activeView === collection.id ? styles.sidebarItemActive : {}),
                     }}
-                    onClick={() => { setActiveView(collection.id); onCollectionChange?.(null); }}
+                    onClick={() => {
+                      setActiveView(collection.id);
+                      onCollectionChange?.(null);
+                    }}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDropOnCollection(e, collection.id)}
                   >
@@ -2067,36 +2283,55 @@ const LibraryBrowser = ({
         )}
 
         {/* Content */}
-        <div style={{
-          ...styles.content,
-          ...(isUserCollectionView && (collectionBanks || videoTextBanksAvailable) ? {
-            display: 'flex', flexDirection: 'column', overflowY: 'hidden', minHeight: 0
-          } : {})
-        }}>
+        <div
+          style={{
+            ...styles.content,
+            ...(isUserCollectionView && (collectionBanks || videoTextBanksAvailable)
+              ? {
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflowY: 'hidden',
+                  minHeight: 0,
+                }
+              : {}),
+          }}
+        >
           {/* Collection view: media on left, banks on right */}
           {isUserCollectionView && (collectionBanks || videoTextBanksAvailable) ? (
-            <div style={{
-              display: 'flex',
-              flexDirection: isMobile ? 'column' : 'row',
-              gap: isMobile ? '8px' : '12px',
-              flex: 1,
-              minHeight: 0,
-              overflow: isMobile ? 'auto' : 'hidden'
-            }}>
-              {/* Left half — all collection images */}
-              <div style={{
-                flex: isMobile ? 'none' : 1,
+            <div
+              style={{
                 display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
-                minWidth: 0,
-                ...(isMobile ? { maxHeight: '50vh' } : {})
-              }}>
-                <div style={{
-                  padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px',
-                  borderBottom: `1px solid ${theme.border.subtle}`, flexShrink: 0
-                }}>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: theme.text.secondary }}>All Images</span>
+                flexDirection: isMobile ? 'column' : 'row',
+                gap: isMobile ? '8px' : '12px',
+                flex: 1,
+                minHeight: 0,
+                overflow: isMobile ? 'auto' : 'hidden',
+              }}
+            >
+              {/* Left half — all collection images */}
+              <div
+                style={{
+                  flex: isMobile ? 'none' : 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden',
+                  minWidth: 0,
+                  ...(isMobile ? { maxHeight: '50vh' } : {}),
+                }}
+              >
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    borderBottom: `1px solid ${theme.border.subtle}`,
+                    flexShrink: 0,
+                  }}
+                >
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: theme.text.secondary }}>
+                    All Images
+                  </span>
                   <span style={{ fontSize: '11px', color: theme.text.muted, flex: 1 }}>
                     {displayedMedia.length} items{isMobile ? '' : ' — drag into banks →'}
                   </span>
@@ -2107,10 +2342,18 @@ const LibraryBrowser = ({
                       <button
                         onClick={() => setShowCloudMenu(!showCloudMenu)}
                         style={{
-                          background: 'none', border: `1px solid ${theme.border.subtle}`,
-                          borderRadius: '6px', padding: '3px 8px', cursor: 'pointer',
-                          color: collections.find(c => c.id === activeView)?.linkedDrive ? '#4ade80' : theme.text.muted,
-                          fontSize: '14px', display: 'flex', alignItems: 'center', gap: '4px'
+                          background: 'none',
+                          border: `1px solid ${theme.border.subtle}`,
+                          borderRadius: '6px',
+                          padding: '3px 8px',
+                          cursor: 'pointer',
+                          color: collections.find((c) => c.id === activeView)?.linkedDrive
+                            ? '#4ade80'
+                            : theme.text.muted,
+                          fontSize: '14px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
                         }}
                         title="Cloud Storage"
                       >
@@ -2118,47 +2361,112 @@ const LibraryBrowser = ({
                         <span style={{ fontSize: '10px' }}>Cloud</span>
                       </button>
                       {showCloudMenu && (
-                        <div style={{
-                          position: 'absolute', top: '100%', right: 0, marginTop: '4px',
-                          backgroundColor: theme.bg.input, border: `1px solid ${theme.border.subtle}`,
-                          borderRadius: '8px', boxShadow: theme.shadow,
-                          zIndex: 1000, minWidth: '200px', overflow: 'hidden'
-                        }}>
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: '100%',
+                            right: 0,
+                            marginTop: '4px',
+                            backgroundColor: theme.bg.input,
+                            border: `1px solid ${theme.border.subtle}`,
+                            borderRadius: '8px',
+                            boxShadow: theme.shadow,
+                            zIndex: 1000,
+                            minWidth: '200px',
+                            overflow: 'hidden',
+                          }}
+                        >
                           {(() => {
-                            const col = collections.find(c => c.id === activeView);
+                            const col = collections.find((c) => c.id === activeView);
                             const linked = col?.linkedDrive;
                             return (
                               <>
                                 {linked && (
-                                  <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.border.subtle}`, fontSize: '11px', color: '#4ade80' }}>
+                                  <div
+                                    style={{
+                                      padding: '8px 12px',
+                                      borderBottom: `1px solid ${theme.border.subtle}`,
+                                      fontSize: '11px',
+                                      color: '#4ade80',
+                                    }}
+                                  >
                                     Linked: {linked.folderName}
                                   </div>
                                 )}
                                 <div
                                   onClick={handleLinkDriveFolder}
-                                  style={{ padding: '10px 12px', cursor: 'pointer', fontSize: '13px', color: theme.text.primary, display: 'flex', alignItems: 'center', gap: '8px' }}
-                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.hover.bg}
-                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                  style={{
+                                    padding: '10px 12px',
+                                    cursor: 'pointer',
+                                    fontSize: '13px',
+                                    color: theme.text.primary,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                  }}
+                                  onMouseEnter={(e) =>
+                                    (e.currentTarget.style.backgroundColor = theme.hover.bg)
+                                  }
+                                  onMouseLeave={(e) =>
+                                    (e.currentTarget.style.backgroundColor = 'transparent')
+                                  }
                                 >
-                                  <span>&#128279;</span> {linked ? 'Change Drive Folder' : 'Link to Google Drive'}
+                                  <span>&#128279;</span>{' '}
+                                  {linked ? 'Change Drive Folder' : 'Link to Google Drive'}
                                 </div>
                                 {linked && (
                                   <>
                                     <div
                                       onClick={driveImporting ? undefined : handleDriveImport}
-                                      style={{ padding: '10px 12px', cursor: driveImporting ? 'wait' : 'pointer', fontSize: '13px', color: driveImporting ? theme.text.muted : theme.text.primary, display: 'flex', alignItems: 'center', gap: '8px' }}
-                                      onMouseEnter={(e) => { if (!driveImporting) e.currentTarget.style.backgroundColor = theme.hover.bg; }}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                      style={{
+                                        padding: '10px 12px',
+                                        cursor: driveImporting ? 'wait' : 'pointer',
+                                        fontSize: '13px',
+                                        color: driveImporting
+                                          ? theme.text.muted
+                                          : theme.text.primary,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        if (!driveImporting)
+                                          e.currentTarget.style.backgroundColor = theme.hover.bg;
+                                      }}
+                                      onMouseLeave={(e) =>
+                                        (e.currentTarget.style.backgroundColor = 'transparent')
+                                      }
                                     >
-                                      <span>&#11015;</span> {driveImporting ? `Importing ${driveProgress.current}/${driveProgress.total}...` : 'Import from Drive'}
+                                      <span>&#11015;</span>{' '}
+                                      {driveImporting
+                                        ? `Importing ${driveProgress.current}/${driveProgress.total}...`
+                                        : 'Import from Drive'}
                                     </div>
                                     <div
                                       onClick={driveExporting ? undefined : handleDriveExport}
-                                      style={{ padding: '10px 12px', cursor: driveExporting ? 'wait' : 'pointer', fontSize: '13px', color: driveExporting ? theme.text.muted : theme.text.primary, display: 'flex', alignItems: 'center', gap: '8px' }}
-                                      onMouseEnter={(e) => { if (!driveExporting) e.currentTarget.style.backgroundColor = theme.hover.bg; }}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                      style={{
+                                        padding: '10px 12px',
+                                        cursor: driveExporting ? 'wait' : 'pointer',
+                                        fontSize: '13px',
+                                        color: driveExporting
+                                          ? theme.text.muted
+                                          : theme.text.primary,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        if (!driveExporting)
+                                          e.currentTarget.style.backgroundColor = theme.hover.bg;
+                                      }}
+                                      onMouseLeave={(e) =>
+                                        (e.currentTarget.style.backgroundColor = 'transparent')
+                                      }
                                     >
-                                      <span>&#11014;</span> {driveExporting ? `Exporting ${driveProgress.current}/${driveProgress.total}...` : 'Export to Drive'}
+                                      <span>&#11014;</span>{' '}
+                                      {driveExporting
+                                        ? `Exporting ${driveProgress.current}/${driveProgress.total}...`
+                                        : 'Export to Drive'}
                                     </div>
                                   </>
                                 )}
@@ -2166,25 +2474,47 @@ const LibraryBrowser = ({
                             );
                           })()}
                           {/* Dropbox divider + import */}
-                          <div style={{ height: '1px', backgroundColor: theme.border.subtle, margin: '4px 0' }} />
+                          <div
+                            style={{
+                              height: '1px',
+                              backgroundColor: theme.border.subtle,
+                              margin: '4px 0',
+                            }}
+                          />
                           <div
                             onClick={async () => {
                               setShowCloudMenu(false);
                               if (!isDropboxAuth()) {
-                                try { await dropboxAuth(); } catch { toastError('Dropbox auth failed'); return; }
+                                try {
+                                  await dropboxAuth();
+                                } catch {
+                                  toastError('Dropbox auth failed');
+                                  return;
+                                }
                               }
                               try {
                                 const result = await dropboxListFiles('');
-                                const files = (result.entries || result || []).filter(f => f['.tag'] === 'file');
-                                if (!files.length) { toastSuccess('No files in Dropbox root'); return; }
+                                const files = (result.entries || result || []).filter(
+                                  (f) => f['.tag'] === 'file',
+                                );
+                                if (!files.length) {
+                                  toastSuccess('No files in Dropbox root');
+                                  return;
+                                }
                                 for (const f of files) {
-                                  const blob = await dropboxDownloadFile(f.path_lower || f.path_display);
+                                  const blob = await dropboxDownloadFile(
+                                    f.path_lower || f.path_display,
+                                  );
                                   const localUrl = URL.createObjectURL(blob);
                                   const type = detectMediaType(f.name);
                                   if (type && artistId) {
                                     addToLibraryAsync(db, artistId, {
                                       id: `dbx_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-                                      name: f.name, type, url: localUrl, localUrl, source: 'dropbox'
+                                      name: f.name,
+                                      type,
+                                      url: localUrl,
+                                      localUrl,
+                                      source: 'dropbox',
                                     });
                                   }
                                 }
@@ -2194,9 +2524,21 @@ const LibraryBrowser = ({
                                 toastError('Dropbox import failed');
                               }
                             }}
-                            style={{ padding: '10px 12px', cursor: 'pointer', fontSize: '13px', color: theme.text.primary, display: 'flex', alignItems: 'center', gap: '8px' }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.hover.bg}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                            style={{
+                              padding: '10px 12px',
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              color: theme.text.primary,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.currentTarget.style.backgroundColor = theme.hover.bg)
+                            }
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.backgroundColor = 'transparent')
+                            }
                           >
                             <span>📦</span> Import from Dropbox
                           </div>
@@ -2208,44 +2550,78 @@ const LibraryBrowser = ({
                 <div
                   ref={gridRef}
                   style={{
-                    flex: 1, overflowY: 'auto', padding: isMobile ? '8px' : '10px',
+                    flex: 1,
+                    overflowY: 'auto',
+                    padding: isMobile ? '8px' : '10px',
                     display: 'grid',
                     gridTemplateColumns: isMobile
                       ? 'repeat(3, 1fr)'
                       : `repeat(auto-fill, minmax(${compact ? '80px' : '110px'}, 1fr))`,
-                    gap: isMobile ? '6px' : '8px', alignContent: 'start',
-                    userSelect: 'none', WebkitUserSelect: 'none'
+                    gap: isMobile ? '6px' : '8px',
+                    alignContent: 'start',
+                    userSelect: 'none',
+                    WebkitUserSelect: 'none',
                   }}
                   onMouseDown={handleGridMouseDown}
                 >
                   {displayedMedia.length === 0 ? (
-                    <div style={{ gridColumn: '1 / -1', padding: '32px', textAlign: 'center', color: theme.text.muted, fontSize: '13px' }}>
+                    <div
+                      style={{
+                        gridColumn: '1 / -1',
+                        padding: '32px',
+                        textAlign: 'center',
+                        color: theme.text.muted,
+                        fontSize: '13px',
+                      }}
+                    >
                       This collection is empty. Drag items here to add them.
                     </div>
-                  ) : displayedMedia.map(media => renderMediaCard(media, selectedMediaIds.includes(media.id)))}
+                  ) : (
+                    displayedMedia.map((media) =>
+                      renderMediaCard(media, selectedMediaIds.includes(media.id)),
+                    )
+                  )}
                 </div>
               </div>
 
               {/* Right half — Banks with tabs */}
-              <div style={{
-                flex: isMobile ? 'none' : 1,
-                display: 'flex',
-                flexDirection: 'column',
-                minWidth: 0,
-                minHeight: 0,
-                overflow: 'hidden',
-                ...(isMobile ? { width: '100%' } : {})
-              }}>
+              <div
+                style={{
+                  flex: isMobile ? 'none' : 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  minWidth: 0,
+                  minHeight: 0,
+                  overflow: 'hidden',
+                  ...(isMobile ? { width: '100%' } : {}),
+                }}
+              >
                 {/* Tab bar — only for slideshow mode (videos have no image banks) */}
                 {mode !== 'videos' && (
-                  <div style={{ display: 'flex', gap: '2px', padding: '4px', backgroundColor: theme.hover.bg, borderRadius: '8px', marginBottom: '8px', flexShrink: 0 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '2px',
+                      padding: '4px',
+                      backgroundColor: theme.hover.bg,
+                      borderRadius: '8px',
+                      marginBottom: '8px',
+                      flexShrink: 0,
+                    }}
+                  >
                     <button
                       onClick={() => setBankTab('images')}
                       style={{
-                        flex: 1, padding: '6px 12px', borderRadius: '6px', border: 'none',
-                        fontSize: '12px', fontWeight: 600, cursor: 'pointer',
-                        backgroundColor: bankTab === 'images' ? `${theme.accent.primary}33` : 'transparent',
-                        color: bankTab === 'images' ? theme.accent.hover : theme.text.muted
+                        flex: 1,
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        backgroundColor:
+                          bankTab === 'images' ? `${theme.accent.primary}33` : 'transparent',
+                        color: bankTab === 'images' ? theme.accent.hover : theme.text.muted,
                       }}
                     >
                       Image Banks
@@ -2253,10 +2629,16 @@ const LibraryBrowser = ({
                     <button
                       onClick={() => setBankTab('text')}
                       style={{
-                        flex: 1, padding: '6px 12px', borderRadius: '6px', border: 'none',
-                        fontSize: '12px', fontWeight: 600, cursor: 'pointer',
-                        backgroundColor: bankTab === 'text' ? `${theme.accent.primary}33` : 'transparent',
-                        color: bankTab === 'text' ? theme.accent.hover : theme.text.muted
+                        flex: 1,
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        backgroundColor:
+                          bankTab === 'text' ? `${theme.accent.primary}33` : 'transparent',
+                        color: bankTab === 'text' ? theme.accent.hover : theme.text.muted,
                       }}
                     >
                       Text Banks
@@ -2265,251 +2647,458 @@ const LibraryBrowser = ({
                 )}
 
                 <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-                {mode !== 'videos' && bankTab === 'images' ? (
-                  <div style={{
-                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                    display: 'flex',
-                    flexDirection: isMobile ? 'row' : 'column',
-                    gap: '8px',
-                    overflowY: 'auto',
-                    WebkitOverflowScrolling: 'touch',
-                    paddingBottom: isMobile ? '8px' : undefined,
-                    paddingRight: isMobile ? undefined : '4px'
-                  }}>
-                    {(collectionBanks?.banks || []).map((bankMedia, idx) => {
-                      const color = getBankColor(idx);
-                      const bankSel = selectedBankItems[idx] || new Set();
-                      return (
-                        <div
-                          key={idx}
-                          style={{
-                            flex: isMobile ? 'none' : '0 0 auto',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            overflow: 'hidden',
-                            minHeight: isMobile ? '120px' : '280px',
-                            minWidth: isMobile ? '200px' : undefined,
-                            flexShrink: isMobile ? 0 : undefined,
-                            borderRadius: '10px',
-                            border: dragOverBank === idx ? `2px dashed ${color.border}` : `1px solid ${theme.border.subtle}`,
-                            backgroundColor: dragOverBank === idx ? color.bg : 'transparent',
-                            transition: 'all 0.15s ease'
-                          }}
-                          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBank(idx); }}
-                          onDragLeave={() => setDragOverBank(null)}
-                          onDrop={(e) => handleDropOnBank(e, idx)}
-                        >
-                          <div style={{
-                            padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px',
-                            borderBottom: `1px solid ${theme.border.subtle}`, flexShrink: 0,
-                            background: `linear-gradient(135deg, ${color.bg}, transparent)`
-                          }}>
-                            <div style={{
-                              width: '22px', height: '22px', borderRadius: '6px',
-                              background: `linear-gradient(135deg, ${color.primary}, ${color.light})`,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: '10px', fontWeight: 700, color: '#fff'
-                            }}>{idx + 1}</div>
-                            <span style={{ fontSize: '13px', fontWeight: 600, color: color.light }}>{getBankLabel(idx)}</span>
-                            <span style={{ fontSize: '11px', color: theme.text.muted }}>{bankMedia.length}</span>
-                            {bankMedia.length > 0 && (
-                              <>
-                                <button
-                                  onClick={() => handleSelectAllBank(idx)}
-                                  style={{
-                                    marginLeft: '8px', padding: '4px 10px', fontSize: '11px',
-                                    backgroundColor: `${color.primary}33`, border: 'none',
-                                    borderRadius: '4px', color: color.light, cursor: 'pointer',
-                                    transition: 'background-color 0.2s'
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = `${color.primary}55`}
-                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = `${color.primary}33`}
-                                  title={`Select all items in ${getBankLabel(idx)}`}
-                                >Select All</button>
-                                {bankSel.size > 0 && (
-                                  <button
-                                    onClick={() => handleRemoveFromBank(idx, Array.from(bankSel))}
-                                    style={{
-                                      padding: '4px 10px', fontSize: '11px',
-                                      backgroundColor: 'rgba(239, 68, 68, 0.2)', border: 'none',
-                                      borderRadius: '4px', color: '#fca5a5', cursor: 'pointer',
-                                      transition: 'background-color 0.2s'
-                                    }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.35)'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)'}
-                                    title={`Remove selected (${bankSel.size})`}
-                                  >Remove {bankSel.size}</button>
-                                )}
-                              </>
-                            )}
-                            {/* Delete bank button (only show if more than 2 banks exist) */}
-                            {(collectionBanks?.banks?.length || 0) > 2 && (
-                              <button
-                                onClick={() => {
-                                  if (window.confirm(`Delete ${getBankLabel(idx)}? All images will be moved to Library.`)) {
-                                    removeBankFromCollection(artistId, activeView, idx, db);
-                                    loadData();
-                                    syncCollection(activeView);
-                                  }
-                                }}
-                                style={{
-                                  marginLeft: 'auto', padding: '4px 8px', fontSize: '11px',
-                                  backgroundColor: 'transparent', border: `1px solid ${theme.border.subtle}`,
-                                  borderRadius: '4px', color: theme.text.muted, cursor: 'pointer',
-                                  transition: 'all 0.2s', display: 'flex', alignItems: 'center'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)';
-                                  e.currentTarget.style.color = '#fca5a5';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.borderColor = theme.border.subtle;
-                                  e.currentTarget.style.color = theme.text.muted;
-                                }}
-                                title={`Delete ${getBankLabel(idx)}`}
-                              >✕</button>
-                            )}
-                          </div>
-                          <div style={{
-                            flex: 1, overflowY: 'auto', padding: '16px', minHeight: 0,
-                            display: 'flex', flexWrap: 'wrap', gap: '8px', alignContent: 'start'
-                          }}>
-                            {bankMedia.length === 0 ? (
-                              <div style={{ width: '100%', padding: '16px', textAlign: 'center', color: theme.text.muted, fontSize: '11px' }}>
-                                Drag images here for {getBankLabel(idx)}
-                              </div>
-                            ) : bankMedia.map(media => renderBankMediaCard(media, idx))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {/* + Add Slide Bank button */}
-                    {(collectionBanks?.banks?.length || 0) < MAX_BANKS && (
-                      <button
-                        onClick={() => { addBankToCollection(artistId, activeView, db); loadData(); syncCollection(activeView); }}
-                        style={{
-                          padding: '10px', borderRadius: '10px',
-                          border: `1px dashed ${theme.text.muted}`,
-                          backgroundColor: 'transparent', color: theme.text.muted,
-                          fontSize: '12px', cursor: 'pointer', textAlign: 'center',
-                          transition: 'all 0.15s ease', flexShrink: 0
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = `${theme.accent.primary}80`; e.currentTarget.style.color = theme.accent.hover; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = theme.text.muted; e.currentTarget.style.color = theme.text.muted; }}
-                      >
-                        + Add Slide Bank
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', paddingRight: '4px' }}>
-                    {/* Slideshow Text Banks (only in images/slideshows mode) - Dynamic based on collection banks */}
-                    {mode !== 'videos' && (() => {
-                      const col = collections.find(c => c.id === activeView);
-                      if (!col) return null;
-                      const migrated = migrateCollectionBanks(col);
-                      const numBanks = migrated.textBanks?.length || 0;
-
-                      return (
-                        <>
-                          {Array.from({ length: numBanks }, (_, idx) => {
-                            const bankNum = idx + 1;
-                            const bankColor = getBankColor(idx);
-                            return (
-                              <TextBankPanel
-                                key={`textbank-${idx}`}
-                                bankNum={bankNum}
-                                label={getBankLabel(idx)}
-                                color={bankColor.light}
-                                texts={migrated.textBanks?.[idx] || []}
-                                onAdd={(text) => { addToTextBank(artistId, activeView, bankNum, text, db); loadData(); syncCollection(activeView); }}
-                                onRemove={(index) => { removeFromTextBank(artistId, activeView, bankNum, index, db); loadData(); syncCollection(activeView); }}
-                                onUpdate={(texts) => { updateTextBank(artistId, activeView, bankNum, texts, db); loadData(); syncCollection(activeView); }}
-                                onDelete={numBanks > 2 ? () => {
-                                  if (window.confirm(`Delete ${getBankLabel(idx)}? All text entries will be removed.`)) {
-                                    removeBankFromCollection(artistId, activeView, idx, db);
-                                    loadData();
-                                    syncCollection(activeView);
-                                  }
-                                } : null}
-                              />
-                            );
-                          })}
-                          {/* + Add Text Bank button */}
-                          {numBanks < MAX_BANKS && (
-                            <button
-                              onClick={() => { addBankToCollection(artistId, activeView, db); loadData(); syncCollection(activeView); }}
+                  {mode !== 'videos' && bankTab === 'images' ? (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        display: 'flex',
+                        flexDirection: isMobile ? 'row' : 'column',
+                        gap: '8px',
+                        overflowY: 'auto',
+                        WebkitOverflowScrolling: 'touch',
+                        paddingBottom: isMobile ? '8px' : undefined,
+                        paddingRight: isMobile ? undefined : '4px',
+                      }}
+                    >
+                      {(collectionBanks?.banks || []).map((bankMedia, idx) => {
+                        const color = getBankColor(idx);
+                        const bankSel = selectedBankItems[idx] || new Set();
+                        return (
+                          <div
+                            key={idx}
+                            style={{
+                              flex: isMobile ? 'none' : '0 0 auto',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              overflow: 'hidden',
+                              minHeight: isMobile ? '120px' : '280px',
+                              minWidth: isMobile ? '200px' : undefined,
+                              flexShrink: isMobile ? 0 : undefined,
+                              borderRadius: '10px',
+                              border:
+                                dragOverBank === idx
+                                  ? `2px dashed ${color.border}`
+                                  : `1px solid ${theme.border.subtle}`,
+                              backgroundColor: dragOverBank === idx ? color.bg : 'transparent',
+                              transition: 'all 0.15s ease',
+                            }}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = 'copy';
+                              setDragOverBank(idx);
+                            }}
+                            onDragLeave={() => setDragOverBank(null)}
+                            onDrop={(e) => handleDropOnBank(e, idx)}
+                          >
+                            <div
                               style={{
-                                padding: '10px', borderRadius: '10px',
-                                border: `1px dashed ${theme.text.muted}`,
-                                backgroundColor: 'transparent', color: theme.text.muted,
-                                fontSize: '12px', cursor: 'pointer', textAlign: 'center',
-                                transition: 'all 0.15s ease', flexShrink: 0
+                                padding: '8px 12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                borderBottom: `1px solid ${theme.border.subtle}`,
+                                flexShrink: 0,
+                                background: `linear-gradient(135deg, ${color.bg}, transparent)`,
                               }}
-                              onMouseEnter={(e) => { e.currentTarget.style.borderColor = `${theme.accent.primary}80`; e.currentTarget.style.color = theme.accent.hover; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.borderColor = theme.text.muted; e.currentTarget.style.color = theme.text.muted; }}
                             >
-                              + Add Text Bank
-                            </button>
-                          )}
-                        </>
-                      );
-                    })()}
-                    {mode === 'videos' && (
-                      <>
-                        {/* Video Text Bank 1 */}
-                        <TextBankPanel
-                          bankNum={1}
-                          label="Video Text 1"
-                          color="#38bdf8"
-                          texts={(() => {
-                            const col = collections.find(c => c.id === activeView);
-                            return col?.videoTextBank1 || [];
-                          })()}
-                          onAdd={(text) => { addToVideoTextBank(artistId, activeView, 1, text, db); loadData(); syncCollection(activeView); }}
-                          onRemove={(index) => { removeFromVideoTextBank(artistId, activeView, 1, index, db); loadData(); syncCollection(activeView); }}
-                          onUpdate={(texts) => { updateVideoTextBank(artistId, activeView, 1, texts, db); loadData(); syncCollection(activeView); }}
-                        />
-                        {/* Video Text Bank 2 */}
-                        <TextBankPanel
-                          bankNum={2}
-                          label="Video Text 2"
-                          color="#fb923c"
-                          texts={(() => {
-                            const col = collections.find(c => c.id === activeView);
-                            return col?.videoTextBank2 || [];
-                          })()}
-                          onAdd={(text) => { addToVideoTextBank(artistId, activeView, 2, text, db); loadData(); syncCollection(activeView); }}
-                          onRemove={(index) => { removeFromVideoTextBank(artistId, activeView, 2, index, db); loadData(); syncCollection(activeView); }}
-                          onUpdate={(texts) => { updateVideoTextBank(artistId, activeView, 2, texts, db); loadData(); syncCollection(activeView); }}
-                        />
-                      </>
-                    )}
-                    {/* Template Editor Button */}
-                    <div style={{ padding: '8px', flexShrink: 0 }}>
-                      <button
-                        onClick={() => {
-                          const col = collections.find(c => c.id === activeView);
-                          const existing = col?.textTemplates?.[0] || {
-                            id: `template_${Date.now()}`,
-                            name: 'Default',
-                            text1Style: { fontFamily: 'Inter, sans-serif', fontSize: 48, fontWeight: '700', color: '#ffffff', position: { x: 50, y: 30 }, outline: true, outlineColor: 'rgba(0,0,0,0.5)' },
-                            text2Style: { fontFamily: 'Inter, sans-serif', fontSize: 36, fontWeight: '400', color: '#ffffff', position: { x: 50, y: 70 }, outline: true, outlineColor: 'rgba(0,0,0,0.5)' }
-                          };
-                          setEditingTemplate(existing);
-                          setShowTemplateEditor(true);
-                        }}
-                        style={{
-                          width: '100%', padding: '8px 12px', borderRadius: '8px', border: `1px dashed ${theme.text.muted}`,
-                          backgroundColor: 'transparent', color: theme.text.muted, fontSize: '12px',
-                          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
-                        }}
-                      >
-                        🎨 Edit Text Style Template
-                      </button>
+                              <div
+                                style={{
+                                  width: '22px',
+                                  height: '22px',
+                                  borderRadius: '6px',
+                                  background: `linear-gradient(135deg, ${color.primary}, ${color.light})`,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '10px',
+                                  fontWeight: 700,
+                                  color: '#fff',
+                                }}
+                              >
+                                {idx + 1}
+                              </div>
+                              <span
+                                style={{ fontSize: '13px', fontWeight: 600, color: color.light }}
+                              >
+                                {getBankLabel(idx)}
+                              </span>
+                              <span style={{ fontSize: '11px', color: theme.text.muted }}>
+                                {bankMedia.length}
+                              </span>
+                              {bankMedia.length > 0 && (
+                                <>
+                                  <button
+                                    onClick={() => handleSelectAllBank(idx)}
+                                    style={{
+                                      marginLeft: '8px',
+                                      padding: '4px 10px',
+                                      fontSize: '11px',
+                                      backgroundColor: `${color.primary}33`,
+                                      border: 'none',
+                                      borderRadius: '4px',
+                                      color: color.light,
+                                      cursor: 'pointer',
+                                      transition: 'background-color 0.2s',
+                                    }}
+                                    onMouseEnter={(e) =>
+                                      (e.currentTarget.style.backgroundColor = `${color.primary}55`)
+                                    }
+                                    onMouseLeave={(e) =>
+                                      (e.currentTarget.style.backgroundColor = `${color.primary}33`)
+                                    }
+                                    title={`Select all items in ${getBankLabel(idx)}`}
+                                  >
+                                    Select All
+                                  </button>
+                                  {bankSel.size > 0 && (
+                                    <button
+                                      onClick={() => handleRemoveFromBank(idx, Array.from(bankSel))}
+                                      style={{
+                                        padding: '4px 10px',
+                                        fontSize: '11px',
+                                        backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        color: '#fca5a5',
+                                        cursor: 'pointer',
+                                        transition: 'background-color 0.2s',
+                                      }}
+                                      onMouseEnter={(e) =>
+                                        (e.currentTarget.style.backgroundColor =
+                                          'rgba(239, 68, 68, 0.35)')
+                                      }
+                                      onMouseLeave={(e) =>
+                                        (e.currentTarget.style.backgroundColor =
+                                          'rgba(239, 68, 68, 0.2)')
+                                      }
+                                      title={`Remove selected (${bankSel.size})`}
+                                    >
+                                      Remove {bankSel.size}
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                              {/* Delete bank button (only show if more than 2 banks exist) */}
+                              {(collectionBanks?.banks?.length || 0) > 2 && (
+                                <button
+                                  onClick={() => {
+                                    if (
+                                      window.confirm(
+                                        `Delete ${getBankLabel(idx)}? All images will be moved to Library.`,
+                                      )
+                                    ) {
+                                      removeBankFromCollection(artistId, activeView, idx, db);
+                                      loadData();
+                                      syncCollection(activeView);
+                                    }
+                                  }}
+                                  style={{
+                                    marginLeft: 'auto',
+                                    padding: '4px 8px',
+                                    fontSize: '11px',
+                                    backgroundColor: 'transparent',
+                                    border: `1px solid ${theme.border.subtle}`,
+                                    borderRadius: '4px',
+                                    color: theme.text.muted,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+                                    e.currentTarget.style.color = '#fca5a5';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.borderColor = theme.border.subtle;
+                                    e.currentTarget.style.color = theme.text.muted;
+                                  }}
+                                  title={`Delete ${getBankLabel(idx)}`}
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                            <div
+                              style={{
+                                flex: 1,
+                                overflowY: 'auto',
+                                padding: '16px',
+                                minHeight: 0,
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                gap: '8px',
+                                alignContent: 'start',
+                              }}
+                            >
+                              {bankMedia.length === 0 ? (
+                                <div
+                                  style={{
+                                    width: '100%',
+                                    padding: '16px',
+                                    textAlign: 'center',
+                                    color: theme.text.muted,
+                                    fontSize: '11px',
+                                  }}
+                                >
+                                  Drag images here for {getBankLabel(idx)}
+                                </div>
+                              ) : (
+                                bankMedia.map((media) => renderBankMediaCard(media, idx))
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {/* + Add Slide Bank button */}
+                      {(collectionBanks?.banks?.length || 0) < MAX_BANKS && (
+                        <button
+                          onClick={() => {
+                            addBankToCollection(artistId, activeView, db);
+                            loadData();
+                            syncCollection(activeView);
+                          }}
+                          style={{
+                            padding: '10px',
+                            borderRadius: '10px',
+                            border: `1px dashed ${theme.text.muted}`,
+                            backgroundColor: 'transparent',
+                            color: theme.text.muted,
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                            transition: 'all 0.15s ease',
+                            flexShrink: 0,
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.borderColor = `${theme.accent.primary}80`;
+                            e.currentTarget.style.color = theme.accent.hover;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.borderColor = theme.text.muted;
+                            e.currentTarget.style.color = theme.text.muted;
+                          }}
+                        >
+                          + Add Slide Bank
+                        </button>
+                      )}
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                        overflowY: 'auto',
+                        paddingRight: '4px',
+                      }}
+                    >
+                      {/* Slideshow Text Banks (only in images/slideshows mode) - Dynamic based on collection banks */}
+                      {mode !== 'videos' &&
+                        (() => {
+                          const col = collections.find((c) => c.id === activeView);
+                          if (!col) return null;
+                          const migrated = migrateCollectionBanks(col);
+                          const numBanks = migrated.textBanks?.length || 0;
+
+                          return (
+                            <>
+                              {Array.from({ length: numBanks }, (_, idx) => {
+                                const bankNum = idx + 1;
+                                const bankColor = getBankColor(idx);
+                                return (
+                                  <TextBankPanel
+                                    key={`textbank-${idx}`}
+                                    bankNum={bankNum}
+                                    label={getBankLabel(idx)}
+                                    color={bankColor.light}
+                                    texts={migrated.textBanks?.[idx] || []}
+                                    onAdd={(text) => {
+                                      addToTextBank(artistId, activeView, bankNum, text, db);
+                                      loadData();
+                                      syncCollection(activeView);
+                                    }}
+                                    onRemove={(index) => {
+                                      removeFromTextBank(artistId, activeView, bankNum, index, db);
+                                      loadData();
+                                      syncCollection(activeView);
+                                    }}
+                                    onUpdate={(texts) => {
+                                      updateTextBank(artistId, activeView, bankNum, texts, db);
+                                      loadData();
+                                      syncCollection(activeView);
+                                    }}
+                                    onDelete={
+                                      numBanks > 2
+                                        ? () => {
+                                            if (
+                                              window.confirm(
+                                                `Delete ${getBankLabel(idx)}? All text entries will be removed.`,
+                                              )
+                                            ) {
+                                              removeBankFromCollection(
+                                                artistId,
+                                                activeView,
+                                                idx,
+                                                db,
+                                              );
+                                              loadData();
+                                              syncCollection(activeView);
+                                            }
+                                          }
+                                        : null
+                                    }
+                                  />
+                                );
+                              })}
+                              {/* + Add Text Bank button */}
+                              {numBanks < MAX_BANKS && (
+                                <button
+                                  onClick={() => {
+                                    addBankToCollection(artistId, activeView, db);
+                                    loadData();
+                                    syncCollection(activeView);
+                                  }}
+                                  style={{
+                                    padding: '10px',
+                                    borderRadius: '10px',
+                                    border: `1px dashed ${theme.text.muted}`,
+                                    backgroundColor: 'transparent',
+                                    color: theme.text.muted,
+                                    fontSize: '12px',
+                                    cursor: 'pointer',
+                                    textAlign: 'center',
+                                    transition: 'all 0.15s ease',
+                                    flexShrink: 0,
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.borderColor = `${theme.accent.primary}80`;
+                                    e.currentTarget.style.color = theme.accent.hover;
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.borderColor = theme.text.muted;
+                                    e.currentTarget.style.color = theme.text.muted;
+                                  }}
+                                >
+                                  + Add Text Bank
+                                </button>
+                              )}
+                            </>
+                          );
+                        })()}
+                      {mode === 'videos' && (
+                        <>
+                          {/* Video Text Bank 1 */}
+                          <TextBankPanel
+                            bankNum={1}
+                            label="Video Text 1"
+                            color="#38bdf8"
+                            texts={(() => {
+                              const col = collections.find((c) => c.id === activeView);
+                              return col?.videoTextBank1 || [];
+                            })()}
+                            onAdd={(text) => {
+                              addToVideoTextBank(artistId, activeView, 1, text, db);
+                              loadData();
+                              syncCollection(activeView);
+                            }}
+                            onRemove={(index) => {
+                              removeFromVideoTextBank(artistId, activeView, 1, index, db);
+                              loadData();
+                              syncCollection(activeView);
+                            }}
+                            onUpdate={(texts) => {
+                              updateVideoTextBank(artistId, activeView, 1, texts, db);
+                              loadData();
+                              syncCollection(activeView);
+                            }}
+                          />
+                          {/* Video Text Bank 2 */}
+                          <TextBankPanel
+                            bankNum={2}
+                            label="Video Text 2"
+                            color="#fb923c"
+                            texts={(() => {
+                              const col = collections.find((c) => c.id === activeView);
+                              return col?.videoTextBank2 || [];
+                            })()}
+                            onAdd={(text) => {
+                              addToVideoTextBank(artistId, activeView, 2, text, db);
+                              loadData();
+                              syncCollection(activeView);
+                            }}
+                            onRemove={(index) => {
+                              removeFromVideoTextBank(artistId, activeView, 2, index, db);
+                              loadData();
+                              syncCollection(activeView);
+                            }}
+                            onUpdate={(texts) => {
+                              updateVideoTextBank(artistId, activeView, 2, texts, db);
+                              loadData();
+                              syncCollection(activeView);
+                            }}
+                          />
+                        </>
+                      )}
+                      {/* Template Editor Button */}
+                      <div style={{ padding: '8px', flexShrink: 0 }}>
+                        <button
+                          onClick={() => {
+                            const col = collections.find((c) => c.id === activeView);
+                            const existing = col?.textTemplates?.[0] || {
+                              id: `template_${Date.now()}`,
+                              name: 'Default',
+                              text1Style: {
+                                fontFamily: 'Inter, sans-serif',
+                                fontSize: 48,
+                                fontWeight: '700',
+                                color: '#ffffff',
+                                position: { x: 50, y: 30 },
+                                outline: true,
+                                outlineColor: 'rgba(0,0,0,0.5)',
+                              },
+                              text2Style: {
+                                fontFamily: 'Inter, sans-serif',
+                                fontSize: 36,
+                                fontWeight: '400',
+                                color: '#ffffff',
+                                position: { x: 50, y: 70 },
+                                outline: true,
+                                outlineColor: 'rgba(0,0,0,0.5)',
+                              },
+                            };
+                            setEditingTemplate(existing);
+                            setShowTemplateEditor(true);
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            border: `1px dashed ${theme.text.muted}`,
+                            backgroundColor: 'transparent',
+                            color: theme.text.muted,
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                          }}
+                        >
+                          🎨 Edit Text Style Template
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2521,17 +3110,24 @@ const LibraryBrowser = ({
                   ? 'No results found'
                   : activeView === 'library'
                     ? 'Your library is empty. Upload some media to get started!'
-                    : 'This collection is empty. Drag items here to add them.'
-                }
+                    : 'This collection is empty. Drag items here to add them.'}
               </div>
               {!searchQuery && activeView === 'library' && (
-                <label style={{...styles.uploadButton, marginTop: '8px', ...(isMobile ? { padding: '12px 20px', minHeight: '44px' } : {})}}>
+                <label
+                  style={{
+                    ...styles.uploadButton,
+                    marginTop: '8px',
+                    ...(isMobile ? { padding: '12px 20px', minHeight: '44px' } : {}),
+                  }}
+                >
                   <span>⬆️</span>
                   <span>{isMobile ? 'Add Media' : 'Upload Media'}</span>
                   <input
                     type="file"
                     multiple
-                    accept={isMobile ? 'image/*,video/*,.heic,.heif,.tif,.tiff' : getAcceptTypes()}
+                    accept={
+                      isMobile ? 'image/*,video/*,.heic,.heif,.tif,.tiff,.dng' : getAcceptTypes()
+                    }
                     {...(isMobile ? { capture: 'environment' } : {})}
                     onChange={handleFileUpload}
                     style={{ display: 'none' }}
@@ -2543,27 +3139,32 @@ const LibraryBrowser = ({
             <div ref={gridRef} onMouseDown={handleGridMouseDown} style={{ minHeight: '100%' }}>
               {groupMediaByDate(displayedMedia).map((group, gi) => (
                 <div key={group.label + gi}>
-                  <div style={{
-                    padding: gi === 0 ? '0 4px 6px' : '14px 4px 6px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    color: theme.text.muted,
-                    letterSpacing: '0.3px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}>
+                  <div
+                    style={{
+                      padding: gi === 0 ? '0 4px 6px' : '14px 4px 6px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      color: theme.text.muted,
+                      letterSpacing: '0.3px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
                     <span>{group.label}</span>
-                    <span style={{
-                      flex: 1, height: '1px',
-                      background: `linear-gradient(to right, ${theme.border.subtle}, transparent)`
-                    }} />
+                    <span
+                      style={{
+                        flex: 1,
+                        height: '1px',
+                        background: `linear-gradient(to right, ${theme.border.subtle}, transparent)`,
+                      }}
+                    />
                     <span style={{ fontSize: '10px', fontWeight: 400, color: theme.text.muted }}>
                       {group.items.length}
                     </span>
                   </div>
                   <div style={styles.mediaGrid}>
-                    {group.items.map(media => {
+                    {group.items.map((media) => {
                       const isSelected = selectedMediaIds.includes(media.id);
                       return renderMediaCard(media, isSelected);
                     })}
@@ -2577,28 +3178,39 @@ const LibraryBrowser = ({
 
       {/* Drag Selection Rectangle */}
       {isDragSelecting && dragStart && dragEnd && (
-        <div style={{
-          position: 'fixed',
-          left: Math.min(dragStart.x, dragEnd.x),
-          top: Math.min(dragStart.y, dragEnd.y),
-          width: Math.abs(dragEnd.x - dragStart.x),
-          height: Math.abs(dragEnd.y - dragStart.y),
-          backgroundColor: `${theme.accent.primary}26`,
-          border: `1px solid ${theme.accent.primary}80`,
-          pointerEvents: 'none',
-          zIndex: 9999
-        }} />
+        <div
+          style={{
+            position: 'fixed',
+            left: Math.min(dragStart.x, dragEnd.x),
+            top: Math.min(dragStart.y, dragEnd.y),
+            width: Math.abs(dragEnd.x - dragStart.x),
+            height: Math.abs(dragEnd.y - dragStart.y),
+            backgroundColor: `${theme.accent.primary}26`,
+            border: `1px solid ${theme.accent.primary}80`,
+            pointerEvents: 'none',
+            zIndex: 9999,
+          }}
+        />
       )}
 
       {/* Upload Progress Overlay */}
       {isUploading && (
         <div style={styles.uploadOverlay}>
           <div style={{ fontSize: '24px', marginBottom: '8px' }}>⬆️</div>
-          <div style={{ fontSize: '14px', color: theme.text.primary, marginBottom: '12px' }}>Uploading...</div>
+          <div style={{ fontSize: '14px', color: theme.text.primary, marginBottom: '12px' }}>
+            Uploading...
+          </div>
           <div style={styles.progressBar}>
             <div style={{ ...styles.progressFill, width: `${uploadProgress}%` }} />
           </div>
-          <div style={{ fontSize: '18px', fontWeight: '600', color: theme.text.primary, marginTop: '8px' }}>
+          <div
+            style={{
+              fontSize: '18px',
+              fontWeight: '600',
+              color: theme.text.primary,
+              marginTop: '8px',
+            }}
+          >
             {Math.round(uploadProgress)}%
           </div>
         </div>
@@ -2607,173 +3219,242 @@ const LibraryBrowser = ({
       {/* Context Menu */}
       {contextMenu && (
         <>
-        {isMobile && (
+          {isMobile && (
+            <div
+              style={{
+                position: 'fixed',
+                inset: 0,
+                backgroundColor: theme.overlay.light,
+                zIndex: 9999,
+              }}
+              onClick={() => setContextMenu(null)}
+            />
+          )}
           <div
             style={{
-              position: 'fixed', inset: 0,
-              backgroundColor: theme.overlay.light,
-              zIndex: 9999
+              ...styles.contextMenu,
+              ...(isMobile ? {} : { left: contextMenu.x, top: contextMenu.y }),
             }}
-            onClick={() => setContextMenu(null)}
-          />
-        )}
-        <div
-          style={{
-            ...styles.contextMenu,
-            ...(isMobile ? {} : { left: contextMenu.x, top: contextMenu.y })
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div
-            style={styles.contextMenuItem}
-            onClick={() => handleToggleFavorite(contextMenu.media.id, { stopPropagation: () => {} })}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.hover.bg}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            onClick={(e) => e.stopPropagation()}
           >
-            <span>{contextMenu.media.isFavorite ? '★' : '☆'}</span>
-            <span>{contextMenu.media.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}</span>
-          </div>
+            <div
+              style={styles.contextMenuItem}
+              onClick={() =>
+                handleToggleFavorite(contextMenu.media.id, { stopPropagation: () => {} })
+              }
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = theme.hover.bg)}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              <span>{contextMenu.media.isFavorite ? '★' : '☆'}</span>
+              <span>
+                {contextMenu.media.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+              </span>
+            </div>
 
-          {userCollections.length > 0 && (
-            <>
-              <div style={styles.contextMenuDivider} />
-              <div style={{ padding: '8px 16px', fontSize: '12px', color: theme.text.muted }}>
-                Add to Collection
-              </div>
-              {userCollections.map(collection => (
+            {userCollections.length > 0 && (
+              <>
+                <div style={styles.contextMenuDivider} />
+                <div style={{ padding: '8px 16px', fontSize: '12px', color: theme.text.muted }}>
+                  Add to Collection
+                </div>
+                {userCollections.map((collection) => (
+                  <div
+                    key={collection.id}
+                    style={styles.contextMenuItem}
+                    onClick={() => handleAddToCollection([contextMenu.media.id], collection.id)}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = theme.hover.bg)}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  >
+                    <span>📁</span>
+                    <span>{collection.name}</span>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {/* Assign to Bank — shows per-collection bank options */}
+            {userCollections.length > 0 && contextMenu.media?.type === MEDIA_TYPES.IMAGE && (
+              <>
+                <div style={styles.contextMenuDivider} />
+                <div style={{ padding: '8px 16px', fontSize: '12px', color: theme.text.muted }}>
+                  Assign to Bank
+                </div>
+                {userCollections.map((collection) => (
+                  <React.Fragment key={`bank-${collection.id}`}>
+                    <div
+                      style={{ padding: '4px 16px 2px', fontSize: '11px', color: theme.text.muted }}
+                    >
+                      {collection.name}
+                    </div>
+                    {(() => {
+                      const migrated = migrateCollectionBanks(collection);
+                      return (migrated.banks || [[], []]).map((_, bankIdx) => {
+                        const color = getBankColor(bankIdx);
+                        return (
+                          <div
+                            key={bankIdx}
+                            style={{ ...styles.contextMenuItem, paddingLeft: '24px' }}
+                            onClick={() => {
+                              assignToBankAsync(
+                                db,
+                                artistId,
+                                collection.id,
+                                contextMenu.media.id,
+                                bankIdx,
+                              );
+                              loadData();
+                              setContextMenu(null);
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.currentTarget.style.backgroundColor = `${color.primary}1a`)
+                            }
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.backgroundColor = 'transparent')
+                            }
+                          >
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                width: '18px',
+                                height: '18px',
+                                borderRadius: '4px',
+                                background: `linear-gradient(135deg, ${color.primary}, ${color.light})`,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                color: '#fff',
+                              }}
+                            >
+                              {bankIdx + 1}
+                            </span>
+                            <span>{getBankLabel(bankIdx)}</span>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </React.Fragment>
+                ))}
+              </>
+            )}
+
+            <div style={styles.contextMenuDivider} />
+
+            {/* Show "Remove from folder" option when in a collection view */}
+            {activeView !== 'library' &&
+              activeView !== 'favorites' &&
+              !collections.find(
+                (c) => c.id === activeView && c.type === COLLECTION_TYPES.SMART,
+              ) && (
                 <div
-                  key={collection.id}
-                  style={styles.contextMenuItem}
-                  onClick={() => handleAddToCollection([contextMenu.media.id], collection.id)}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.hover.bg}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  style={{ ...styles.contextMenuItem, color: '#f59e0b' }}
+                  onClick={() => {
+                    removeFromCollectionAsync(db, artistId, activeView, contextMenu.media.id);
+                    loadData();
+                    setContextMenu(null);
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.backgroundColor = 'rgba(245,158,11,0.1)')
+                  }
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   <span>📁</span>
-                  <span>{collection.name}</span>
+                  <span>Remove from folder</span>
                 </div>
-              ))}
-            </>
-          )}
+              )}
 
-          {/* Assign to Bank — shows per-collection bank options */}
-          {userCollections.length > 0 && (contextMenu.media?.type === MEDIA_TYPES.IMAGE) && (
-            <>
-              <div style={styles.contextMenuDivider} />
-              <div style={{ padding: '8px 16px', fontSize: '12px', color: theme.text.muted }}>
-                Assign to Bank
-              </div>
-              {userCollections.map(collection => (
-                <React.Fragment key={`bank-${collection.id}`}>
-                  <div style={{ padding: '4px 16px 2px', fontSize: '11px', color: theme.text.muted }}>
-                    {collection.name}
-                  </div>
-                  {(() => {
-                    const migrated = migrateCollectionBanks(collection);
-                    return (migrated.banks || [[], []]).map((_, bankIdx) => {
-                      const color = getBankColor(bankIdx);
-                      return (
-                        <div
-                          key={bankIdx}
-                          style={{...styles.contextMenuItem, paddingLeft: '24px'}}
-                          onClick={() => {
-                            assignToBankAsync(db, artistId, collection.id, contextMenu.media.id, bankIdx);
-                            loadData();
-                            setContextMenu(null);
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = `${color.primary}1a`}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                        >
-                          <span style={{
-                            display: 'inline-flex', width: '18px', height: '18px', borderRadius: '4px',
-                            background: `linear-gradient(135deg, ${color.primary}, ${color.light})`,
-                            alignItems: 'center', justifyContent: 'center',
-                            fontSize: '10px', fontWeight: 700, color: '#fff'
-                          }}>{bankIdx + 1}</span>
-                          <span>{getBankLabel(bankIdx)}</span>
-                        </div>
-                      );
-                    });
-                  })()}
-                </React.Fragment>
-              ))}
-            </>
-          )}
-
-          <div style={styles.contextMenuDivider} />
-
-          {/* Show "Remove from folder" option when in a collection view */}
-          {activeView !== 'library' && activeView !== 'favorites'
-            && !collections.find(c => c.id === activeView && c.type === COLLECTION_TYPES.SMART) && (
             <div
-              style={{...styles.contextMenuItem, color: '#f59e0b'}}
+              style={{ ...styles.contextMenuItem, color: '#ef4444' }}
               onClick={() => {
-                removeFromCollectionAsync(db, artistId, activeView, contextMenu.media.id);
-                loadData();
+                handleDelete(contextMenu.media.id);
                 setContextMenu(null);
               }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(245,158,11,0.1)'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.1)')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
             >
-              <span>📁</span>
-              <span>Remove from folder</span>
+              <span>🗑️</span>
+              <span>Delete from library</span>
             </div>
-          )}
-
-          <div
-            style={{...styles.contextMenuItem, color: '#ef4444'}}
-            onClick={() => {
-              handleDelete(contextMenu.media.id);
-              setContextMenu(null);
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.1)'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-          >
-            <span>🗑️</span>
-            <span>Delete from library</span>
           </div>
-        </div>
         </>
       )}
 
       {/* Smart Delete Modal — remove from folder vs delete everywhere */}
       {showDeleteModal && (
         <div style={styles.modal} onClick={() => setShowDeleteModal(null)}>
-          <div style={{...styles.modalContent, maxWidth: '380px'}} onClick={(e) => e.stopPropagation()}>
+          <div
+            style={{ ...styles.modalContent, maxWidth: '380px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div style={styles.modalTitle}>Delete Item</div>
-            <p style={{ color: theme.text.secondary, fontSize: '14px', margin: '8px 0 20px', lineHeight: '1.5' }}>
+            <p
+              style={{
+                color: theme.text.secondary,
+                fontSize: '14px',
+                margin: '8px 0 20px',
+                lineHeight: '1.5',
+              }}
+            >
               This item is in a collection. What would you like to do?
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button
                 style={{
-                  padding: '12px 16px', borderRadius: '10px', border: `1px solid ${theme.accent.primary}4d`,
-                  backgroundColor: `${theme.accent.primary}1a`, color: theme.accent.hover, cursor: 'pointer',
-                  fontSize: '13px', fontWeight: '500', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '10px'
+                  padding: '12px 16px',
+                  borderRadius: '10px',
+                  border: `1px solid ${theme.accent.primary}4d`,
+                  backgroundColor: `${theme.accent.primary}1a`,
+                  color: theme.accent.hover,
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  textAlign: 'left',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
                 }}
                 onClick={() => handleSmartDelete('removeFromFolder')}
               >
                 <span style={{ fontSize: '18px' }}>📁</span>
                 <div>
                   <div style={{ fontWeight: 600 }}>Remove from this folder</div>
-                  <div style={{ fontSize: '11px', color: theme.text.muted, marginTop: '2px' }}>Stays in your library and other folders</div>
+                  <div style={{ fontSize: '11px', color: theme.text.muted, marginTop: '2px' }}>
+                    Stays in your library and other folders
+                  </div>
                 </div>
               </button>
               <button
                 style={{
-                  padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.3)',
-                  backgroundColor: 'rgba(239, 68, 68, 0.08)', color: '#fca5a5', cursor: 'pointer',
-                  fontSize: '13px', fontWeight: '500', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '10px'
+                  padding: '12px 16px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                  color: '#fca5a5',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  textAlign: 'left',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
                 }}
                 onClick={() => handleSmartDelete('deleteEverywhere')}
               >
                 <span style={{ fontSize: '18px' }}>🗑️</span>
                 <div>
                   <div style={{ fontWeight: 600 }}>Delete from library</div>
-                  <div style={{ fontSize: '11px', color: theme.text.muted, marginTop: '2px' }}>Permanently remove from everywhere</div>
+                  <div style={{ fontSize: '11px', color: theme.text.muted, marginTop: '2px' }}>
+                    Permanently remove from everywhere
+                  </div>
                 </div>
               </button>
             </div>
-            <Button variant="neutral-tertiary" className="w-full mt-4" size="small" onClick={() => setShowDeleteModal(null)}>
+            <Button
+              variant="neutral-tertiary"
+              className="w-full mt-4"
+              size="small"
+              onClick={() => setShowDeleteModal(null)}
+            >
               Cancel
             </Button>
           </div>
@@ -2808,187 +3489,429 @@ const LibraryBrowser = ({
 
       {/* Text Template Editor Modal */}
       {showTemplateEditor && editingTemplate && (
-        <div style={{
-          position: 'fixed', inset: 0, backgroundColor: theme.overlay.heavy,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-        }} onClick={() => setShowTemplateEditor(false)}>
-          <div style={{
-            backgroundColor: theme.bg.input, borderRadius: '16px', padding: '24px',
-            width: '720px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto',
-            display: 'flex', gap: '20px'
-          }} onClick={e => e.stopPropagation()}>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: theme.overlay.heavy,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setShowTemplateEditor(false)}
+        >
+          <div
+            style={{
+              backgroundColor: theme.bg.input,
+              borderRadius: '16px',
+              padding: '24px',
+              width: '720px',
+              maxWidth: '95vw',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              display: 'flex',
+              gap: '20px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Left: Controls */}
             <div style={{ flex: 1, minWidth: 0 }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: '16px', color: theme.text.primary }}>Text Style Template</h3>
+              <h3 style={{ margin: '0 0 16px', fontSize: '16px', color: theme.text.primary }}>
+                Text Style Template
+              </h3>
 
-            {[1, 2].map(num => {
-              const key = `text${num}Style`;
-              const style = editingTemplate[key];
-              const labelColor = num === 1 ? '#c4b5fd' : '#86efac';
-              return (
-                <div key={num} style={{ marginBottom: '16px', padding: '12px', borderRadius: '10px', backgroundColor: theme.hover.bg }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: labelColor, marginBottom: '10px' }}>Text {num} Style</div>
-
-                  {/* Font Family */}
-                  <div style={{ marginBottom: '8px' }}>
-                    <label style={{ fontSize: '11px', color: theme.text.muted, display: 'block', marginBottom: '2px' }}>Font</label>
-                    <select
-                      value={style.fontFamily}
-                      onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], fontFamily: e.target.value } }))}
-                      style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: `1px solid ${theme.border.subtle}`, backgroundColor: theme.bg.page, color: theme.text.primary, fontSize: '13px' }}
+              {[1, 2].map((num) => {
+                const key = `text${num}Style`;
+                const style = editingTemplate[key];
+                const labelColor = num === 1 ? '#c4b5fd' : '#86efac';
+                return (
+                  <div
+                    key={num}
+                    style={{
+                      marginBottom: '16px',
+                      padding: '12px',
+                      borderRadius: '10px',
+                      backgroundColor: theme.hover.bg,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: labelColor,
+                        marginBottom: '10px',
+                      }}
                     >
-                      {['Inter, sans-serif', 'Georgia, serif', 'Courier New, monospace', 'Impact, sans-serif', 'Arial Black, sans-serif', 'Playfair Display, serif', 'Oswald, sans-serif', 'Bebas Neue, sans-serif'].map(f => (
-                        <option key={f} value={f} style={{ fontFamily: f }}>{f.split(',')[0]}</option>
-                      ))}
-                    </select>
-                  </div>
+                      Text {num} Style
+                    </div>
 
-                  {/* Font Size */}
-                  <div style={{ marginBottom: '8px' }}>
-                    <label style={{ fontSize: '11px', color: theme.text.muted, display: 'block', marginBottom: '2px' }}>Size: {style.fontSize}px</label>
-                    <input type="range" min="16" max="96" value={style.fontSize}
-                      onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], fontSize: parseInt(e.target.value) } }))}
-                      style={{ width: '100%' }}
-                    />
-                  </div>
+                    {/* Font Family */}
+                    <div style={{ marginBottom: '8px' }}>
+                      <label
+                        style={{
+                          fontSize: '11px',
+                          color: theme.text.muted,
+                          display: 'block',
+                          marginBottom: '2px',
+                        }}
+                      >
+                        Font
+                      </label>
+                      <select
+                        value={style.fontFamily}
+                        onChange={(e) =>
+                          setEditingTemplate((prev) => ({
+                            ...prev,
+                            [key]: { ...prev[key], fontFamily: e.target.value },
+                          }))
+                        }
+                        style={{
+                          width: '100%',
+                          padding: '6px 8px',
+                          borderRadius: '6px',
+                          border: `1px solid ${theme.border.subtle}`,
+                          backgroundColor: theme.bg.page,
+                          color: theme.text.primary,
+                          fontSize: '13px',
+                        }}
+                      >
+                        {[
+                          'Inter, sans-serif',
+                          'Georgia, serif',
+                          'Courier New, monospace',
+                          'Impact, sans-serif',
+                          'Arial Black, sans-serif',
+                          'Playfair Display, serif',
+                          'Oswald, sans-serif',
+                          'Bebas Neue, sans-serif',
+                        ].map((f) => (
+                          <option key={f} value={f} style={{ fontFamily: f }}>
+                            {f.split(',')[0]}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  {/* Font Weight */}
-                  <div style={{ marginBottom: '8px' }}>
-                    <label style={{ fontSize: '11px', color: theme.text.muted, display: 'block', marginBottom: '2px' }}>Weight</label>
-                    <select
-                      value={style.fontWeight}
-                      onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], fontWeight: e.target.value } }))}
-                      style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: `1px solid ${theme.border.subtle}`, backgroundColor: theme.bg.page, color: theme.text.primary, fontSize: '13px' }}
-                    >
-                      {['300', '400', '500', '600', '700', '800', '900'].map(w => (
-                        <option key={w} value={w}>{w === '300' ? 'Light' : w === '400' ? 'Regular' : w === '500' ? 'Medium' : w === '600' ? 'Semibold' : w === '700' ? 'Bold' : w === '800' ? 'Extra Bold' : 'Black'}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Color */}
-                  <div style={{ marginBottom: '8px' }}>
-                    <label style={{ fontSize: '11px', color: theme.text.muted, display: 'block', marginBottom: '2px' }}>Color</label>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <input type="color" value={style.color}
-                        onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], color: e.target.value } }))}
-                        style={{ width: '32px', height: '32px', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-                      />
-                      <input type="text" value={style.color}
-                        onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], color: e.target.value } }))}
-                        style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', border: `1px solid ${theme.border.subtle}`, backgroundColor: theme.bg.page, color: theme.text.primary, fontSize: '13px' }}
+                    {/* Font Size */}
+                    <div style={{ marginBottom: '8px' }}>
+                      <label
+                        style={{
+                          fontSize: '11px',
+                          color: theme.text.muted,
+                          display: 'block',
+                          marginBottom: '2px',
+                        }}
+                      >
+                        Size: {style.fontSize}px
+                      </label>
+                      <input
+                        type="range"
+                        min="16"
+                        max="96"
+                        value={style.fontSize}
+                        onChange={(e) =>
+                          setEditingTemplate((prev) => ({
+                            ...prev,
+                            [key]: { ...prev[key], fontSize: parseInt(e.target.value) },
+                          }))
+                        }
+                        style={{ width: '100%' }}
                       />
                     </div>
-                  </div>
 
-                  {/* Position */}
-                  <div style={{ marginBottom: '8px' }}>
-                    <label style={{ fontSize: '11px', color: theme.text.muted, display: 'block', marginBottom: '2px' }}>Position</label>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      {[
-                        { label: 'Top', pos: { x: 50, y: 20 } },
-                        { label: 'Center', pos: { x: 50, y: 50 } },
-                        { label: 'Bottom', pos: { x: 50, y: 80 } }
-                      ].map(p => (
-                        <button key={p.label}
-                          onClick={() => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], position: p.pos } }))}
+                    {/* Font Weight */}
+                    <div style={{ marginBottom: '8px' }}>
+                      <label
+                        style={{
+                          fontSize: '11px',
+                          color: theme.text.muted,
+                          display: 'block',
+                          marginBottom: '2px',
+                        }}
+                      >
+                        Weight
+                      </label>
+                      <select
+                        value={style.fontWeight}
+                        onChange={(e) =>
+                          setEditingTemplate((prev) => ({
+                            ...prev,
+                            [key]: { ...prev[key], fontWeight: e.target.value },
+                          }))
+                        }
+                        style={{
+                          width: '100%',
+                          padding: '6px 8px',
+                          borderRadius: '6px',
+                          border: `1px solid ${theme.border.subtle}`,
+                          backgroundColor: theme.bg.page,
+                          color: theme.text.primary,
+                          fontSize: '13px',
+                        }}
+                      >
+                        {['300', '400', '500', '600', '700', '800', '900'].map((w) => (
+                          <option key={w} value={w}>
+                            {w === '300'
+                              ? 'Light'
+                              : w === '400'
+                                ? 'Regular'
+                                : w === '500'
+                                  ? 'Medium'
+                                  : w === '600'
+                                    ? 'Semibold'
+                                    : w === '700'
+                                      ? 'Bold'
+                                      : w === '800'
+                                        ? 'Extra Bold'
+                                        : 'Black'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Color */}
+                    <div style={{ marginBottom: '8px' }}>
+                      <label
+                        style={{
+                          fontSize: '11px',
+                          color: theme.text.muted,
+                          display: 'block',
+                          marginBottom: '2px',
+                        }}
+                      >
+                        Color
+                      </label>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <input
+                          type="color"
+                          value={style.color}
+                          onChange={(e) =>
+                            setEditingTemplate((prev) => ({
+                              ...prev,
+                              [key]: { ...prev[key], color: e.target.value },
+                            }))
+                          }
                           style={{
-                            flex: 1, padding: '6px', borderRadius: '6px', border: 'none', fontSize: '11px', cursor: 'pointer',
-                            backgroundColor: style.position.y === p.pos.y ? `${theme.accent.primary}4d` : theme.hover.bg,
-                            color: style.position.y === p.pos.y ? theme.accent.hover : theme.text.muted
+                            width: '32px',
+                            height: '32px',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
                           }}
-                        >{p.label}</button>
-                      ))}
+                        />
+                        <input
+                          type="text"
+                          value={style.color}
+                          onChange={(e) =>
+                            setEditingTemplate((prev) => ({
+                              ...prev,
+                              [key]: { ...prev[key], color: e.target.value },
+                            }))
+                          }
+                          style={{
+                            flex: 1,
+                            padding: '6px 8px',
+                            borderRadius: '6px',
+                            border: `1px solid ${theme.border.subtle}`,
+                            backgroundColor: theme.bg.page,
+                            color: theme.text.primary,
+                            fontSize: '13px',
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Position */}
+                    <div style={{ marginBottom: '8px' }}>
+                      <label
+                        style={{
+                          fontSize: '11px',
+                          color: theme.text.muted,
+                          display: 'block',
+                          marginBottom: '2px',
+                        }}
+                      >
+                        Position
+                      </label>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {[
+                          { label: 'Top', pos: { x: 50, y: 20 } },
+                          { label: 'Center', pos: { x: 50, y: 50 } },
+                          { label: 'Bottom', pos: { x: 50, y: 80 } },
+                        ].map((p) => (
+                          <button
+                            key={p.label}
+                            onClick={() =>
+                              setEditingTemplate((prev) => ({
+                                ...prev,
+                                [key]: { ...prev[key], position: p.pos },
+                              }))
+                            }
+                            style={{
+                              flex: 1,
+                              padding: '6px',
+                              borderRadius: '6px',
+                              border: 'none',
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                              backgroundColor:
+                                style.position?.y === p.pos.y
+                                  ? `${theme.accent.primary}4d`
+                                  : theme.hover.bg,
+                              color:
+                                style.position?.y === p.pos.y
+                                  ? theme.accent.hover
+                                  : theme.text.muted,
+                            }}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Outline */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <label style={{ fontSize: '11px', color: theme.text.muted }}>
+                        <input
+                          type="checkbox"
+                          checked={style.outline}
+                          onChange={(e) =>
+                            setEditingTemplate((prev) => ({
+                              ...prev,
+                              [key]: { ...prev[key], outline: e.target.checked },
+                            }))
+                          }
+                        />{' '}
+                        Text outline
+                      </label>
+                      {style.outline && (
+                        <input
+                          type="color"
+                          value={style.outlineColor || '#000000'}
+                          onChange={(e) =>
+                            setEditingTemplate((prev) => ({
+                              ...prev,
+                              [key]: { ...prev[key], outlineColor: e.target.value },
+                            }))
+                          }
+                          style={{
+                            width: '24px',
+                            height: '24px',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                          }}
+                        />
+                      )}
                     </div>
                   </div>
+                );
+              })}
 
-                  {/* Outline */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <label style={{ fontSize: '11px', color: theme.text.muted }}>
-                      <input type="checkbox" checked={style.outline}
-                        onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], outline: e.target.checked } }))}
-                      /> Text outline
-                    </label>
-                    {style.outline && (
-                      <input type="color" value={style.outlineColor || '#000000'}
-                        onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], outlineColor: e.target.value } }))}
-                        style={{ width: '24px', height: '24px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                      />
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-
-            <div className="flex gap-2 mt-4">
-              <Button variant="neutral-secondary" className="flex-1" onClick={() => setShowTemplateEditor(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="brand-primary"
-                className="flex-1"
-                onClick={() => {
-                  saveTextTemplates(artistId, activeView, [editingTemplate], db);
-                  loadData();
-                  syncCollection(activeView);
-                  setShowTemplateEditor(false);
-                }}
-              >
-                Save Template
-              </Button>
-            </div>
+              <div className="flex gap-2 mt-4">
+                <Button
+                  variant="neutral-secondary"
+                  className="flex-1"
+                  onClick={() => setShowTemplateEditor(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="brand-primary"
+                  className="flex-1"
+                  onClick={() => {
+                    saveTextTemplates(artistId, activeView, [editingTemplate], db);
+                    loadData();
+                    syncCollection(activeView);
+                    setShowTemplateEditor(false);
+                  }}
+                >
+                  Save Template
+                </Button>
+              </div>
             </div>
 
             {/* Right: Live Preview */}
-            <div style={{ width: '200px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ fontSize: '11px', color: theme.text.muted, textAlign: 'center' }}>Preview</div>
-              <div style={{
-                aspectRatio: '9/16', borderRadius: '12px', overflow: 'hidden',
-                backgroundColor: theme.bg.page, position: 'relative',
-                border: `1px solid ${theme.border.subtle}`
-              }}>
+            <div
+              style={{
+                width: '200px',
+                flexShrink: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}
+            >
+              <div style={{ fontSize: '11px', color: theme.text.muted, textAlign: 'center' }}>
+                Preview
+              </div>
+              <div
+                style={{
+                  aspectRatio: '9/16',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  backgroundColor: theme.bg.page,
+                  position: 'relative',
+                  border: `1px solid ${theme.border.subtle}`,
+                }}
+              >
                 {/* Text 1 preview */}
                 {(() => {
                   const s = editingTemplate.text1Style;
-                  const col = collections.find(c => c.id === activeView);
+                  const col = collections.find((c) => c.id === activeView);
                   const sampleText = col?.textBank1?.[0] || 'Text Bank 1';
                   return (
-                    <div style={{
-                      position: 'absolute',
-                      left: '50%', top: `${s.position.y}%`,
-                      transform: 'translate(-50%, -50%)',
-                      fontFamily: s.fontFamily,
-                      fontSize: `${Math.max(8, s.fontSize * 0.22)}px`,
-                      fontWeight: s.fontWeight,
-                      color: s.color,
-                      textAlign: 'center',
-                      width: '85%',
-                      wordBreak: 'break-word',
-                      textShadow: s.outline ? `0 0 3px ${s.outlineColor || '#000'}, 0 0 6px ${s.outlineColor || '#000'}` : 'none',
-                      lineHeight: 1.2
-                    }}>{sampleText}</div>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: '50%',
+                        top: `${s.position?.y ?? 50}%`,
+                        transform: 'translate(-50%, -50%)',
+                        fontFamily: s?.fontFamily,
+                        fontSize: `${Math.max(8, (s?.fontSize || 48) * 0.22)}px`,
+                        fontWeight: s?.fontWeight,
+                        color: s?.color,
+                        textAlign: 'center',
+                        width: '85%',
+                        wordBreak: 'break-word',
+                        textShadow: s?.outline
+                          ? `0 0 3px ${s.outlineColor || '#000'}, 0 0 6px ${s.outlineColor || '#000'}`
+                          : 'none',
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {sampleText}
+                    </div>
                   );
                 })()}
                 {/* Text 2 preview */}
                 {(() => {
                   const s = editingTemplate.text2Style;
-                  const col = collections.find(c => c.id === activeView);
+                  const col = collections.find((c) => c.id === activeView);
                   const sampleText = col?.textBank2?.[0] || 'Text Bank 2';
                   return (
-                    <div style={{
-                      position: 'absolute',
-                      left: '50%', top: `${s.position.y}%`,
-                      transform: 'translate(-50%, -50%)',
-                      fontFamily: s.fontFamily,
-                      fontSize: `${Math.max(8, s.fontSize * 0.22)}px`,
-                      fontWeight: s.fontWeight,
-                      color: s.color,
-                      textAlign: 'center',
-                      width: '85%',
-                      wordBreak: 'break-word',
-                      textShadow: s.outline ? `0 0 3px ${s.outlineColor || '#000'}, 0 0 6px ${s.outlineColor || '#000'}` : 'none',
-                      lineHeight: 1.2
-                    }}>{sampleText}</div>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: '50%',
+                        top: `${s?.position?.y ?? 70}%`,
+                        transform: 'translate(-50%, -50%)',
+                        fontFamily: s?.fontFamily,
+                        fontSize: `${Math.max(8, (s?.fontSize || 48) * 0.22)}px`,
+                        fontWeight: s?.fontWeight,
+                        color: s?.color,
+                        textAlign: 'center',
+                        width: '85%',
+                        wordBreak: 'break-word',
+                        textShadow: s.outline
+                          ? `0 0 3px ${s.outlineColor || '#000'}, 0 0 6px ${s.outlineColor || '#000'}`
+                          : 'none',
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {sampleText}
+                    </div>
                   );
                 })()}
               </div>

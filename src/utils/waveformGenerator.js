@@ -9,15 +9,19 @@ import log from './logger';
 const cache = new Map();
 const bufferCache = new Map(); // Cache decoded AudioBuffers by URL
 
+// Skip full audio decode for files larger than this (prevents browser tab freeze)
+const MAX_DECODE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+
 /**
  * Decode an audio/video source into an AudioBuffer, with caching.
+ * Throws if the source exceeds MAX_DECODE_SIZE_BYTES to prevent browser freeze.
  */
 async function getAudioBuffer(source) {
   const cacheKey = source instanceof Blob ? null : source;
   if (cacheKey && bufferCache.has(cacheKey)) return bufferCache.get(cacheKey);
 
   // Yield to main thread before heavy work
-  await new Promise(r => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0));
 
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -28,20 +32,48 @@ async function getAudioBuffer(source) {
 
   let arrayBuffer;
   if (source instanceof Blob) {
+    if (source.size > MAX_DECODE_SIZE_BYTES) {
+      await audioCtx.close();
+      throw new Error(
+        `File too large for waveform (${(source.size / 1024 / 1024).toFixed(0)}MB > ${MAX_DECODE_SIZE_BYTES / 1024 / 1024}MB limit)`,
+      );
+    }
     arrayBuffer = await source.arrayBuffer();
   } else {
+    // Check file size with HEAD request before downloading
+    try {
+      const headResp = await fetch(source, { method: 'HEAD', mode: 'cors' });
+      const contentLength = parseInt(headResp.headers.get('content-length') || '0', 10);
+      if (contentLength > MAX_DECODE_SIZE_BYTES) {
+        await audioCtx.close();
+        throw new Error(
+          `File too large for waveform (${(contentLength / 1024 / 1024).toFixed(0)}MB > ${MAX_DECODE_SIZE_BYTES / 1024 / 1024}MB limit)`,
+        );
+      }
+    } catch (headErr) {
+      // HEAD failed (CORS etc.) — continue and check after fetch
+      if (headErr.message.includes('too large')) throw headErr;
+    }
     // IMPORTANT: use cache: 'no-store' to avoid getting a cached partial response
     // from the <video preload="metadata"> range request (which only fetches the first chunk).
     const resp = await fetch(source, { mode: 'cors', cache: 'no-store' });
     arrayBuffer = await resp.arrayBuffer();
+    if (arrayBuffer.byteLength > MAX_DECODE_SIZE_BYTES) {
+      await audioCtx.close();
+      throw new Error(
+        `File too large for waveform (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(0)}MB > ${MAX_DECODE_SIZE_BYTES / 1024 / 1024}MB limit)`,
+      );
+    }
   }
 
   // Yield before CPU-heavy decode
-  await new Promise(r => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0));
   const buffer = await audioCtx.decodeAudioData(arrayBuffer);
   await audioCtx.close();
 
-  log.info(`[Waveform] Decoded ${buffer.duration.toFixed(1)}s audio (${buffer.sampleRate}Hz, ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB)`);
+  log.info(
+    `[Waveform] Decoded ${buffer.duration.toFixed(1)}s audio (${buffer.sampleRate}Hz, ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB)`,
+  );
   if (cacheKey) bufferCache.set(cacheKey, buffer);
   return buffer;
 }
@@ -56,13 +88,13 @@ function sampleWaveform(rawData, samples) {
   for (let i = 0; i < samples; i++) {
     let sum = 0;
     for (let j = 0; j < blockSize; j++) {
-      sum += Math.abs(rawData[(i * blockSize) + j]);
+      sum += Math.abs(rawData[i * blockSize + j]);
     }
     filteredData.push(sum / blockSize);
   }
   const max = Math.max(...filteredData);
   if (max === 0) return filteredData;
-  return filteredData.map(d => d / max);
+  return filteredData.map((d) => d / max);
 }
 
 /**

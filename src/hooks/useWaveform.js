@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { generateWaveformDataWithDuration, generateWaveformForClip, generateWaveformData, clearWaveformCache } from '../utils/waveformGenerator';
+import {
+  generateWaveformDataWithDuration,
+  generateWaveformForClip,
+  generateWaveformData,
+  clearWaveformCache,
+} from '../utils/waveformGenerator';
 
 /**
  * Shared hook for waveform generation across all video editors.
@@ -37,7 +42,9 @@ export default function useWaveform({ selectedAudio, clips = [], getClipUrl }) {
 
   // External audio waveform (skip for source video audio — that's handled by clipWaveforms)
   useEffect(() => {
-    const hasAudio = (selectedAudio?.url || selectedAudio?.localUrl || (selectedAudio?.file instanceof Blob)) && !selectedAudio?.isSourceAudio;
+    const hasAudio =
+      (selectedAudio?.url || selectedAudio?.localUrl || selectedAudio?.file instanceof Blob) &&
+      !selectedAudio?.isSourceAudio;
     if (!hasAudio) {
       setWaveformData([]);
       return;
@@ -45,20 +52,26 @@ export default function useWaveform({ selectedAudio, clips = [], getClipUrl }) {
 
     let cancelled = false;
     (async () => {
-      const source = selectedAudio.file instanceof Blob
-        ? selectedAudio.file
-        : (selectedAudio.localUrl && !selectedAudio.localUrl.startsWith('blob:'))
-          ? selectedAudio.localUrl
-          : selectedAudio.url;
-      if (!source) { setWaveformData([]); setWaveformDuration(0); return; }
+      const source =
+        selectedAudio.file instanceof Blob
+          ? selectedAudio.file
+          : selectedAudio.localUrl && !selectedAudio.localUrl.startsWith('blob:')
+            ? selectedAudio.localUrl
+            : selectedAudio.url;
+      if (!source) {
+        setWaveformData([]);
+        setWaveformDuration(0);
+        return;
+      }
       const { data, duration } = await generateWaveformDataWithDuration(source, 400);
       if (!cancelled && mountedRef.current) {
         setWaveformData(data);
         if (duration > 0) setWaveformDuration(duration);
       }
     })();
-    return () => { cancelled = true; };
-
+    return () => {
+      cancelled = true;
+    };
   }, [selectedAudio]);
 
   // Source video waveforms — always generated regardless of external audio
@@ -81,9 +94,12 @@ export default function useWaveform({ selectedAudio, clips = [], getClipUrl }) {
         for (const clip of clips) {
           if (cancelled) return;
           // Prefer local file (Blob) to avoid re-downloading from remote URL
-          const source = clip.file instanceof Blob
-            ? clip.file
-            : (getClipUrl ? getClipUrl(clip) : (clip?.url || clip?.localUrl));
+          const source =
+            clip.file instanceof Blob
+              ? clip.file
+              : getClipUrl
+                ? getClipUrl(clip)
+                : clip?.url || clip?.localUrl;
           if (!source) continue;
           const key = clip.id || clip.sourceId || (typeof source === 'string' ? source : 'blob');
           const clipDur = clip.duration || 0;
@@ -91,15 +107,16 @@ export default function useWaveform({ selectedAudio, clips = [], getClipUrl }) {
           if (source instanceof Blob) {
             data = await generateWaveformData(source, 400);
           } else {
-            data = clipDur > 0
-              ? await generateWaveformForClip(source, clipDur, 400)
-              : await generateWaveformData(source, 400);
+            data =
+              clipDur > 0
+                ? await generateWaveformForClip(source, clipDur, 400)
+                : await generateWaveformData(source, 400);
           }
           if (data.length > 0) {
             results[key] = data;
           }
           // Yield to main thread between clips to prevent UI freeze
-          await new Promise(r => setTimeout(r, 0));
+          await new Promise((r) => setTimeout(r, 0));
         }
         if (!cancelled && mountedRef.current) {
           setClipWaveforms(results);
@@ -108,8 +125,10 @@ export default function useWaveform({ selectedAudio, clips = [], getClipUrl }) {
       })();
     }, 1500); // Wait 1.5s for page to become interactive first
 
-    return () => { cancelled = true; clearTimeout(delayId); };
-
+    return () => {
+      cancelled = true;
+      clearTimeout(delayId);
+    };
   }, [clips, getClipUrl]);
 
   // Derive waveformSource from current state

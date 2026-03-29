@@ -38,7 +38,7 @@ export async function generateCaptions(params, onProgress) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${idToken}`,
+      Authorization: `Bearer ${idToken}`,
     },
     body: JSON.stringify(params),
   });
@@ -49,6 +49,8 @@ export async function generateCaptions(params, onProgress) {
   }
 
   const data = await response.json();
-  onProgress?.(`Generated ${data.captions?.length || 0} captions, ${data.hashtags?.length || 0} hashtags`);
+  onProgress?.(
+    `Generated ${data.captions?.length || 0} captions, ${data.hashtags?.length || 0} hashtags`,
+  );
   return data;
 }

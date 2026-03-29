@@ -19,7 +19,7 @@ import {
   query,
   where,
   orderBy,
-  onSnapshot
+  onSnapshot,
 } from 'firebase/firestore';
 import log from '../utils/logger';
 
@@ -57,16 +57,20 @@ export const subscribeToArtists = (db, callback) => {
   const artistsRef = collection(db, 'artists');
   const q = query(artistsRef, orderBy('createdAt', 'desc'));
 
-  return onSnapshot(q, (snapshot) => {
-    const artists = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-    callback(artists);
-  }, (error) => {
-    log.error('Error subscribing to artists:', error);
-    callback([]);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const artists = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      callback(artists);
+    },
+    (error) => {
+      log.error('Error subscribing to artists:', error);
+      callback([]);
+    },
+  );
 };
 
 /**
@@ -74,16 +78,20 @@ export const subscribeToArtists = (db, callback) => {
  */
 export const subscribeToArtistById = (db, artistId, callback) => {
   const artistRef = doc(db, 'artists', artistId);
-  return onSnapshot(artistRef, (snapshot) => {
-    if (snapshot.exists()) {
-      callback([{ id: snapshot.id, ...snapshot.data() }]);
-    } else {
+  return onSnapshot(
+    artistRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        callback([{ id: snapshot.id, ...snapshot.data() }]);
+      } else {
+        callback([]);
+      }
+    },
+    (error) => {
+      log.error('Error subscribing to artist:', artistId, error);
       callback([]);
-    }
-  }, (error) => {
-    log.error('Error subscribing to artist:', artistId, error);
-    callback([]);
-  });
+    },
+  );
 };
 
 /**
@@ -96,9 +104,9 @@ export const getArtists = async (db) => {
     const q = query(artistsRef, orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
 
-    return snapshot.docs.map(doc => ({
+    return snapshot.docs.map((doc) => ({
       id: doc.id,
-      ...doc.data()
+      ...doc.data(),
     }));
   } catch (error) {
     log.error('Error getting artists:', error);
@@ -142,7 +150,20 @@ export const createArtist = async (db, artistData) => {
       status: 'active',
       activeSince: (() => {
         const d = new Date();
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const months = [
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
+        ];
         return `${months[d.getMonth()]} ${d.getFullYear()}`;
       })(),
       totalPages: 0,
@@ -151,7 +172,7 @@ export const createArtist = async (db, artistData) => {
       lateAccountIds: artistData.lateAccountIds || {},
       metrics: { views: 0, engagement: 0, rate: 0 },
       ownerOperatorId: artistData.ownerOperatorId || null, // Which operator owns this artist (null = conductor only)
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     };
 
     const docRef = await addDoc(artistsRef, newArtist);
@@ -177,7 +198,7 @@ export const updateArtist = async (db, artistId, updates) => {
     const artistRef = doc(db, 'artists', artistId);
     await updateDoc(artistRef, {
       ...updates,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     });
     return true;
   } catch (error) {
@@ -211,11 +232,14 @@ export const deleteArtist = async (db, artistId) => {
  */
 export const initializeArtistData = (artistId) => {
   localStorage.setItem(`${CATEGORIES_PREFIX}${artistId}`, JSON.stringify([]));
-  localStorage.setItem(`${ANALYTICS_PREFIX}${artistId}`, JSON.stringify({
-    videos: {},
-    snapshots: [],
-    lastUpdated: null
-  }));
+  localStorage.setItem(
+    `${ANALYTICS_PREFIX}${artistId}`,
+    JSON.stringify({
+      videos: {},
+      snapshots: [],
+      lastUpdated: null,
+    }),
+  );
   // NOTE: Late API keys are stored securely server-side via lateService.setArtistLateKey()
 };
 
@@ -274,10 +298,13 @@ export const getArtistAnalytics = (artistId) => {
  */
 export const saveArtistAnalytics = (artistId, analytics) => {
   try {
-    localStorage.setItem(`${ANALYTICS_PREFIX}${artistId}`, JSON.stringify({
-      ...analytics,
-      lastUpdated: new Date().toISOString()
-    }));
+    localStorage.setItem(
+      `${ANALYTICS_PREFIX}${artistId}`,
+      JSON.stringify({
+        ...analytics,
+        lastUpdated: new Date().toISOString(),
+      }),
+    );
   } catch (error) {
     log.error('Error saving artist analytics:', error);
   }
@@ -372,7 +399,7 @@ export const ensureBoonArtistExists = async (db) => {
         lateApiKey: '',
         lateAccountIds: {},
         metrics: { views: 0, engagement: 0, rate: 0 },
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
       };
 
       const docRef = await addDoc(artistsRef, boonData);
@@ -454,23 +481,23 @@ export const linkAccounts = (artistId, accountIds, groupName = null) => {
   if (!artistId || !accountIds || accountIds.length < 2) return null;
 
   // String-coerce all IDs for consistent matching
-  const stringIds = accountIds.map(id => String(id));
+  const stringIds = accountIds.map((id) => String(id));
 
   const groups = getLinkedAccountGroups(artistId);
 
   // Remove these accounts from any existing groups
-  groups.forEach(group => {
-    group.accountIds = group.accountIds.filter(id => !stringIds.includes(String(id)));
+  groups.forEach((group) => {
+    group.accountIds = group.accountIds.filter((id) => !stringIds.includes(String(id)));
   });
 
   // Remove empty groups
-  const filteredGroups = groups.filter(g => g.accountIds.length > 0);
+  const filteredGroups = groups.filter((g) => g.accountIds.length > 0);
 
   // Create new group
   const newGroup = {
     id: `group_${Date.now()}`,
     name: groupName,
-    accountIds: stringIds
+    accountIds: stringIds,
   };
 
   filteredGroups.push(newGroup);
@@ -491,12 +518,12 @@ export const unlinkAccount = (artistId, accountId) => {
   const groups = getLinkedAccountGroups(artistId);
 
   // Remove account from all groups (string-coerce for safety)
-  groups.forEach(group => {
-    group.accountIds = group.accountIds.filter(id => String(id) !== stringId);
+  groups.forEach((group) => {
+    group.accountIds = group.accountIds.filter((id) => String(id) !== stringId);
   });
 
   // Remove groups with less than 2 accounts (no point in a group of 1)
-  const filteredGroups = groups.filter(g => g.accountIds.length >= 2);
+  const filteredGroups = groups.filter((g) => g.accountIds.length >= 2);
 
   saveLinkedAccountGroups(artistId, filteredGroups);
 };
@@ -512,7 +539,7 @@ export const getAccountGroupId = (artistId, accountId) => {
 
   const stringId = String(accountId);
   const groups = getLinkedAccountGroups(artistId);
-  const group = groups.find(g => g.accountIds.some(id => String(id) === stringId));
+  const group = groups.find((g) => g.accountIds.some((id) => String(id) === stringId));
   return group ? group.id : null;
 };
 
@@ -540,5 +567,5 @@ export default {
   saveLinkedAccountGroups,
   linkAccounts,
   unlinkAccount,
-  getAccountGroupId
+  getAccountGroupId,
 };

@@ -13,8 +13,18 @@
  */
 
 import {
-  collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  query, orderBy, serverTimestamp, writeBatch, onSnapshot
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  orderBy,
+  serverTimestamp,
+  writeBatch,
+  onSnapshot,
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import log from '../utils/logger';
@@ -27,7 +37,7 @@ export const POST_STATUS = Object.freeze({
   SCHEDULED: 'scheduled',
   POSTING: 'posting',
   POSTED: 'posted',
-  FAILED: 'failed'
+  FAILED: 'failed',
 });
 
 // Re-export platform constants for backward compat
@@ -94,17 +104,17 @@ export async function createScheduledPost(db, artistId, data) {
     editorState: data.editorState || null,
 
     // Posting result
-    postResults: data.postResults || {},  // { platform: { postId, url, error } }
+    postResults: data.postResults || {}, // { platform: { postId, url, error } }
 
     // Timestamps
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 
   try {
     await setDoc(getDocRef(db, artistId, id), {
       ...post,
-      serverUpdatedAt: serverTimestamp()
+      serverUpdatedAt: serverTimestamp(),
     });
     log('[ScheduledPosts] Created:', id);
     // Also update local
@@ -124,13 +134,13 @@ export async function createScheduledPost(db, artistId, data) {
 export async function updateScheduledPost(db, artistId, postId, updates) {
   const patch = {
     ...updates,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 
   try {
     await updateDoc(getDocRef(db, artistId, postId), {
       ...patch,
-      serverUpdatedAt: serverTimestamp()
+      serverUpdatedAt: serverTimestamp(),
     });
     log('[ScheduledPosts] Updated:', postId);
     // Also update local
@@ -172,13 +182,13 @@ export async function deleteScheduledPost(db, artistId, postId) {
 export async function deletePostsByContentId(db, artistId, contentId) {
   try {
     const allPosts = await getScheduledPosts(db, artistId);
-    const matching = allPosts.filter(p => p.contentId === contentId);
+    const matching = allPosts.filter((p) => p.contentId === contentId);
     if (matching.length === 0) return 0;
 
     const batch = writeBatch(db);
-    matching.forEach(p => batch.delete(getDocRef(db, artistId, p.id)));
+    matching.forEach((p) => batch.delete(getDocRef(db, artistId, p.id)));
     await batch.commit();
-    matching.forEach(p => removeLocalPost(artistId, p.id));
+    matching.forEach((p) => removeLocalPost(artistId, p.id));
     log('[ScheduledPosts] Cascade-deleted', matching.length, 'posts for contentId:', contentId);
     return matching.length;
   } catch (error) {
@@ -192,12 +202,9 @@ export async function deletePostsByContentId(db, artistId, contentId) {
  */
 export async function getScheduledPosts(db, artistId) {
   try {
-    const q = query(
-      getCollectionRef(db, artistId),
-      orderBy('queuePosition', 'asc')
-    );
+    const q = query(getCollectionRef(db, artistId), orderBy('queuePosition', 'asc'));
     const snapshot = await getDocs(q);
-    const posts = snapshot.docs.map(d => d.data());
+    const posts = snapshot.docs.map((d) => d.data());
     log('[ScheduledPosts] Loaded', posts.length, 'posts');
     return posts;
   } catch (error) {
@@ -210,18 +217,19 @@ export async function getScheduledPosts(db, artistId) {
  * Subscribe to real-time changes on scheduled posts
  */
 export function subscribeToScheduledPosts(db, artistId, callback) {
-  const q = query(
-    getCollectionRef(db, artistId),
-    orderBy('queuePosition', 'asc')
-  );
+  const q = query(getCollectionRef(db, artistId), orderBy('queuePosition', 'asc'));
 
-  return onSnapshot(q, (snapshot) => {
-    const posts = snapshot.docs.map(d => d.data());
-    callback(posts);
-  }, (error) => {
-    log.error('[ScheduledPosts] Subscription error:', error);
-    callback(getLocalPosts(artistId));
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const posts = snapshot.docs.map((d) => d.data());
+      callback(posts);
+    },
+    (error) => {
+      log.error('[ScheduledPosts] Subscription error:', error);
+      callback(getLocalPosts(artistId));
+    },
+  );
 }
 
 /**
@@ -237,7 +245,7 @@ export async function reorderPosts(db, artistId, newOrder) {
       batch.update(getDocRef(db, artistId, id), {
         queuePosition,
         updatedAt: new Date().toISOString(),
-        serverUpdatedAt: serverTimestamp()
+        serverUpdatedAt: serverTimestamp(),
       });
     });
     await batch.commit();
@@ -292,12 +300,12 @@ export async function addManyScheduledPosts(db, artistId, posts) {
       editorState: data.editorState || null,
       postResults: {},
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
 
     batch.set(getDocRef(db, artistId, id), {
       ...post,
-      serverUpdatedAt: serverTimestamp()
+      serverUpdatedAt: serverTimestamp(),
     });
     results.push(post);
   }
@@ -306,11 +314,11 @@ export async function addManyScheduledPosts(db, artistId, posts) {
     await batch.commit();
     log('[ScheduledPosts] Batch created', results.length, 'posts');
     // Also update local
-    results.forEach(p => saveLocalPost(artistId, p));
+    results.forEach((p) => saveLocalPost(artistId, p));
   } catch (error) {
     log.error('[ScheduledPosts] Firestore batch create failed:', error);
     // Save to localStorage as fallback (mark unsynced)
-    results.forEach(p => saveLocalPost(artistId, { ...p, syncedToCloud: false }));
+    results.forEach((p) => saveLocalPost(artistId, { ...p, syncedToCloud: false }));
   }
 
   return results;
@@ -334,7 +342,7 @@ function getLocalPosts(artistId) {
 function saveLocalPost(artistId, post) {
   try {
     const posts = getLocalPosts(artistId);
-    const index = posts.findIndex(p => p.id === post.id);
+    const index = posts.findIndex((p) => p.id === post.id);
     if (index >= 0) {
       posts[index] = post;
     } else {
@@ -351,7 +359,7 @@ function saveLocalPost(artistId, post) {
           keysToClean.push(key);
         }
       }
-      keysToClean.forEach(k => localStorage.removeItem(k));
+      keysToClean.forEach((k) => localStorage.removeItem(k));
       // Retry save
       try {
         localStorage.setItem(STORAGE_KEY(artistId), JSON.stringify(posts));
@@ -367,7 +375,7 @@ function saveLocalPost(artistId, post) {
 function updateLocalPost(artistId, postId, updates) {
   try {
     const posts = getLocalPosts(artistId);
-    const index = posts.findIndex(p => p.id === postId);
+    const index = posts.findIndex((p) => p.id === postId);
     if (index >= 0) {
       posts[index] = { ...posts[index], ...updates };
       localStorage.setItem(STORAGE_KEY(artistId), JSON.stringify(posts));
@@ -379,7 +387,7 @@ function updateLocalPost(artistId, postId, updates) {
 
 function removeLocalPost(artistId, postId) {
   try {
-    const posts = getLocalPosts(artistId).filter(p => p.id !== postId);
+    const posts = getLocalPosts(artistId).filter((p) => p.id !== postId);
     localStorage.setItem(STORAGE_KEY(artistId), JSON.stringify(posts));
   } catch (error) {
     log.error('[ScheduledPosts] Local delete failed:', error);

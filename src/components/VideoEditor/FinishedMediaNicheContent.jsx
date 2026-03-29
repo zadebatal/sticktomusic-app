@@ -3,16 +3,21 @@
  */
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { subscribeToScheduledPosts } from '../../services/scheduledPostsService';
-import {
-  updateNicheAudioId,
-} from '../../services/libraryService';
+import { updateNicheAudioId } from '../../services/libraryService';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { Badge } from '../../ui/components/Badge';
 import {
-  FeatherUploadCloud, FeatherTrash2, FeatherImage, FeatherFilm,
-  FeatherPlus, FeatherX,
-  FeatherMusic, FeatherPlay, FeatherChevronDown, FeatherCheck,
+  FeatherUploadCloud,
+  FeatherTrash2,
+  FeatherImage,
+  FeatherFilm,
+  FeatherPlus,
+  FeatherX,
+  FeatherMusic,
+  FeatherPlay,
+  FeatherChevronDown,
+  FeatherCheck,
 } from '@subframe/core';
 import { useToast } from '../ui';
 import useFileUploader from './shared/useFileUploader';
@@ -26,14 +31,22 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
   const fileInputRef = useRef(null);
 
   const {
-    files, uploading, addFiles, removeFile, updateFileName, handleDrop, uploadAll, clearFiles, formatSize,
+    files,
+    uploading,
+    addFiles,
+    removeFile,
+    updateFileName,
+    handleDrop,
+    uploadAll,
+    clearFiles,
+    formatSize,
   } = useFileUploader({ db, artistId, nicheId: niche?.id, nicheName: niche?.name, user });
 
   // Audio picker
   const [audioPickerOpen, setAudioPickerOpen] = useState(false);
   const selectedAudio = useMemo(
-    () => projectAudio.find(a => a.id === niche?.audioId) || projectAudio[0] || null,
-    [projectAudio, niche?.audioId]
+    () => projectAudio.find((a) => a.id === niche?.audioId) || projectAudio[0] || null,
+    [projectAudio, niche?.audioId],
   );
 
   // Subscribe to scheduled posts to show uploads from this niche
@@ -43,17 +56,20 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
   }, [db, artistId]);
 
   // Filter to uploads from this niche
-  const nicheUploads = useMemo(() =>
-    scheduledPosts
-      .filter(p => p.contentType === 'upload' && p.nicheId === niche?.id)
-      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')),
-    [scheduledPosts, niche?.id]
+  const nicheUploads = useMemo(
+    () =>
+      scheduledPosts
+        .filter((p) => p.contentType === 'upload' && p.nicheId === niche?.id)
+        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')),
+    [scheduledPosts, niche?.id],
   );
 
   // Escape-to-close preview lightbox
   useEffect(() => {
     if (!previewPost) return;
-    const handler = (e) => { if (e.key === 'Escape') setPreviewPost(null); };
+    const handler = (e) => {
+      if (e.key === 'Escape') setPreviewPost(null);
+    };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [previewPost]);
@@ -71,11 +87,14 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
     return () => document.removeEventListener('mousedown', handler);
   }, [audioPickerOpen]);
 
-  const handleSelectAudio = useCallback((audioId) => {
-    if (!niche) return;
-    updateNicheAudioId(artistId, niche.id, audioId, db);
-    setAudioPickerOpen(false);
-  }, [artistId, niche, db]);
+  const handleSelectAudio = useCallback(
+    (audioId) => {
+      if (!niche) return;
+      updateNicheAudioId(artistId, niche.id, audioId, db);
+      setAudioPickerOpen(false);
+    },
+    [artistId, niche, db],
+  );
 
   const handleUploadAll = useCallback(async () => {
     if (files.length === 0 || !niche) return;
@@ -108,19 +127,29 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
         <div
           className={`flex w-full max-w-md flex-col items-center gap-3 rounded-lg border-2 border-dashed border-neutral-200 bg-[#0a0a0f] px-6 py-6 cursor-pointer hover:border-neutral-500 transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
           onClick={() => !uploading && fileInputRef.current?.click()}
-          onDrop={(e) => { if (!uploading) handleDrop(e); else e.preventDefault(); }}
-          onDragOver={e => e.preventDefault()}
+          onDrop={(e) => {
+            if (!uploading) handleDrop(e);
+            else e.preventDefault();
+          }}
+          onDragOver={(e) => e.preventDefault()}
         >
           <FeatherUploadCloud className="text-neutral-500" style={{ width: 28, height: 28 }} />
-          <span className="text-body font-body text-neutral-400">Drop files here or click to browse</span>
-          <span className="text-caption font-caption text-neutral-600">Videos and images accepted</span>
+          <span className="text-body font-body text-neutral-400">
+            Drop files here or click to browse
+          </span>
+          <span className="text-caption font-caption text-neutral-600">
+            Videos and images accepted
+          </span>
           <input
             ref={fileInputRef}
             type="file"
             multiple
             accept="video/*,image/*"
             className="hidden"
-            onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
+            onChange={(e) => {
+              addFiles(e.target.files);
+              e.target.value = '';
+            }}
           />
         </div>
 
@@ -128,7 +157,10 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
         {files.length > 0 && (
           <div className="flex w-full max-w-md flex-col gap-2">
             {files.map((entry, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1a] px-3 py-2">
+              <div
+                key={i}
+                className="flex items-center gap-3 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1a] px-3 py-2"
+              >
                 <div className="w-10 h-10 flex-none rounded bg-[#0a0a0f] overflow-hidden flex items-center justify-center">
                   {entry.type === 'image' ? (
                     <img src={entry.localPreview} alt="" className="w-full h-full object-cover" />
@@ -141,25 +173,40 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
                     <input
                       className="bg-transparent text-sm text-white outline-none w-full truncate"
                       value={entry.name}
-                      onChange={e => updateFileName(i, e.target.value)}
+                      onChange={(e) => updateFileName(i, e.target.value)}
                     />
                   ) : (
                     <span className="text-sm text-white truncate">{entry.name}</span>
                   )}
                   <div className="flex items-center gap-2">
                     <Badge variant="neutral">{entry.type === 'video' ? 'Video' : 'Image'}</Badge>
-                    <span className="text-[11px] text-neutral-500">{formatSize(entry.file.size)}</span>
+                    <span className="text-[11px] text-neutral-500">
+                      {formatSize(entry.file.size)}
+                    </span>
                   </div>
                   {entry.status === 'uploading' && (
                     <div className="w-full h-1 rounded-full bg-neutral-100 mt-1">
-                      <div className="h-full rounded-full bg-cyan-500 transition-all" style={{ width: `${entry.progress}%` }} />
+                      <div
+                        className="h-full rounded-full bg-cyan-500 transition-all"
+                        style={{ width: `${entry.progress}%` }}
+                      />
                     </div>
                   )}
-                  {entry.status === 'done' && <span className="text-[11px] text-green-500">Uploaded</span>}
-                  {entry.status === 'error' && <span className="text-[11px] text-red-500">{entry.error || 'Failed'}</span>}
+                  {entry.status === 'done' && (
+                    <span className="text-[11px] text-green-500">Uploaded</span>
+                  )}
+                  {entry.status === 'error' && (
+                    <span className="text-[11px] text-red-500">{entry.error || 'Failed'}</span>
+                  )}
                 </div>
                 {!uploading && (
-                  <IconButton variant="neutral-tertiary" size="small" icon={<FeatherTrash2 />} aria-label="Remove" onClick={() => removeFile(i)} />
+                  <IconButton
+                    variant="neutral-tertiary"
+                    size="small"
+                    icon={<FeatherTrash2 />}
+                    aria-label="Remove"
+                    onClick={() => removeFile(i)}
+                  />
                 )}
               </div>
             ))}
@@ -172,14 +219,14 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
                   placeholder="Caption (optional)..."
                   aria-label="Caption"
                   value={caption}
-                  onChange={e => setCaption(e.target.value)}
+                  onChange={(e) => setCaption(e.target.value)}
                 />
                 <input
                   className="w-full rounded-lg border border-neutral-200 bg-[#0a0a0f] px-3 py-2 text-sm text-white outline-none focus:border-neutral-500"
                   placeholder="#hashtags (optional)"
                   aria-label="Hashtags"
                   value={hashtags}
-                  onChange={e => setHashtags(e.target.value)}
+                  onChange={(e) => setHashtags(e.target.value)}
                 />
               </div>
             )}
@@ -194,7 +241,7 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
               onClick={handleUploadAll}
             >
               {uploading
-                ? `Uploading ${files.filter(f => f.status === 'done').length}/${files.length}...`
+                ? `Uploading ${files.filter((f) => f.status === 'done').length}/${files.length}...`
                 : `Upload & Add to Queue (${files.length})`}
             </Button>
           </div>
@@ -206,7 +253,9 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
         <div className="flex flex-col items-center justify-center gap-3 py-16 text-center px-4 sm:px-12">
           <FeatherUploadCloud className="w-12 h-12 text-neutral-500" />
           <h3 className="text-body-bold font-body-bold text-white">No uploads yet</h3>
-          <p className="text-caption font-caption text-neutral-400">Upload finished videos or images using the area above</p>
+          <p className="text-caption font-caption text-neutral-400">
+            Upload finished videos or images using the area above
+          </p>
         </div>
       )}
 
@@ -218,7 +267,7 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
             <Badge variant="neutral">{nicheUploads.length}</Badge>
           </div>
           <div className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {nicheUploads.map(post => (
+            {nicheUploads.map((post) => (
               <div
                 key={post.id}
                 className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-neutral-50 overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
@@ -227,9 +276,19 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
                 {post.thumbnail ? (
                   <div className="w-full aspect-video bg-neutral-100">
                     {post.mediaType === 'video' ? (
-                      <video src={post.cloudUrl} className="w-full h-full object-cover" muted preload="metadata" />
+                      <video
+                        src={post.cloudUrl}
+                        className="w-full h-full object-cover"
+                        muted
+                        preload="metadata"
+                      />
                     ) : (
-                      <img src={post.thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      <img
+                        src={post.thumbnail}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
                     )}
                   </div>
                 ) : (
@@ -238,8 +297,18 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
                   </div>
                 )}
                 <div className="flex w-full items-center gap-2 px-3 pb-3">
-                  <span className="text-caption font-caption text-neutral-300 truncate flex-1">{post.contentName || 'Untitled'}</span>
-                  <Badge variant={post.status === 'scheduled' ? 'brand' : post.status === 'posted' ? 'success' : 'neutral'}>
+                  <span className="text-caption font-caption text-neutral-300 truncate flex-1">
+                    {post.contentName || 'Untitled'}
+                  </span>
+                  <Badge
+                    variant={
+                      post.status === 'scheduled'
+                        ? 'brand'
+                        : post.status === 'posted'
+                          ? 'success'
+                          : 'neutral'
+                    }
+                  >
                     {post.status}
                   </Badge>
                 </div>
@@ -251,21 +320,49 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
 
       {/* Preview lightbox */}
       {previewPost && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85" onClick={() => setPreviewPost(null)}>
-          <div className="relative max-w-3xl max-h-[85vh] w-full mx-4" onClick={e => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
+          onClick={() => setPreviewPost(null)}
+        >
+          <div
+            className="relative max-w-3xl max-h-[85vh] w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <IconButton
               className="absolute -top-10 right-0"
-              variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close preview"
+              variant="neutral-tertiary"
+              size="medium"
+              icon={<FeatherX />}
+              aria-label="Close preview"
               onClick={() => setPreviewPost(null)}
             />
             {previewPost.mediaType === 'video' ? (
-              <video src={previewPost.cloudUrl} className="w-full max-h-[80vh] rounded-lg" controls autoPlay />
+              <video
+                src={previewPost.cloudUrl}
+                className="w-full max-h-[80vh] rounded-lg"
+                controls
+                autoPlay
+              />
             ) : (
-              <img src={previewPost.cloudUrl || previewPost.thumbnail} alt={previewPost.contentName} className="w-full max-h-[80vh] rounded-lg object-contain" />
+              <img
+                src={previewPost.cloudUrl || previewPost.thumbnail}
+                alt={previewPost.contentName}
+                className="w-full max-h-[80vh] rounded-lg object-contain"
+              />
             )}
             <div className="flex items-center gap-2 mt-3">
-              <span className="text-body font-body text-white">{previewPost.contentName || 'Untitled'}</span>
-              <Badge variant={previewPost.status === 'scheduled' ? 'brand' : previewPost.status === 'posted' ? 'success' : 'neutral'}>
+              <span className="text-body font-body text-white">
+                {previewPost.contentName || 'Untitled'}
+              </span>
+              <Badge
+                variant={
+                  previewPost.status === 'scheduled'
+                    ? 'brand'
+                    : previewPost.status === 'posted'
+                      ? 'success'
+                      : 'neutral'
+                }
+              >
                 {previewPost.status}
               </Badge>
             </div>
@@ -287,15 +384,21 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
             </span>
             <FeatherChevronDown
               className="text-neutral-400 flex-none transition-transform"
-              style={{ width: 14, height: 14, transform: audioPickerOpen ? 'rotate(180deg)' : 'none' }}
+              style={{
+                width: 14,
+                height: 14,
+                transform: audioPickerOpen ? 'rotate(180deg)' : 'none',
+              }}
             />
           </button>
           {audioPickerOpen && (
             <div className="absolute top-full left-0 right-0 mt-1 flex flex-col gap-0.5 px-2 py-2 bg-[#111111] border border-neutral-200 rounded-lg max-h-48 overflow-y-auto shadow-xl z-20">
               {projectAudio.length === 0 && (
-                <span className="text-caption font-caption text-neutral-500 px-2 py-1">No audio uploaded</span>
+                <span className="text-caption font-caption text-neutral-500 px-2 py-1">
+                  No audio uploaded
+                </span>
               )}
-              {projectAudio.map(audio => {
+              {projectAudio.map((audio) => {
                 const isActive = selectedAudio?.id === audio.id;
                 return (
                   <button
@@ -305,9 +408,19 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
                     }`}
                     onClick={() => handleSelectAudio(audio.id)}
                   >
-                    <FeatherPlay className="text-neutral-300 flex-none" style={{ width: 10, height: 10 }} />
-                    <span className="text-caption font-caption text-white truncate grow">{audio.name}</span>
-                    {isActive && <FeatherCheck className="text-indigo-300 flex-none" style={{ width: 12, height: 12 }} />}
+                    <FeatherPlay
+                      className="text-neutral-300 flex-none"
+                      style={{ width: 10, height: 10 }}
+                    />
+                    <span className="text-caption font-caption text-white truncate grow">
+                      {audio.name}
+                    </span>
+                    {isActive && (
+                      <FeatherCheck
+                        className="text-indigo-300 flex-none"
+                        style={{ width: 12, height: 12 }}
+                      />
+                    )}
                   </button>
                 );
               })}
@@ -315,7 +428,6 @@ const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAu
           )}
         </div>
       </div>
-
     </div>
   );
 };

@@ -72,7 +72,12 @@ const loadFFmpeg = async (onProgress = () => {}) => {
  * @param {Object} audioInfo - Optional audio info { buffer, startTime }
  * @param {boolean} isNativeMP4 - Whether the input is already MP4
  */
-const processVideo = async (videoBlob, onProgress = () => {}, audioInfo = null, isNativeMP4 = false) => {
+const processVideo = async (
+  videoBlob,
+  onProgress = () => {},
+  audioInfo = null,
+  isNativeMP4 = false,
+) => {
   const hasAudio = !!audioInfo?.buffer;
 
   // Always process through FFmpeg to ensure correct frame rate metadata (TikTok requires 23-60 FPS)
@@ -85,7 +90,7 @@ const processVideo = async (videoBlob, onProgress = () => {}, audioInfo = null, 
   log('[VideoExport] Processing video:', {
     needsVideoConversion,
     hasAudio,
-    inputSize: (videoBlob.size / 1024 / 1024).toFixed(2) + 'MB'
+    inputSize: (videoBlob.size / 1024 / 1024).toFixed(2) + 'MB',
   });
 
   try {
@@ -113,30 +118,36 @@ const processVideo = async (videoBlob, onProgress = () => {}, audioInfo = null, 
     if (needsVideoConversion) {
       // Need to re-encode WebM to H.264
       ffmpegArgs.push(
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-crf', '28',           // Higher CRF = faster, slightly lower quality
-        '-pix_fmt', 'yuv420p',
-        '-r', '30'              // Force 30fps output for TikTok (requires 23-60)
+        '-c:v',
+        'libx264',
+        '-preset',
+        'ultrafast',
+        '-crf',
+        '28', // Higher CRF = faster, slightly lower quality
+        '-pix_fmt',
+        'yuv420p',
+        '-r',
+        '30', // Force 30fps output for TikTok (requires 23-60)
       );
     } else {
       // Native MP4 — re-encode to fix frame rate metadata from captureStream(0)
       ffmpegArgs.push(
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-crf', '23',           // Better quality since input is already MP4
-        '-pix_fmt', 'yuv420p',
-        '-r', '30'              // Force 30fps output for TikTok (requires 23-60)
+        '-c:v',
+        'libx264',
+        '-preset',
+        'ultrafast',
+        '-crf',
+        '23', // Better quality since input is already MP4
+        '-pix_fmt',
+        'yuv420p',
+        '-r',
+        '30', // Force 30fps output for TikTok (requires 23-60)
       );
     }
 
     // Audio encoding
     if (hasAudio) {
-      ffmpegArgs.push(
-        '-c:a', 'aac',
-        '-b:a', '96k',
-        '-shortest'
-      );
+      ffmpegArgs.push('-c:a', 'aac', '-b:a', '96k', '-shortest');
     }
 
     ffmpegArgs.push('-movflags', '+faststart', outputName);
@@ -151,7 +162,11 @@ const processVideo = async (videoBlob, onProgress = () => {}, audioInfo = null, 
     await ffmpeg.deleteFile(inputName);
     await ffmpeg.deleteFile(outputName);
     if (hasAudio) {
-      try { await ffmpeg.deleteFile(audioName); } catch (e) { /* ignore */ }
+      try {
+        await ffmpeg.deleteFile(audioName);
+      } catch (e) {
+        /* ignore */
+      }
     }
 
     log('[VideoExport] Processing complete:', (outputBlob.size / 1024 / 1024).toFixed(2), 'MB');
@@ -234,7 +249,6 @@ const loadAudio = (url) => {
       const fallbackAudio = document.createElement('audio');
       fallbackAudio.preload = 'auto';
 
-
       const fallbackTimeout = setTimeout(() => {
         reject(new Error(`Audio fallback load timeout: ${url}`));
       }, 30000);
@@ -271,7 +285,7 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
   const dimensions = {
     '9:16': { width: 1080, height: 1920 },
     '4:3': { width: 1080, height: 1440 },
-    '1:1': { width: 1080, height: 1080 }
+    '1:1': { width: 1080, height: 1080 },
   };
   const { width, height } = dimensions[cropMode] || dimensions['9:16'];
 
@@ -287,7 +301,7 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
     // Prefer cloud URL over blob URLs (blob URLs expire between sessions)
     const localUrl = clip.localUrl;
     const isBlobUrl = localUrl && localUrl.startsWith('blob:');
-    const url = isBlobUrl ? clip.url : (localUrl || clip.url);
+    const url = isBlobUrl ? clip.url : localUrl || clip.url;
 
     log(`[VideoExport] Loading clip ${i}:`, url?.substring(0, 50) + '...');
     try {
@@ -317,21 +331,25 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
   // Prefer MP4/H.264 if browser supports it (Chrome, Edge) - avoids FFmpeg conversion!
   // Fall back to WebM which will need FFmpeg conversion later
   const mimeTypes = [
-    'video/mp4;codecs=avc1',    // H.264 in MP4 - best for TikTok
-    'video/mp4;codecs=h264',    // Alternative H.264
-    'video/mp4',                 // Generic MP4
-    'video/webm;codecs=vp8',    // WebM fallback
+    'video/mp4;codecs=avc1', // H.264 in MP4 - best for TikTok
+    'video/mp4;codecs=h264', // Alternative H.264
+    'video/mp4', // Generic MP4
+    'video/webm;codecs=vp8', // WebM fallback
     'video/webm;codecs=vp9',
-    'video/webm'
+    'video/webm',
   ];
 
-  let mimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || 'video/webm';
+  let mimeType = mimeTypes.find((type) => MediaRecorder.isTypeSupported(type)) || 'video/webm';
   const isMP4Native = mimeType.includes('mp4');
-  log('[VideoExport] Using codec:', mimeType, isMP4Native ? '(native MP4!)' : '(will need conversion)');
+  log(
+    '[VideoExport] Using codec:',
+    mimeType,
+    isMP4Native ? '(native MP4!)' : '(will need conversion)',
+  );
 
   const recorder = new MediaRecorder(combinedStream, {
     mimeType,
-    videoBitsPerSecond: 6000000 // 6 Mbps - slightly lower for faster encoding
+    videoBitsPerSecond: 6000000, // 6 Mbps - slightly lower for faster encoding
   });
 
   const chunks = [];
@@ -357,7 +375,7 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
 
   const getWordAtTime = (t) => {
     if (!words || words.length === 0) return null;
-    return words.find(w => t >= w.start && t < w.end);
+    return words.find((w) => t >= w.start && t < w.end);
   };
 
   // Draw a single frame at the given time
@@ -397,11 +415,12 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
     // Draw text overlay
     const currentWord = getWordAtTime(currentTime);
     if (currentWord && textStyle) {
-      const text = textStyle.textCase === 'upper'
-        ? currentWord.word.toUpperCase()
-        : textStyle.textCase === 'lower'
-          ? currentWord.word.toLowerCase()
-          : currentWord.word;
+      const text =
+        textStyle.textCase === 'upper'
+          ? currentWord.word.toUpperCase()
+          : textStyle.textCase === 'lower'
+            ? currentWord.word.toLowerCase()
+            : currentWord.word;
 
       const fontSize = textStyle.fontSize || 48;
       const fontFamily = textStyle.fontFamily || 'Inter, sans-serif';
@@ -412,7 +431,7 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
       ctx.textBaseline = 'middle';
 
       const x = width / 2;
-      const y = height * 0.75;
+      const y = height * 0.5;
 
       if (textStyle.outline) {
         ctx.strokeStyle = textStyle.outlineColor || '#000';
@@ -511,9 +530,11 @@ export const renderVideo = async (videoData, onProgress = () => {}, options = {}
   }
 
   // Validate clip URLs
-  const invalidClips = clips.filter(clip => !clip.localUrl && !clip.url);
+  const invalidClips = clips.filter((clip) => !clip.localUrl && !clip.url);
   if (invalidClips.length > 0) {
-    throw new Error(`${invalidClips.length} clip(s) missing URLs. Re-upload or re-select the clips.`);
+    throw new Error(
+      `${invalidClips.length} clip(s) missing URLs. Re-upload or re-select the clips.`,
+    );
   }
 
   log(`[VideoExport] Starting render: ${clips.length} clips, ${duration}s duration`);
@@ -528,23 +549,25 @@ export const renderVideo = async (videoData, onProgress = () => {}, options = {}
       const audioLocalUrl = audio.localUrl;
       const isAudioBlobUrl = audioLocalUrl && audioLocalUrl.startsWith('blob:');
       // Prefer non-blob localUrl, then cloud url; skip stale blob URLs entirely
-      const audioUrl = isAudioBlobUrl ? audio.url : (audioLocalUrl || audio.url);
+      const audioUrl = isAudioBlobUrl ? audio.url : audioLocalUrl || audio.url;
       const isBlobUrl = audioUrl && audioUrl.startsWith('blob:');
 
       if (audioUrl && !isBlobUrl) {
         log('[VideoExport] Pre-fetching audio in parallel...');
         audioBufferPromise = fetch(audioUrl)
-          .then(res => res.arrayBuffer())
-          .catch(err => {
+          .then((res) => res.arrayBuffer())
+          .catch((err) => {
             log.warn('[VideoExport] Audio pre-fetch failed:', err);
             return null;
           });
 
         audioInfo = {
-          startTime: audio.startTime || 0
+          startTime: audio.startTime || 0,
         };
       } else if (isBlobUrl) {
-        log.warn('[VideoExport] Audio has stale blob URL — skipping audio. Re-add from library to include audio.');
+        log.warn(
+          '[VideoExport] Audio has stale blob URL — skipping audio. Re-add from library to include audio.',
+        );
       }
     }
 
@@ -581,7 +604,7 @@ export const renderPreview = async (videoData, onProgress = () => {}) => {
   // Create a lower-res version for preview
   const previewData = {
     ...videoData,
-    cropMode: '9:16' // Force 9:16 for preview
+    cropMode: '9:16', // Force 9:16 for preview
   };
 
   // Render with smaller canvas
@@ -606,5 +629,5 @@ export const renderPreview = async (videoData, onProgress = () => {}) => {
 
 export default {
   renderVideo,
-  renderPreview
+  renderPreview,
 };

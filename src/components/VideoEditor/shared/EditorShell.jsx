@@ -11,7 +11,10 @@ const EditorShell = ({ children, onBackdropClick, isMobile }) => (
     role="dialog"
     aria-modal="true"
   >
-    <div className="w-full h-screen bg-black flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="w-full h-screen bg-black flex flex-col overflow-hidden"
+      onClick={(e) => e.stopPropagation()}
+    >
       {children}
     </div>
   </div>

@@ -48,7 +48,9 @@ function generateCodeVerifier() {
   const array = new Uint8Array(32);
   crypto.getRandomValues(array);
   return btoa(String.fromCharCode(...array))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 }
 
 /**
@@ -59,7 +61,9 @@ async function generateCodeChallenge(verifier) {
   const data = encoder.encode(verifier);
   const digest = await crypto.subtle.digest('SHA-256', data);
   return btoa(String.fromCharCode(...new Uint8Array(digest)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 }
 
 /**
@@ -76,15 +80,17 @@ export async function authenticate() {
   const redirectUri = `${window.location.origin}/dropbox-callback`;
   const state = crypto.randomUUID();
 
-  const authUrl = `${AUTH_URL}?` + new URLSearchParams({
-    client_id: appKey,
-    response_type: 'code',
-    code_challenge: codeChallenge,
-    code_challenge_method: 'S256',
-    redirect_uri: redirectUri,
-    state,
-    token_access_type: 'offline'
-  }).toString();
+  const authUrl =
+    `${AUTH_URL}?` +
+    new URLSearchParams({
+      client_id: appKey,
+      response_type: 'code',
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
+      redirect_uri: redirectUri,
+      state,
+      token_access_type: 'offline',
+    }).toString();
 
   return new Promise((resolve, reject) => {
     const width = 500;
@@ -92,8 +98,9 @@ export async function authenticate() {
     const left = (window.screen.width - width) / 2;
     const top = (window.screen.height - height) / 2;
     const popup = window.open(
-      authUrl, 'dropbox-auth',
-      `width=${width},height=${height},left=${left},top=${top}`
+      authUrl,
+      'dropbox-auth',
+      `width=${width},height=${height},left=${left},top=${top}`,
     );
 
     if (!popup) {
@@ -132,8 +139,8 @@ export async function authenticate() {
               grant_type: 'authorization_code',
               client_id: appKey,
               redirect_uri: redirectUri,
-              code_verifier: codeVerifier
-            })
+              code_verifier: codeVerifier,
+            }),
           });
 
           if (!tokenResp.ok) {
@@ -177,7 +184,7 @@ export function disconnect() {
     // Revoke token
     fetch(`${API_URL}/auth/token/revoke`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` }
+      headers: { Authorization: `Bearer ${accessToken}` },
     }).catch(() => {});
     accessToken = null;
     refreshToken = null;
@@ -198,8 +205,8 @@ async function refreshAccessToken() {
       body: new URLSearchParams({
         grant_type: 'refresh_token',
         refresh_token: refreshToken,
-        client_id: appKey
-      })
+        client_id: appKey,
+      }),
     });
 
     if (!resp.ok) return false;
@@ -231,13 +238,14 @@ async function ensureAuth() {
  * Make an API call to Dropbox with automatic retry on 401
  */
 async function apiCall(url, options = {}) {
-  const makeRequest = () => fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      ...options.headers
-    }
-  });
+  const makeRequest = () =>
+    fetch(url, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...options.headers,
+      },
+    });
 
   let response = await makeRequest();
 
@@ -270,14 +278,12 @@ export async function listFiles(path = '', options = {}) {
     ? `${API_URL}/files/list_folder/continue`
     : `${API_URL}/files/list_folder`;
 
-  const body = cursor
-    ? { cursor }
-    : { path: path || '', limit, include_media_info: true };
+  const body = cursor ? { cursor } : { path: path || '', limit, include_media_info: true };
 
   const response = await apiCall(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -286,17 +292,17 @@ export async function listFiles(path = '', options = {}) {
 
   const data = await response.json();
   return {
-    entries: (data.entries || []).map(entry => ({
+    entries: (data.entries || []).map((entry) => ({
       id: entry.id,
       name: entry.name,
       path: entry.path_display,
       isFolder: entry['.tag'] === 'folder',
       size: entry.size,
       modifiedAt: entry.client_modified || entry.server_modified,
-      mediaInfo: entry.media_info
+      mediaInfo: entry.media_info,
     })),
     cursor: data.cursor,
-    hasMore: data.has_more
+    hasMore: data.has_more,
   };
 }
 
@@ -316,8 +322,8 @@ export async function searchFiles(query, options = {}) {
     options: {
       max_results: maxResults,
       path: path || '',
-      file_status: 'active'
-    }
+      file_status: 'active',
+    },
   };
 
   if (fileExtensions) {
@@ -327,7 +333,7 @@ export async function searchFiles(query, options = {}) {
   const response = await apiCall(`${API_URL}/files/search_v2`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -336,7 +342,7 @@ export async function searchFiles(query, options = {}) {
 
   const data = await response.json();
   return {
-    matches: (data.matches || []).map(m => {
+    matches: (data.matches || []).map((m) => {
       const entry = m.metadata?.metadata || m.metadata;
       return {
         id: entry.id,
@@ -344,9 +350,9 @@ export async function searchFiles(query, options = {}) {
         path: entry.path_display,
         isFolder: entry['.tag'] === 'folder',
         size: entry.size,
-        modifiedAt: entry.client_modified || entry.server_modified
+        modifiedAt: entry.client_modified || entry.server_modified,
       };
-    })
+    }),
   };
 }
 
@@ -361,8 +367,8 @@ export async function downloadFile(path) {
   const response = await apiCall(`${CONTENT_URL}/files/download`, {
     method: 'POST',
     headers: {
-      'Dropbox-API-Arg': JSON.stringify({ path })
-    }
+      'Dropbox-API-Arg': JSON.stringify({ path }),
+    },
   });
 
   if (!response.ok) {
@@ -390,10 +396,10 @@ export async function uploadFile(file, path, mode = 'add') {
         path,
         mode,
         autorename: true,
-        mute: false
-      })
+        mute: false,
+      }),
     },
-    body: file
+    body: file,
   });
 
   if (!response.ok) {
@@ -406,7 +412,7 @@ export async function uploadFile(file, path, mode = 'add') {
     id: result.id,
     name: result.name,
     path: result.path_display,
-    size: result.size
+    size: result.size,
   };
 }
 
@@ -421,7 +427,7 @@ export async function createFolder(path) {
   const response = await apiCall(`${API_URL}/files/create_folder_v2`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path, autorename: false })
+    body: JSON.stringify({ path, autorename: false }),
   });
 
   if (!response.ok) {
@@ -440,7 +446,7 @@ export async function createFolder(path) {
   return {
     id: metadata.id,
     name: metadata.name,
-    path: metadata.path_display
+    path: metadata.path_display,
   };
 }
 
@@ -474,7 +480,7 @@ export async function getTemporaryLink(path) {
   const response = await apiCall(`${API_URL}/files/get_temporary_link`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path })
+    body: JSON.stringify({ path }),
   });
 
   if (!response.ok) {
@@ -514,10 +520,14 @@ export async function getDropboxSettings(db, artistId) {
 export async function saveDropboxSettings(db, artistId, settings) {
   try {
     const docRef = doc(db, 'artists', artistId, 'settings', 'dropbox');
-    await setDoc(docRef, {
-      ...settings,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
+    await setDoc(
+      docRef,
+      {
+        ...settings,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true },
+    );
     log('[Dropbox] Settings saved');
   } catch (error) {
     log('[Dropbox] Settings save failed:', error);
@@ -530,7 +540,21 @@ export const DROPBOX_EXTENSIONS = {
   VIDEO: ['mp4', 'mov', 'webm', 'avi'],
   AUDIO: ['mp3', 'wav', 'ogg', 'aac', 'm4a'],
   IMAGE: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'tif', 'tiff'],
-  ALL_MEDIA: ['mp4', 'mov', 'webm', 'mp3', 'wav', 'ogg', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'tif', 'tiff']
+  ALL_MEDIA: [
+    'mp4',
+    'mov',
+    'webm',
+    'mp3',
+    'wav',
+    'ogg',
+    'jpg',
+    'jpeg',
+    'png',
+    'gif',
+    'webp',
+    'tif',
+    'tiff',
+  ],
 };
 
 /**
@@ -561,5 +585,5 @@ export default {
   getDropboxSettings,
   saveDropboxSettings,
   detectMediaType,
-  DROPBOX_EXTENSIONS
+  DROPBOX_EXTENSIONS,
 };

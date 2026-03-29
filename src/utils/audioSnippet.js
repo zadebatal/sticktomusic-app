@@ -48,7 +48,7 @@ function audioBufferToWav(buffer) {
   for (let i = 0; i < buffer.length; i++) {
     for (let channel = 0; channel < numChannels; channel++) {
       const sample = Math.max(-1, Math.min(1, buffer.getChannelData(channel)[i]));
-      const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+      const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
       view.setInt16(offset, intSample, true);
       offset += 2;
     }
@@ -89,7 +89,7 @@ export async function extractAudioSnippet(source, startSec, endSec, options = {}
   // Decode audio — use target sample rate if provided (browser resamples automatically)
   const decodeRate = targetSampleRate || undefined;
   const audioContext = new (window.AudioContext || window.webkitAudioContext)(
-    decodeRate ? { sampleRate: decodeRate } : undefined
+    decodeRate ? { sampleRate: decodeRate } : undefined,
   );
   const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 

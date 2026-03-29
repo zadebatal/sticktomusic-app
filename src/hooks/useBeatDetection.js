@@ -17,6 +17,9 @@ import log from '../utils/logger';
  * // For trimmed audio:
  * const localBeats = getLocalBeats(trimStart, trimEnd); // LOCAL time
  */
+// Skip full audio decode for files larger than this (prevents browser tab freeze)
+const MAX_BEAT_DETECT_SIZE = 50 * 1024 * 1024; // 50MB
+
 export const useBeatDetection = () => {
   const [beats, setBeats] = useState([]);
   const [bpm, setBpm] = useState(null);
@@ -39,6 +42,22 @@ export const useBeatDetection = () => {
       let arrayBuffer;
 
       if (audioSource instanceof File || audioSource instanceof Blob) {
+        // Check file size before processing
+        if (audioSource.size > MAX_BEAT_DETECT_SIZE) {
+          log.warn(
+            `[BeatDetection] File too large (${(audioSource.size / 1024 / 1024).toFixed(0)}MB), using fallback BPM`,
+          );
+          await audioContext.close();
+          const fallbackBpm = 120;
+          setBpm(fallbackBpm);
+          setBeats(generateBeatTimestamps(fallbackBpm, 0, 60));
+          setIsAnalyzing(false);
+          return {
+            bpm: fallbackBpm,
+            beats: generateBeatTimestamps(fallbackBpm, 0, 60),
+            isFallback: true,
+          };
+        }
         // Direct file/blob - most reliable, no CORS issues
         log('Beat detection: Analyzing from file/blob');
         arrayBuffer = await audioSource.arrayBuffer();
@@ -53,6 +72,28 @@ export const useBeatDetection = () => {
         log('Beat detection: Fetching from URL:', audioSource.substring(0, 50) + '...');
 
         try {
+          // Check size with HEAD before full download
+          try {
+            const headResp = await fetch(audioSource, { method: 'HEAD', mode: 'cors' });
+            const contentLength = parseInt(headResp.headers.get('content-length') || '0', 10);
+            if (contentLength > MAX_BEAT_DETECT_SIZE) {
+              log.warn(
+                `[BeatDetection] URL too large (${(contentLength / 1024 / 1024).toFixed(0)}MB), using fallback BPM`,
+              );
+              await audioContext.close();
+              const fallbackBpm = 120;
+              setBpm(fallbackBpm);
+              setBeats(generateBeatTimestamps(fallbackBpm, 0, 60));
+              setIsAnalyzing(false);
+              return {
+                bpm: fallbackBpm,
+                beats: generateBeatTimestamps(fallbackBpm, 0, 60),
+                isFallback: true,
+              };
+            }
+          } catch {
+            /* HEAD failed, continue with fetch */
+          }
           const response = await fetch(audioSource, { mode: 'cors' });
           if (!response.ok) {
             throw new Error(`Failed to fetch audio: ${response.status}`);
@@ -86,7 +127,11 @@ export const useBeatDetection = () => {
           setBeats(generateBeatTimestamps(fallbackBpm, 0, duration));
           setIsAnalyzing(false);
 
-          return { bpm: fallbackBpm, beats: generateBeatTimestamps(fallbackBpm, 0, duration), isFallback: true };
+          return {
+            bpm: fallbackBpm,
+            beats: generateBeatTimestamps(fallbackBpm, 0, duration),
+            isFallback: true,
+          };
         }
       } else {
         throw new Error('Invalid audio source - must be File, Blob, or URL string');
@@ -121,7 +166,6 @@ export const useBeatDetection = () => {
         log(`Beat detection complete: ${detectedBpm} BPM, ${beatTimestamps.length} beats`);
 
         return { bpm: detectedBpm, beats: beatTimestamps, offset };
-
       } catch (detectError) {
         log.warn('Professional beat detection failed, using fallback:', detectError.message);
 
@@ -135,7 +179,6 @@ export const useBeatDetection = () => {
 
         return fallbackResult;
       }
-
     } catch (err) {
       log.error('Beat detection error:', err);
       setError(err.message);
@@ -177,19 +220,22 @@ export const useBeatDetection = () => {
    * @param {number} trimEnd - End of trim range in GLOBAL seconds
    * @returns {Array<number>} - Beats in LOCAL time (0 = trimStart)
    */
-  const getLocalBeats = useCallback((trimStart, trimEnd) => {
-    return normalizeBeatsToTrimRange(beats, trimStart, trimEnd);
-  }, [beats]);
+  const getLocalBeats = useCallback(
+    (trimStart, trimEnd) => {
+      return normalizeBeatsToTrimRange(beats, trimStart, trimEnd);
+    },
+    [beats],
+  );
 
   return {
-    beats,        // GLOBAL time - use for full audio only
+    beats, // GLOBAL time - use for full audio only
     bpm,
     isAnalyzing,
     error,
     analyzeAudio,
     generateBeatsFromBPM,
     clearBeats,
-    getLocalBeats // LOCAL time - use for trimmed audio
+    getLocalBeats, // LOCAL time - use for trimmed audio
   };
 };
 
@@ -239,7 +285,7 @@ function detectBeatsBasic(audioBuffer) {
     return { bpm: 120, beats: generateBeatTimestamps(120, 0, duration) };
   }
 
-  const normalizedEnergies = energies.map(e => e / maxEnergy);
+  const normalizedEnergies = energies.map((e) => e / maxEnergy);
 
   // Detect onsets (sudden increases in energy)
   const onsets = [];

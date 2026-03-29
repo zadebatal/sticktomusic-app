@@ -13,7 +13,13 @@
  * @param {Function} onProgress - Optional progress callback
  * @returns {Promise<File>} - New File containing only the trimmed audio
  */
-export async function trimAudioToFile(audioSource, startTime, endTime, outputName = 'trimmed_audio', onProgress) {
+export async function trimAudioToFile(
+  audioSource,
+  startTime,
+  endTime,
+  outputName = 'trimmed_audio',
+  onProgress,
+) {
   onProgress?.('Loading audio...');
 
   // Get array buffer from source
@@ -97,7 +103,7 @@ async function encodeMP3(buffer) {
     const int16 = new Int16Array(length);
     for (let j = 0; j < length; j++) {
       const s = Math.max(-1, Math.min(1, floatData[offset + j]));
-      int16[j] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      int16[j] = s < 0 ? s * 0x8000 : s * 0x7fff;
     }
     return int16;
   };

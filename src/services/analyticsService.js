@@ -61,10 +61,13 @@ export const getStoredAnalytics = (artistId) => {
 export const saveAnalytics = (artistId, data) => {
   if (!artistId) return;
   try {
-    localStorage.setItem(getStorageKey(artistId), JSON.stringify({
-      ...data,
-      lastUpdated: new Date().toISOString()
-    }));
+    localStorage.setItem(
+      getStorageKey(artistId),
+      JSON.stringify({
+        ...data,
+        lastUpdated: new Date().toISOString(),
+      }),
+    );
     localStorage.setItem(getLastSyncKey(artistId), new Date().toISOString());
   } catch (error) {
     log.error('Error saving analytics to localStorage:', error);
@@ -82,7 +85,7 @@ export const needsSync = (artistId) => {
 
   const lastSyncTime = new Date(lastSync).getTime();
   const now = Date.now();
-  return (now - lastSyncTime) >= SYNC_INTERVAL;
+  return now - lastSyncTime >= SYNC_INTERVAL;
 };
 
 /**
@@ -94,9 +97,9 @@ export const fetchLateAnalytics = async (latePostId, accessToken) => {
   try {
     const response = await fetch(`https://api.late.co/v1/posts/${latePostId}/analytics`, {
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
     });
 
     if (!response.ok) {
@@ -118,9 +121,9 @@ export const fetchLatePosts = async (accessToken) => {
   try {
     const response = await fetch('https://api.late.co/v1/posts', {
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
     });
 
     if (!response.ok) {
@@ -146,7 +149,7 @@ export const syncAnalytics = async (artistId, videos, accessToken) => {
   const today = now.split('T')[0];
 
   // Fetch analytics for each video that has a latePostId
-  const videosWithLate = videos.filter(v => v.latePostId);
+  const videosWithLate = videos.filter((v) => v.latePostId);
 
   for (const video of videosWithLate) {
     try {
@@ -172,7 +175,7 @@ export const syncAnalytics = async (artistId, videos, accessToken) => {
           reach: analytics.reach || 0,
           impressions: analytics.impressions || 0,
           engagementRate: analytics.engagement_rate || 0,
-          updatedAt: now
+          updatedAt: now,
         };
       }
     } catch (error) {
@@ -181,13 +184,13 @@ export const syncAnalytics = async (artistId, videos, accessToken) => {
   }
 
   // Create a daily snapshot for time-series
-  const existingSnapshotIndex = stored.snapshots.findIndex(s => s.date === today);
+  const existingSnapshotIndex = stored.snapshots.findIndex((s) => s.date === today);
   const totalStats = calculateTotalStats(stored.videos);
 
   const snapshot = {
     date: today,
     ...totalStats,
-    videoCount: Object.keys(stored.videos).length
+    videoCount: Object.keys(stored.videos).length,
   };
 
   if (existingSnapshotIndex >= 0) {
@@ -214,9 +217,10 @@ export const calculateTotalStats = (videos) => {
     totalLikes: videoList.reduce((sum, v) => sum + (v.likes || 0), 0),
     totalComments: videoList.reduce((sum, v) => sum + (v.comments || 0), 0),
     totalShares: videoList.reduce((sum, v) => sum + (v.shares || 0), 0),
-    avgEngagement: videoList.length > 0
-      ? videoList.reduce((sum, v) => sum + (v.engagementRate || 0), 0) / videoList.length
-      : 0
+    avgEngagement:
+      videoList.length > 0
+        ? videoList.reduce((sum, v) => sum + (v.engagementRate || 0), 0) / videoList.length
+        : 0,
   };
 };
 
@@ -230,9 +234,7 @@ export const getTopVideos = (artistId, limit = 10, sortBy = 'views') => {
   const stored = getStoredAnalytics(artistId);
   const videos = Object.values(stored.videos);
 
-  return videos
-    .sort((a, b) => (b[sortBy] || 0) - (a[sortBy] || 0))
-    .slice(0, limit);
+  return videos.sort((a, b) => (b[sortBy] || 0) - (a[sortBy] || 0)).slice(0, limit);
 };
 
 /**
@@ -259,7 +261,7 @@ export const getSongPerformance = (artistId) => {
         totalLikes: 0,
         totalComments: 0,
         totalShares: 0,
-        avgEngagement: 0
+        avgEngagement: 0,
       };
     }
 
@@ -271,16 +273,17 @@ export const getSongPerformance = (artistId) => {
   }
 
   // Calculate averages and find top video for each song
-  const songs = Object.values(songMap).map(song => {
+  const songs = Object.values(songMap).map((song) => {
     const videoCount = song.videos.length;
     return {
       ...song,
       videoCount,
       avgViewsPerVideo: videoCount > 0 ? Math.round(song.totalViews / videoCount) : 0,
-      avgEngagement: videoCount > 0
-        ? song.videos.reduce((sum, v) => sum + (v.engagementRate || 0), 0) / videoCount
-        : 0,
-      topVideo: song.videos.sort((a, b) => (b.views || 0) - (a.views || 0))[0] || null
+      avgEngagement:
+        videoCount > 0
+          ? song.videos.reduce((sum, v) => sum + (v.engagementRate || 0), 0) / videoCount
+          : 0,
+      topVideo: song.videos.sort((a, b) => (b.views || 0) - (a.views || 0))[0] || null,
     };
   });
 
@@ -310,7 +313,7 @@ export const getCategoryPerformance = (artistId) => {
         totalViews: 0,
         totalLikes: 0,
         totalComments: 0,
-        avgEngagement: 0
+        avgEngagement: 0,
       };
     }
 
@@ -321,12 +324,13 @@ export const getCategoryPerformance = (artistId) => {
   }
 
   // Calculate averages
-  const categories = Object.values(categoryMap).map(cat => ({
+  const categories = Object.values(categoryMap).map((cat) => ({
     ...cat,
     videoCount: cat.videos.length,
-    avgEngagement: cat.videos.length > 0
-      ? cat.videos.reduce((sum, v) => sum + (v.engagementRate || 0), 0) / cat.videos.length
-      : 0
+    avgEngagement:
+      cat.videos.length > 0
+        ? cat.videos.reduce((sum, v) => sum + (v.engagementRate || 0), 0) / cat.videos.length
+        : 0,
   }));
 
   return categories.sort((a, b) => b.totalViews - a.totalViews);
@@ -356,7 +360,7 @@ export const getAccountPerformance = (artistId) => {
         totalViews: 0,
         totalLikes: 0,
         totalComments: 0,
-        avgEngagement: 0
+        avgEngagement: 0,
       };
     }
 
@@ -367,12 +371,13 @@ export const getAccountPerformance = (artistId) => {
   }
 
   // Calculate averages
-  const accounts = Object.values(accountMap).map(acc => ({
+  const accounts = Object.values(accountMap).map((acc) => ({
     ...acc,
     videoCount: acc.videos.length,
-    avgEngagement: acc.videos.length > 0
-      ? acc.videos.reduce((sum, v) => sum + (v.engagementRate || 0), 0) / acc.videos.length
-      : 0
+    avgEngagement:
+      acc.videos.length > 0
+        ? acc.videos.reduce((sum, v) => sum + (v.engagementRate || 0), 0) / acc.videos.length
+        : 0,
   }));
 
   return accounts.sort((a, b) => b.totalViews - a.totalViews);
@@ -394,7 +399,7 @@ export const getTimeSeriesData = (artistId, period = 'daily', days = 30) => {
   const cutoffStr = cutoffDate.toISOString().split('T')[0];
 
   const recentSnapshots = snapshots
-    .filter(s => s.date >= cutoffStr)
+    .filter((s) => s.date >= cutoffStr)
     .sort((a, b) => a.date.localeCompare(b.date));
 
   if (period === 'weekly') {
@@ -427,7 +432,7 @@ export const getTimeSeriesData = (artistId, period = 'daily', days = 30) => {
  */
 export const getSongAnalytics = (artistId, audioId) => {
   const stored = getStoredAnalytics(artistId);
-  const videos = Object.values(stored.videos).filter(v => v.audioId === audioId);
+  const videos = Object.values(stored.videos).filter((v) => v.audioId === audioId);
 
   if (videos.length === 0) return null;
 
@@ -442,19 +447,21 @@ export const getSongAnalytics = (artistId, audioId) => {
     totalComments: videos.reduce((sum, v) => sum + (v.comments || 0), 0),
     totalShares: videos.reduce((sum, v) => sum + (v.shares || 0), 0),
     videoCount: videos.length,
-    avgViewsPerVideo: Math.round(videos.reduce((sum, v) => sum + (v.views || 0), 0) / videos.length),
+    avgViewsPerVideo: Math.round(
+      videos.reduce((sum, v) => sum + (v.views || 0), 0) / videos.length,
+    ),
     avgEngagement: videos.reduce((sum, v) => sum + (v.engagementRate || 0), 0) / videos.length,
     // Group by category
     categoryBreakdown: getCategoryBreakdownForSong(videos),
     // Performance timeline (using video posted dates)
     timeline: videos
-      .filter(v => v.postedAt)
+      .filter((v) => v.postedAt)
       .sort((a, b) => new Date(a.postedAt) - new Date(b.postedAt))
-      .map(v => ({
+      .map((v) => ({
         date: v.postedAt.split('T')[0],
         views: v.views,
-        videoName: v.videoName
-      }))
+        videoName: v.videoName,
+      })),
   };
 };
 
@@ -470,7 +477,7 @@ const getCategoryBreakdownForSong = (videos) => {
         categoryId: catId,
         categoryName: video.categoryName || 'Uncategorized',
         videoCount: 0,
-        totalViews: 0
+        totalViews: 0,
       };
     }
     catMap[catId].videoCount++;
@@ -485,7 +492,7 @@ const getCategoryBreakdownForSong = (videos) => {
  */
 export const addMockData = (artistId) => {
   const mockVideos = {
-    'video_1': {
+    video_1: {
       videoId: 'video_1',
       videoName: 'Summer Vibes',
       audioId: 'audio_droptop',
@@ -499,9 +506,9 @@ export const addMockData = (artistId) => {
       comments: 420,
       shares: 890,
       engagementRate: 8.2,
-      postedAt: '2026-01-15T14:00:00Z'
+      postedAt: '2026-01-15T14:00:00Z',
     },
-    'video_2': {
+    video_2: {
       videoId: 'video_2',
       videoName: 'Runway Walk',
       audioId: 'audio_stay',
@@ -515,9 +522,9 @@ export const addMockData = (artistId) => {
       comments: 310,
       shares: 520,
       engagementRate: 7.8,
-      postedAt: '2026-01-20T16:00:00Z'
+      postedAt: '2026-01-20T16:00:00Z',
     },
-    'video_3': {
+    video_3: {
       videoId: 'video_3',
       videoName: 'EDM Festival',
       audioId: 'audio_droptop',
@@ -531,9 +538,9 @@ export const addMockData = (artistId) => {
       comments: 280,
       shares: 610,
       engagementRate: 9.1,
-      postedAt: '2026-01-25T18:00:00Z'
+      postedAt: '2026-01-25T18:00:00Z',
     },
-    'video_4': {
+    video_4: {
       videoId: 'video_4',
       videoName: 'Night Drive',
       audioId: 'audio_droptop',
@@ -547,9 +554,9 @@ export const addMockData = (artistId) => {
       comments: 190,
       shares: 340,
       engagementRate: 8.5,
-      postedAt: '2026-01-28T20:00:00Z'
+      postedAt: '2026-01-28T20:00:00Z',
     },
-    'video_5': {
+    video_5: {
       videoId: 'video_5',
       videoName: 'Beach Day',
       audioId: 'audio_audit',
@@ -563,8 +570,8 @@ export const addMockData = (artistId) => {
       comments: 150,
       shares: 280,
       engagementRate: 7.4,
-      postedAt: '2026-02-01T12:00:00Z'
-    }
+      postedAt: '2026-02-01T12:00:00Z',
+    },
   };
 
   // Generate mock snapshots for the last 30 days
@@ -588,7 +595,7 @@ export const addMockData = (artistId) => {
       totalComments: Math.round(1200 * variation * growth),
       totalShares: Math.round(2500 * variation * growth),
       avgEngagement: 7.5 + Math.sin(i / 3) * 1.5,
-      videoCount: 5
+      videoCount: 5,
     });
   }
 
@@ -608,5 +615,5 @@ export default {
   getAccountPerformance,
   getTimeSeriesData,
   getSongAnalytics,
-  addMockData
+  addMockData,
 };

@@ -32,7 +32,7 @@ const MomentumSelector = ({
   onCancel,
 }) => {
   const { theme } = useTheme();
-  const styles = getStyles(theme);
+  const styles = useMemo(() => getStyles(theme), [theme]);
 
   const [preset, setPreset] = useState('story');
   const [analyzing, setAnalyzing] = useState(true);
@@ -115,7 +115,7 @@ const MomentumSelector = ({
       ctx.font = '9px sans-serif';
       const label = seg.isHigh ? 'HIGH' : 'LOW';
       const lw = ctx.measureText(label).width;
-      if ((x2 - x1) > lw + 8) {
+      if (x2 - x1 > lw + 8) {
         ctx.fillText(label, x1 + (x2 - x1 - lw) / 2, height - 3);
       }
     }
@@ -208,26 +208,23 @@ const MomentumSelector = ({
         <div style={styles.header}>
           <div style={styles.headerIcon}>🎵</div>
           <div>
-            <h2 style={styles.title}>
-              Cut to music{!analyzing && ` (${cutPoints.length} cuts)`}
-            </h2>
-            <p style={styles.subtitle}>
-              Match cuts to the energy and flow of the song.
-            </p>
+            <h2 style={styles.title}>Cut to music{!analyzing && ` (${cutPoints.length} cuts)`}</h2>
+            <p style={styles.subtitle}>Match cuts to the energy and flow of the song.</p>
           </div>
           <IconButton icon={<FeatherX />} onClick={onCancel} />
         </div>
 
         {/* Presets */}
         <div style={styles.presets}>
-          {PRESETS.map(p => (
+          {PRESETS.map((p) => (
             <button
               key={p.id}
               style={preset === p.id ? styles.presetActive : styles.preset}
               onClick={() => setPreset(p.id)}
               title={p.desc}
             >
-              {p.label}{preset === p.id ? ' ✓' : ''}
+              {p.label}
+              {preset === p.id ? ' ✓' : ''}
             </button>
           ))}
         </div>
@@ -253,10 +250,14 @@ const MomentumSelector = ({
         {/* Footer */}
         <div style={styles.footer}>
           <span style={styles.beatCount}>
-            {analyzing ? 'Analyzing...' : `${cutPoints.length} cuts · ${effectiveDuration.toFixed(0)}s`}
+            {analyzing
+              ? 'Analyzing...'
+              : `${cutPoints.length} cuts · ${effectiveDuration.toFixed(0)}s`}
           </span>
           <div style={styles.footerActions}>
-            <Button variant="neutral-secondary" onClick={onCancel}>Cancel</Button>
+            <Button variant="neutral-secondary" onClick={onCancel}>
+              Cancel
+            </Button>
             <Button
               variant="brand-primary"
               icon={<FeatherCheck />}

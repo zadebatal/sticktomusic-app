@@ -11,7 +11,7 @@ const lateApi = {
         ? `${LATE_API_PROXY}?action=accounts&artistId=${artistId}`
         : `${LATE_API_PROXY}?action=accounts`;
       const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) throw new Error(`Failed: ${response.status}`);
       const data = await response.json();
@@ -23,14 +23,25 @@ const lateApi = {
     }
   },
 
-  async schedulePost({ platforms, caption, videoUrl, scheduledFor, artistId = null, type = 'video', images = null, audioUrl = null }) {
+  async schedulePost({
+    platforms,
+    caption,
+    videoUrl,
+    scheduledFor,
+    artistId = null,
+    type = 'video',
+    images = null,
+    audioUrl = null,
+  }) {
     try {
       const token = await getFirebaseToken();
       if (!platforms || !Array.isArray(platforms) || platforms.length === 0) {
         throw new Error('No platforms selected for posting. Please select TikTok or Instagram.');
       }
       if (type !== 'carousel' && !videoUrl) {
-        throw new Error('No video URL provided. The video must be rendered/exported before posting.');
+        throw new Error(
+          'No video URL provided. The video must be rendered/exported before posting.',
+        );
       }
       if (type === 'carousel' && (!images || images.length === 0)) {
         throw new Error('No carousel images provided');
@@ -39,21 +50,22 @@ const lateApi = {
         throw new Error('No schedule time provided');
       }
 
-      const mediaItems = type === 'carousel'
-        ? images.map(img => ({ type: 'image', url: img.url }))
-        : [{ type: 'video', url: videoUrl }];
+      const mediaItems =
+        type === 'carousel'
+          ? images.map((img) => ({ type: 'image', url: img.url }))
+          : [{ type: 'video', url: videoUrl }];
 
-      const hasTikTok = platforms.some(p => p.platform === 'tiktok');
+      const hasTikTok = platforms.some((p) => p.platform === 'tiktok');
       const isCarousel = type === 'carousel';
       const payload = {
         content: caption || '',
         mediaItems,
-        platforms: platforms.map(p => ({
+        platforms: platforms.map((p) => ({
           platform: p.platform,
-          accountId: p.accountId
+          accountId: p.accountId,
         })),
         scheduledFor,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles',
       };
 
       if (hasTikTok) {
@@ -67,9 +79,9 @@ const lateApi = {
                 draft: true,
                 mediaType: 'photo',
                 photoCoverIndex: 0,
-                autoAddMusic: true
+                autoAddMusic: true,
               }
-            : { allowDuet: true, allowStitch: true })
+            : { allowDuet: true, allowStitch: true }),
         };
       }
 
@@ -82,9 +94,9 @@ const lateApi = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
@@ -110,7 +122,7 @@ const lateApi = {
           : `${LATE_API_PROXY}?action=posts&page=${currentPage}`;
         log('Fetching Late posts from:', url);
         const response = await fetch(url, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
         log('Late API response status:', response.status);
         if (!response.ok) throw new Error(`Failed: ${response.status}`);
@@ -145,7 +157,7 @@ const lateApi = {
         : `${LATE_API_PROXY}?action=delete&postId=${postId}`;
       const response = await fetch(url, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
@@ -156,7 +168,7 @@ const lateApi = {
       log.warn('[Late] deletePost:', error.message);
       return { success: false, error: error.message };
     }
-  }
+  },
 };
 
 export default lateApi;

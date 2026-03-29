@@ -22,13 +22,13 @@ import {
   syncSpotifyData,
   getSpotifyConfig,
   saveSpotifyConfig,
-  calculateMomentumScore
+  calculateMomentumScore,
 } from '../../services/spotifyService';
 import {
   computeAttribution,
   getTopGrowthDrivers,
   getVideoAttributionSummary,
-  getSongAttributionSummary
+  getSongAttributionSummary,
 } from '../../services/spotifyAttributionService';
 
 // ============================================
@@ -40,7 +40,7 @@ export const ConfidenceBadge = ({ level, score }) => {
     High: { bg: 'rgba(16, 185, 129, 0.15)', text: '#10b981', border: 'rgba(16, 185, 129, 0.3)' },
     Medium: { bg: 'rgba(245, 158, 11, 0.15)', text: '#f59e0b', border: 'rgba(245, 158, 11, 0.3)' },
     Low: { bg: 'rgba(107, 114, 128, 0.15)', text: '#9ca3af', border: 'rgba(107, 114, 128, 0.3)' },
-    None: { bg: 'rgba(55, 65, 81, 0.15)', text: '#6b7280', border: 'rgba(55, 65, 81, 0.3)' }
+    None: { bg: 'rgba(55, 65, 81, 0.15)', text: '#6b7280', border: 'rgba(55, 65, 81, 0.3)' },
   };
 
   const color = colors[level] || colors.None;
@@ -57,7 +57,7 @@ export const ConfidenceBadge = ({ level, score }) => {
         borderRadius: '4px',
         fontSize: '11px',
         fontWeight: '600',
-        color: color.text
+        color: color.text,
       }}
       title={`Confidence Score: ${score || 0}/100`}
     >
@@ -146,16 +146,20 @@ export const SpotifyMomentumCard = ({ artistId }) => {
           <div style={styles.momentumStatLabel}>Followers</div>
           <div style={styles.momentumStatValue}>{formatNumber(followers.current)}</div>
           <div style={styles.momentumDeltas}>
-            <span style={{
-              ...styles.deltaChip,
-              color: followers.delta24h >= 0 ? '#10b981' : '#ef4444'
-            }}>
+            <span
+              style={{
+                ...styles.deltaChip,
+                color: followers.delta24h >= 0 ? '#10b981' : '#ef4444',
+              }}
+            >
               24h: {formatDelta(followers.delta24h)}
             </span>
-            <span style={{
-              ...styles.deltaChip,
-              color: followers.delta7d >= 0 ? '#10b981' : '#ef4444'
-            }}>
+            <span
+              style={{
+                ...styles.deltaChip,
+                color: followers.delta7d >= 0 ? '#10b981' : '#ef4444',
+              }}
+            >
               7d: {formatDelta(followers.delta7d)}
             </span>
           </div>
@@ -166,13 +170,12 @@ export const SpotifyMomentumCard = ({ artistId }) => {
           <div style={styles.momentumStatLabel}>Track Momentum</div>
           <div style={styles.momentumStatValue}>
             {data.tracks && data.tracks.length > 0
-              ? formatDelta(Math.round(data.tracks.reduce((sum, t) => sum + t.delta, 0) / data.tracks.length))
-              : '—'
-            }
+              ? formatDelta(
+                  Math.round(data.tracks.reduce((sum, t) => sum + t.delta, 0) / data.tracks.length),
+                )
+              : '—'}
           </div>
-          <div style={styles.momentumSubtext}>
-            avg popularity Δ (24h)
-          </div>
+          <div style={styles.momentumSubtext}>avg popularity Δ (24h)</div>
         </div>
 
         {/* Momentum Score */}
@@ -181,7 +184,7 @@ export const SpotifyMomentumCard = ({ artistId }) => {
           <div
             style={{
               ...styles.momentumScore,
-              color: getMomentumColor(momentum.overall)
+              color: getMomentumColor(momentum.overall),
             }}
           >
             {momentum.overall}
@@ -191,7 +194,7 @@ export const SpotifyMomentumCard = ({ artistId }) => {
               style={{
                 ...styles.momentumScoreFill,
                 width: `${momentum.overall}%`,
-                backgroundColor: getMomentumColor(momentum.overall)
+                backgroundColor: getMomentumColor(momentum.overall),
               }}
             />
           </div>
@@ -236,7 +239,7 @@ export const GrowthDriversCard = ({ artistId }) => {
       instagram: '📸',
       youtube: '▶️',
       twitter: '🐦',
-      facebook: '👤'
+      facebook: '👤',
     };
     return icons[platform?.toLowerCase()] || '📱';
   };
@@ -271,9 +274,7 @@ export const GrowthDriversCard = ({ artistId }) => {
           {drivers.map((driver, i) => (
             <div key={driver.id || i} style={styles.driverRow}>
               <div style={styles.driverRank}>{i + 1}</div>
-              <span style={styles.driverPlatform}>
-                {getPlatformIcon(driver.platform)}
-              </span>
+              <span style={styles.driverPlatform}>{getPlatformIcon(driver.platform)}</span>
               <div style={styles.driverInfo}>
                 <span style={styles.driverName}>
                   {driver.name || driver.videoName || 'Unknown Post'}
@@ -321,7 +322,7 @@ export const TimelineOverlayChart = ({ artistId, days = 30 }) => {
         // Get content posts from per-artist analytics
         const analytics = getStoredAnalytics(artistId);
         const videos = Object.values(analytics.videos || {});
-        setContentPosts(videos.filter(v => v.postedAt));
+        setContentPosts(videos.filter((v) => v.postedAt));
       } catch (error) {
         log.error('Error loading timeline:', error);
       }
@@ -342,7 +343,7 @@ export const TimelineOverlayChart = ({ artistId, days = 30 }) => {
   }
 
   // Calculate bounds for chart
-  const followers = timelineData.map(d => d.followers || 0);
+  const followers = timelineData.map((d) => d.followers || 0);
   const minFollowers = Math.min(...followers);
   const maxFollowers = Math.max(...followers);
   const range = maxFollowers - minFollowers || 1;
@@ -351,7 +352,7 @@ export const TimelineOverlayChart = ({ artistId, days = 30 }) => {
   const timelineStart = new Date(timelineData[0]?.date);
   const timelineEnd = new Date(timelineData[timelineData.length - 1]?.date);
 
-  const postsInRange = contentPosts.filter(post => {
+  const postsInRange = contentPosts.filter((post) => {
     const postDate = new Date(post.postedAt);
     return postDate >= timelineStart && postDate <= timelineEnd;
   });
@@ -380,7 +381,7 @@ export const TimelineOverlayChart = ({ artistId, days = 30 }) => {
         <div style={styles.chartArea}>
           {/* Grid lines */}
           <div style={styles.gridLines}>
-            {[0, 25, 50, 75, 100].map(pct => (
+            {[0, 25, 50, 75, 100].map((pct) => (
               <div key={pct} style={{ ...styles.gridLine, bottom: `${pct}%` }} />
             ))}
           </div>
@@ -388,11 +389,13 @@ export const TimelineOverlayChart = ({ artistId, days = 30 }) => {
           {/* Followers line */}
           <svg style={styles.lineSvg} viewBox={`0 0 100 100`} preserveAspectRatio="none">
             <path
-              d={timelineData.map((d, i) => {
-                const x = (i / (timelineData.length - 1)) * 100;
-                const y = 100 - ((d.followers - minFollowers) / range) * 100;
-                return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-              }).join(' ')}
+              d={timelineData
+                .map((d, i) => {
+                  const x = (i / (timelineData.length - 1)) * 100;
+                  const y = 100 - ((d.followers - minFollowers) / range) * 100;
+                  return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+                })
+                .join(' ')}
               fill="none"
               stroke="#10b981"
               strokeWidth="2"
@@ -408,7 +411,7 @@ export const TimelineOverlayChart = ({ artistId, days = 30 }) => {
                 key={post.videoId || i}
                 style={{
                   ...styles.postMarker,
-                  left: `${xPos}%`
+                  left: `${xPos}%`,
                 }}
                 onMouseEnter={() => setHoveredPoint(post)}
                 onMouseLeave={() => setHoveredPoint(null)}
@@ -439,9 +442,11 @@ export const TimelineOverlayChart = ({ artistId, days = 30 }) => {
 
       {/* X-axis labels */}
       <div style={styles.xAxisLabels}>
-        {timelineData.filter((_, i) => i % Math.ceil(timelineData.length / 5) === 0).map((d, i) => (
-          <span key={i}>{d.date?.slice(5) || ''}</span>
-        ))}
+        {timelineData
+          .filter((_, i) => i % Math.ceil(timelineData.length / 5) === 0)
+          .map((d, i) => (
+            <span key={i}>{d.date?.slice(5) || ''}</span>
+          ))}
       </div>
 
       {/* Legend */}
@@ -486,11 +491,13 @@ export const SpotifySetupCard = ({ artistId, onConfigured }) => {
     try {
       // Call the validation endpoint
       const token = await getFirebaseToken();
-      const params = new URLSearchParams({ action: 'validateArtist', spotifyArtistId: spotifyArtistId.trim() });
-      const response = await fetch(
-        `/api/spotify?${params}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const params = new URLSearchParams({
+        action: 'validateArtist',
+        spotifyArtistId: spotifyArtistId.trim(),
+      });
+      const response = await fetch(`/api/spotify?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       const result = await response.json();
       setValidationResult(result);
@@ -509,7 +516,7 @@ export const SpotifySetupCard = ({ artistId, onConfigured }) => {
       const config = {
         spotifyArtistId: spotifyArtistId.trim(),
         artistName: validationResult.artist.name,
-        configuredAt: new Date().toISOString()
+        configuredAt: new Date().toISOString(),
       };
 
       saveSpotifyConfig(artistId, config);
@@ -531,8 +538,8 @@ export const SpotifySetupCard = ({ artistId, onConfigured }) => {
       </div>
 
       <p style={styles.setupDescription}>
-        Link your Spotify Artist ID to track follower growth and momentum.
-        Find your Artist ID in your Spotify for Artists dashboard or artist URL.
+        Link your Spotify Artist ID to track follower growth and momentum. Find your Artist ID in
+        your Spotify for Artists dashboard or artist URL.
       </p>
 
       <div style={styles.setupInputRow}>
@@ -543,31 +550,39 @@ export const SpotifySetupCard = ({ artistId, onConfigured }) => {
           placeholder="e.g., 0OdUWJ0sBjDrqHygGUXeCF"
           style={styles.setupInput}
         />
-        <Button variant="neutral-secondary" onClick={handleValidate} disabled={isValidating || !spotifyArtistId.trim()} loading={isValidating}>
+        <Button
+          variant="neutral-secondary"
+          onClick={handleValidate}
+          disabled={isValidating || !spotifyArtistId.trim()}
+          loading={isValidating}
+        >
           {isValidating ? 'Checking...' : 'Validate'}
         </Button>
       </div>
 
       {validationResult && (
-        <div style={{
-          ...styles.validationResult,
-          backgroundColor: validationResult.valid
-            ? 'rgba(16, 185, 129, 0.1)'
-            : 'rgba(239, 68, 68, 0.1)',
-          borderColor: validationResult.valid
-            ? 'rgba(16, 185, 129, 0.3)'
-            : 'rgba(239, 68, 68, 0.3)'
-        }}>
+        <div
+          style={{
+            ...styles.validationResult,
+            backgroundColor: validationResult.valid
+              ? 'rgba(16, 185, 129, 0.1)'
+              : 'rgba(239, 68, 68, 0.1)',
+            borderColor: validationResult.valid
+              ? 'rgba(16, 185, 129, 0.3)'
+              : 'rgba(239, 68, 68, 0.3)',
+          }}
+        >
           {validationResult.valid ? (
             <>
               <div style={styles.validatedArtist}>
-                {validationResult.artist.images?.[0] && /^https?:\/\//.test(validationResult.artist.images[0].url) && (
-                  <img
-                    src={validationResult.artist.images[0].url}
-                    alt=""
-                    style={styles.artistImage}
-                  />
-                )}
+                {validationResult.artist.images?.[0] &&
+                  /^https?:\/\//.test(validationResult.artist.images[0].url) && (
+                    <img
+                      src={validationResult.artist.images[0].url}
+                      alt=""
+                      style={styles.artistImage}
+                    />
+                  )}
                 <div>
                   <strong>{validationResult.artist.name}</strong>
                   <br />
@@ -578,7 +593,12 @@ export const SpotifySetupCard = ({ artistId, onConfigured }) => {
                   </span>
                 </div>
               </div>
-              <Button variant="brand-primary" onClick={handleSave} disabled={isSaving} loading={isSaving}>
+              <Button
+                variant="brand-primary"
+                onClick={handleSave}
+                disabled={isSaving}
+                loading={isSaving}
+              >
                 {isSaving ? 'Saving...' : 'Save & Connect'}
               </Button>
             </>
@@ -690,14 +710,17 @@ export const SpotifyTab = ({ artistId }) => {
       {/* Header with sync button */}
       <div style={styles.spotifyHeader}>
         <div>
-          <h2 style={styles.spotifyTitle}>
-            🎧 {config?.artistName || 'Spotify Analytics'}
-          </h2>
+          <h2 style={styles.spotifyTitle}>🎧 {config?.artistName || 'Spotify Analytics'}</h2>
           <span style={styles.lastSyncText}>
             Last synced: {lastSync ? new Date(lastSync).toLocaleString() : 'Never'}
           </span>
         </div>
-        <Button variant="neutral-secondary" onClick={handleSync} disabled={isSyncing} loading={isSyncing}>
+        <Button
+          variant="neutral-secondary"
+          onClick={handleSync}
+          disabled={isSyncing}
+          loading={isSyncing}
+        >
           {isSyncing ? 'Syncing...' : 'Sync Spotify Data'}
         </Button>
       </div>
@@ -710,10 +733,12 @@ export const SpotifyTab = ({ artistId }) => {
             {formatNumber(overview?.followers?.current || 0)}
           </div>
           <div style={styles.spotifyStatLabel}>Followers</div>
-          <div style={{
-            ...styles.spotifyStatDelta,
-            color: (overview?.followers?.delta7d || 0) >= 0 ? '#10b981' : '#ef4444'
-          }}>
+          <div
+            style={{
+              ...styles.spotifyStatDelta,
+              color: (overview?.followers?.delta7d || 0) >= 0 ? '#10b981' : '#ef4444',
+            }}
+          >
             {(overview?.followers?.delta7d || 0) >= 0 ? '+' : ''}
             {formatNumber(overview?.followers?.delta7d || 0)} (7d)
           </div>
@@ -721,35 +746,23 @@ export const SpotifyTab = ({ artistId }) => {
 
         <div style={styles.spotifyStat}>
           <div style={styles.spotifyStatIcon}>🎯</div>
-          <div style={styles.spotifyStatValue}>
-            {overview?.momentum?.overall || 0}
-          </div>
+          <div style={styles.spotifyStatValue}>{overview?.momentum?.overall || 0}</div>
           <div style={styles.spotifyStatLabel}>Momentum Score</div>
-          <div style={styles.spotifyStatDelta}>
-            0-100 scale
-          </div>
+          <div style={styles.spotifyStatDelta}>0-100 scale</div>
         </div>
 
         <div style={styles.spotifyStat}>
           <div style={styles.spotifyStatIcon}>🎵</div>
-          <div style={styles.spotifyStatValue}>
-            {overview?.tracks?.length || 0}
-          </div>
+          <div style={styles.spotifyStatValue}>{overview?.tracks?.length || 0}</div>
           <div style={styles.spotifyStatLabel}>Tracked Tracks</div>
-          <div style={styles.spotifyStatDelta}>
-            with momentum data
-          </div>
+          <div style={styles.spotifyStatDelta}>with momentum data</div>
         </div>
 
         <div style={styles.spotifyStat}>
           <div style={styles.spotifyStatIcon}>📈</div>
-          <div style={styles.spotifyStatValue}>
-            {overview?.growthEvents?.length || 0}
-          </div>
+          <div style={styles.spotifyStatValue}>{overview?.growthEvents?.length || 0}</div>
           <div style={styles.spotifyStatLabel}>Growth Events</div>
-          <div style={styles.spotifyStatDelta}>
-            detected this period
-          </div>
+          <div style={styles.spotifyStatDelta}>detected this period</div>
         </div>
       </div>
 
@@ -806,26 +819,20 @@ export const SpotifyTab = ({ artistId }) => {
                 <span style={{ ...styles.attrTableCell, flex: 2, fontWeight: '500' }}>
                   {video.videoName}
                 </span>
-                <span style={styles.attrTableCell}>
-                  {video.audioName?.slice(0, 15) || '—'}...
+                <span style={styles.attrTableCell}>{video.audioName?.slice(0, 15) || '—'}...</span>
+                <span style={styles.attrTableCell}>{video.platform}</span>
+                <span
+                  style={{
+                    ...styles.attrTableCell,
+                    color: video.spotifyLift7d > 0 ? '#10b981' : '#6b7280',
+                  }}
+                >
+                  {video.spotifyLift7d > 0 ? '+' : ''}
+                  {video.spotifyLift7d.toFixed(1)}
                 </span>
+                <span style={styles.attrTableCell}>{video.contributionPct.toFixed(1)}%</span>
                 <span style={styles.attrTableCell}>
-                  {video.platform}
-                </span>
-                <span style={{
-                  ...styles.attrTableCell,
-                  color: video.spotifyLift7d > 0 ? '#10b981' : '#6b7280'
-                }}>
-                  {video.spotifyLift7d > 0 ? '+' : ''}{video.spotifyLift7d.toFixed(1)}
-                </span>
-                <span style={styles.attrTableCell}>
-                  {video.contributionPct.toFixed(1)}%
-                </span>
-                <span style={styles.attrTableCell}>
-                  <ConfidenceBadge
-                    level={video.confidenceLabel}
-                    score={video.confidenceScore}
-                  />
+                  <ConfidenceBadge level={video.confidenceLabel} score={video.confidenceScore} />
                 </span>
                 <span style={styles.attrTableCell}>
                   {video.timeToImpact ? `${video.timeToImpact}h` : '—'}
@@ -840,10 +847,10 @@ export const SpotifyTab = ({ artistId }) => {
       <div style={styles.fullDisclaimer}>
         <strong>⚠️ Attribution Methodology</strong>
         <p>
-          Attribution scores are calculated using engagement quality, timing correlation,
-          song matching, and platform weights. Results show probabilistic correlation,
-          not proven causation. Confidence levels (High/Medium/Low) reflect the strength
-          of the correlation signal. Use these insights directionally, not as absolute metrics.
+          Attribution scores are calculated using engagement quality, timing correlation, song
+          matching, and platform weights. Results show probabilistic correlation, not proven
+          causation. Confidence levels (High/Medium/Low) reflect the strength of the correlation
+          signal. Use these insights directionally, not as absolute metrics.
         </p>
       </div>
     </div>
@@ -860,77 +867,77 @@ const styles = {
     backgroundColor: '#111118',
     border: '1px solid #1f1f2e',
     borderRadius: '12px',
-    padding: '20px'
+    padding: '20px',
   },
   cardHeader: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    marginBottom: '16px'
+    marginBottom: '16px',
   },
   spotifyIcon: {
-    fontSize: '20px'
+    fontSize: '20px',
   },
   cardTitleText: {
     fontSize: '16px',
     fontWeight: '600',
-    color: '#fff'
+    color: '#fff',
   },
   infoTooltip: {
     marginLeft: 'auto',
     cursor: 'help',
-    opacity: 0.6
+    opacity: 0.6,
   },
   momentumGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '20px'
+    gap: '20px',
   },
   momentumStat: {
-    textAlign: 'center'
+    textAlign: 'center',
   },
   momentumStatLabel: {
     fontSize: '12px',
     color: '#6b7280',
-    marginBottom: '4px'
+    marginBottom: '4px',
   },
   momentumStatValue: {
     fontSize: '24px',
     fontWeight: '700',
     color: '#fff',
-    marginBottom: '4px'
+    marginBottom: '4px',
   },
   momentumDeltas: {
     display: 'flex',
     gap: '8px',
-    justifyContent: 'center'
+    justifyContent: 'center',
   },
   deltaChip: {
     fontSize: '11px',
-    fontWeight: '600'
+    fontWeight: '600',
   },
   momentumSubtext: {
     fontSize: '11px',
-    color: '#6b7280'
+    color: '#6b7280',
   },
   momentumScoreContainer: {
-    textAlign: 'center'
+    textAlign: 'center',
   },
   momentumScore: {
     fontSize: '36px',
     fontWeight: '700',
-    marginBottom: '8px'
+    marginBottom: '8px',
   },
   momentumScoreBar: {
     height: '6px',
     backgroundColor: '#1f1f2e',
     borderRadius: '3px',
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   momentumScoreFill: {
     height: '100%',
     borderRadius: '3px',
-    transition: 'width 0.3s'
+    transition: 'width 0.3s',
   },
 
   // Growth Drivers Card
@@ -938,12 +945,12 @@ const styles = {
     backgroundColor: '#111118',
     border: '1px solid #1f1f2e',
     borderRadius: '12px',
-    padding: '20px'
+    padding: '20px',
   },
   driversList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px'
+    gap: '8px',
   },
   driverRow: {
     display: 'flex',
@@ -951,7 +958,7 @@ const styles = {
     gap: '12px',
     padding: '12px',
     backgroundColor: '#0a0a0f',
-    borderRadius: '8px'
+    borderRadius: '8px',
   },
   driverRank: {
     width: '24px',
@@ -963,14 +970,14 @@ const styles = {
     justifyContent: 'center',
     fontSize: '12px',
     fontWeight: '600',
-    color: '#9ca3af'
+    color: '#9ca3af',
   },
   driverPlatform: {
-    fontSize: '18px'
+    fontSize: '18px',
   },
   driverInfo: {
     flex: 1,
-    minWidth: 0
+    minWidth: 0,
   },
   driverName: {
     display: 'block',
@@ -979,21 +986,21 @@ const styles = {
     color: '#fff',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
-    textOverflow: 'ellipsis'
+    textOverflow: 'ellipsis',
   },
   driverMeta: {
     fontSize: '11px',
-    color: '#6b7280'
+    color: '#6b7280',
   },
   driverStats: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px'
+    gap: '12px',
   },
   driverContribution: {
     fontSize: '14px',
     fontWeight: '600',
-    color: '#10b981'
+    color: '#10b981',
   },
   attributionDisclaimer: {
     marginTop: '12px',
@@ -1002,7 +1009,7 @@ const styles = {
     borderRadius: '6px',
     fontSize: '11px',
     color: '#f59e0b',
-    textAlign: 'center'
+    textAlign: 'center',
   },
 
   // Timeline Chart
@@ -1011,18 +1018,18 @@ const styles = {
     border: '1px solid #1f1f2e',
     borderRadius: '12px',
     padding: '20px',
-    marginBottom: '24px'
+    marginBottom: '24px',
   },
   cardTitle: {
     fontSize: '16px',
     fontWeight: '600',
     color: '#fff',
-    margin: '0 0 16px 0'
+    margin: '0 0 16px 0',
   },
   timelineContainer: {
     display: 'flex',
     height: '200px',
-    position: 'relative'
+    position: 'relative',
   },
   yAxisLabels: {
     width: '50px',
@@ -1032,45 +1039,45 @@ const styles = {
     fontSize: '10px',
     color: '#6b7280',
     paddingRight: '8px',
-    textAlign: 'right'
+    textAlign: 'right',
   },
   chartArea: {
     flex: 1,
     position: 'relative',
     backgroundColor: '#0a0a0f',
     borderRadius: '8px',
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   gridLines: {
     position: 'absolute',
-    inset: 0
+    inset: 0,
   },
   gridLine: {
     position: 'absolute',
     left: 0,
     right: 0,
     height: '1px',
-    backgroundColor: '#1f1f2e'
+    backgroundColor: '#1f1f2e',
   },
   lineSvg: {
     position: 'absolute',
     inset: 0,
     width: '100%',
-    height: '100%'
+    height: '100%',
   },
   postMarker: {
     position: 'absolute',
     bottom: 0,
     transform: 'translateX(-50%)',
     cursor: 'pointer',
-    zIndex: 10
+    zIndex: 10,
   },
   postMarkerDot: {
     width: '8px',
     height: '8px',
     borderRadius: '50%',
     backgroundColor: '#8b5cf6',
-    border: '2px solid #111118'
+    border: '2px solid #111118',
   },
   postMarkerLine: {
     width: '2px',
@@ -1079,7 +1086,7 @@ const styles = {
     position: 'absolute',
     bottom: '8px',
     left: '50%',
-    transform: 'translateX(-50%)'
+    transform: 'translateX(-50%)',
   },
   chartTooltip: {
     position: 'absolute',
@@ -1092,7 +1099,7 @@ const styles = {
     fontSize: '12px',
     color: '#fff',
     zIndex: 20,
-    maxWidth: '200px'
+    maxWidth: '200px',
   },
   xAxisLabels: {
     display: 'flex',
@@ -1100,25 +1107,25 @@ const styles = {
     marginTop: '8px',
     marginLeft: '50px',
     fontSize: '10px',
-    color: '#6b7280'
+    color: '#6b7280',
   },
   timelineLegend: {
     display: 'flex',
     gap: '20px',
     justifyContent: 'center',
-    marginTop: '12px'
+    marginTop: '12px',
   },
   legendItem: {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
     fontSize: '12px',
-    color: '#9ca3af'
+    color: '#9ca3af',
   },
   legendDot: {
     width: '8px',
     height: '8px',
-    borderRadius: '50%'
+    borderRadius: '50%',
   },
 
   // Setup Card
@@ -1127,18 +1134,18 @@ const styles = {
     border: '1px solid #1f1f2e',
     borderRadius: '12px',
     padding: '24px',
-    maxWidth: '600px'
+    maxWidth: '600px',
   },
   setupDescription: {
     fontSize: '14px',
     color: '#9ca3af',
     marginBottom: '20px',
-    lineHeight: '1.5'
+    lineHeight: '1.5',
   },
   setupInputRow: {
     display: 'flex',
     gap: '12px',
-    marginBottom: '16px'
+    marginBottom: '16px',
   },
   setupInput: {
     flex: 1,
@@ -1148,25 +1155,25 @@ const styles = {
     borderRadius: '8px',
     color: '#fff',
     fontSize: '14px',
-    outline: 'none'
+    outline: 'none',
   },
   validationResult: {
     padding: '16px',
     borderRadius: '8px',
     border: '1px solid',
-    marginBottom: '16px'
+    marginBottom: '16px',
   },
   validatedArtist: {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
-    marginBottom: '12px'
+    marginBottom: '12px',
   },
   artistImage: {
     width: '48px',
     height: '48px',
     borderRadius: '50%',
-    objectFit: 'cover'
+    objectFit: 'cover',
   },
   helpText: {
     marginTop: '20px',
@@ -1174,104 +1181,104 @@ const styles = {
     backgroundColor: '#0a0a0f',
     borderRadius: '8px',
     fontSize: '13px',
-    color: '#9ca3af'
+    color: '#9ca3af',
   },
   helpList: {
     marginLeft: '20px',
     marginTop: '8px',
-    lineHeight: '1.8'
+    lineHeight: '1.8',
   },
 
   // Spotify Tab
   spotifyTab: {
-    padding: '16px 0'
+    padding: '16px 0',
   },
   spotifyHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '24px'
+    marginBottom: '24px',
   },
   spotifyTitle: {
     fontSize: '20px',
     fontWeight: '700',
     color: '#fff',
-    margin: 0
+    margin: 0,
   },
   lastSyncText: {
     fontSize: '12px',
-    color: '#6b7280'
+    color: '#6b7280',
   },
   spotifyStatsGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(4, 1fr)',
     gap: '16px',
-    marginBottom: '24px'
+    marginBottom: '24px',
   },
   spotifyStat: {
     backgroundColor: '#111118',
     border: '1px solid #1f1f2e',
     borderRadius: '12px',
     padding: '20px',
-    textAlign: 'center'
+    textAlign: 'center',
   },
   spotifyStatIcon: {
     fontSize: '24px',
-    marginBottom: '8px'
+    marginBottom: '8px',
   },
   spotifyStatValue: {
     fontSize: '28px',
     fontWeight: '700',
     color: '#fff',
-    marginBottom: '4px'
+    marginBottom: '4px',
   },
   spotifyStatLabel: {
     fontSize: '13px',
     color: '#6b7280',
-    marginBottom: '4px'
+    marginBottom: '4px',
   },
   spotifyStatDelta: {
     fontSize: '12px',
-    color: '#9ca3af'
+    color: '#9ca3af',
   },
 
   // Attribution Section
   attributionSection: {
-    marginTop: '24px'
+    marginTop: '24px',
   },
   sectionTitle: {
     fontSize: '16px',
     fontWeight: '600',
     color: '#fff',
-    marginBottom: '16px'
+    marginBottom: '16px',
   },
   songAttributionGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: '16px'
+    gap: '16px',
   },
   songAttrCard: {
     backgroundColor: '#111118',
     border: '1px solid #1f1f2e',
     borderRadius: '12px',
-    padding: '16px'
+    padding: '16px',
   },
   songAttrHeader: {
     display: 'flex',
     justifyContent: 'space-between',
-    marginBottom: '8px'
+    marginBottom: '8px',
   },
   songAttrRank: {
     fontSize: '12px',
     color: '#6b7280',
-    fontWeight: '600'
+    fontWeight: '600',
   },
   songAttrMomentum: {
     fontSize: '11px',
     color: '#10b981',
     backgroundColor: 'rgba(16, 185, 129, 0.1)',
     padding: '2px 8px',
-    borderRadius: '4px'
+    borderRadius: '4px',
   },
   songAttrName: {
     fontSize: '14px',
@@ -1280,14 +1287,14 @@ const styles = {
     margin: '0 0 8px 0',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
-    textOverflow: 'ellipsis'
+    textOverflow: 'ellipsis',
   },
   songAttrStats: {
     display: 'flex',
     gap: '8px',
     fontSize: '12px',
     color: '#6b7280',
-    marginBottom: '12px'
+    marginBottom: '12px',
   },
   songAttrLift: {
     fontSize: '13px',
@@ -1295,7 +1302,7 @@ const styles = {
     padding: '8px 12px',
     backgroundColor: 'rgba(16, 185, 129, 0.1)',
     borderRadius: '6px',
-    textAlign: 'center'
+    textAlign: 'center',
   },
 
   // Attribution Table
@@ -1303,7 +1310,7 @@ const styles = {
     backgroundColor: '#111118',
     border: '1px solid #1f1f2e',
     borderRadius: '12px',
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   attrTableHeader: {
     display: 'flex',
@@ -1312,7 +1319,7 @@ const styles = {
     fontSize: '11px',
     fontWeight: '600',
     color: '#6b7280',
-    textTransform: 'uppercase'
+    textTransform: 'uppercase',
   },
   attrTableRow: {
     display: 'flex',
@@ -1320,14 +1327,14 @@ const styles = {
     borderBottom: '1px solid #1f1f2e',
     fontSize: '13px',
     color: '#e5e7eb',
-    alignItems: 'center'
+    alignItems: 'center',
   },
   attrTableCell: {
     flex: 1,
     minWidth: 0,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap'
+    whiteSpace: 'nowrap',
   },
 
   // Full Disclaimer
@@ -1338,29 +1345,29 @@ const styles = {
     border: '1px solid rgba(245, 158, 11, 0.2)',
     borderRadius: '8px',
     fontSize: '13px',
-    color: '#f59e0b'
+    color: '#f59e0b',
   },
 
   // Empty & Loading States
   loadingPlaceholder: {
     padding: '32px',
     textAlign: 'center',
-    color: '#6b7280'
+    color: '#6b7280',
   },
   emptyState: {
     padding: '24px',
-    textAlign: 'center'
+    textAlign: 'center',
   },
   emptyText: {
     fontSize: '14px',
     color: '#9ca3af',
-    margin: '0 0 4px 0'
+    margin: '0 0 4px 0',
   },
   emptySubtext: {
     fontSize: '12px',
     color: '#6b7280',
-    margin: 0
-  }
+    margin: 0,
+  },
 };
 
 export default {
@@ -1369,5 +1376,5 @@ export default {
   GrowthDriversCard,
   TimelineOverlayChart,
   SpotifySetupCard,
-  SpotifyTab
+  SpotifyTab,
 };

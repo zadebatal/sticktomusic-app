@@ -17,11 +17,25 @@ import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { Badge } from '../../ui/components/Badge';
 import {
-  FeatherPlay, FeatherPause, FeatherScissors, FeatherTrash2,
-  FeatherPlus, FeatherDownload, FeatherUpload, FeatherX,
-  FeatherSkipBack, FeatherSkipForward, FeatherVolume2, FeatherVolumeX,
-  FeatherChevronDown, FeatherChevronRight, FeatherCheck, FeatherZap,
-  FeatherLoader, FeatherZoomIn, FeatherZoomOut,
+  FeatherPlay,
+  FeatherPause,
+  FeatherScissors,
+  FeatherTrash2,
+  FeatherPlus,
+  FeatherDownload,
+  FeatherUpload,
+  FeatherX,
+  FeatherSkipBack,
+  FeatherSkipForward,
+  FeatherVolume2,
+  FeatherVolumeX,
+  FeatherChevronDown,
+  FeatherChevronRight,
+  FeatherCheck,
+  FeatherZap,
+  FeatherLoader,
+  FeatherZoomIn,
+  FeatherZoomOut,
 } from '@subframe/core';
 import EditorShell from './shared/EditorShell';
 import EditorTopBar from './shared/EditorTopBar';
@@ -32,7 +46,12 @@ import usePixelTimeline from './shared/usePixelTimeline';
 import useTimelineZoom from '../../hooks/useTimelineZoom';
 import useWaveform from '../../hooks/useWaveform';
 import { uploadFile } from '../../services/firebaseStorage';
-import { addToLibraryAsync, addToCollection, addToProjectPool, getBankColor } from '../../services/libraryService';
+import {
+  addToLibraryAsync,
+  addToCollection,
+  addToProjectPool,
+  getBankColor,
+} from '../../services/libraryService';
 import { transcribeAudio } from '../../services/whisperService';
 import { analyzeSongStructure } from '../../services/structureAnalysisService';
 import { extractAudioSnippet } from '../../utils/audioSnippet';
@@ -108,7 +127,9 @@ const ClipperEditor = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
-  const [videoName, setVideoName] = useState(existingSession?.name || existingVideo?.name || 'Untitled Clip');
+  const [videoName, setVideoName] = useState(
+    existingSession?.name || existingVideo?.name || 'Untitled Clip',
+  );
   const [clips, setClips] = useState([]);
   const [markIn, setMarkIn] = useState(null);
   const [activeClipIdx, setActiveClipIdx] = useState(null);
@@ -117,8 +138,8 @@ const ClipperEditor = ({
   const [exportedCount, setExportedCount] = useState(0);
 
   // Bank state (replaces buckets)
-  const [bankLabels, setBankLabels] = useState(() =>
-    existingSession?.bankLabels || nicheBankLabels || ['Bucket 1']
+  const [bankLabels, setBankLabels] = useState(
+    () => existingSession?.bankLabels || nicheBankLabels || ['Bucket 1'],
   );
   const [activeBankIndex, setActiveBankIndexRaw] = useState(0);
   const [collapsedBanks, setCollapsedBanks] = useState({});
@@ -128,7 +149,7 @@ const ClipperEditor = ({
   const [destPickerOpen, setDestPickerOpen] = useState(false);
 
   const toggleDestination = useCallback((value) => {
-    setExportDestinations(prev => {
+    setExportDestinations((prev) => {
       const next = new Set(prev);
       if (next.has(value)) {
         next.delete(value);
@@ -153,7 +174,7 @@ const ClipperEditor = ({
     if (dests.has('project-pool')) parts.push('Project Pool');
     for (const d of dests) {
       if (d !== 'current-niche' && d !== 'project-pool') {
-        const niche = projectNiches.find(n => n.id === d);
+        const niche = projectNiches.find((n) => n.id === d);
         if (niche) parts.push(niche.name);
       }
     }
@@ -162,7 +183,14 @@ const ClipperEditor = ({
 
   // Timeline upgrade state
   const [timelineScale, setTimelineScale] = useState(1);
-  const [clipResize, setClipResize] = useState({ active: false, clipIndex: -1, edge: null, startX: 0, startStart: 0, startEnd: 0 });
+  const [clipResize, setClipResize] = useState({
+    active: false,
+    clipIndex: -1,
+    edge: null,
+    startX: 0,
+    startStart: 0,
+    startEnd: 0,
+  });
   const [cutLineDrag, setCutLineDrag] = useState(null);
   const [playheadDragging, setPlayheadDragging] = useState(false);
   const [renamingClipId, setRenamingClipId] = useState(null);
@@ -195,22 +223,26 @@ const ClipperEditor = ({
 
   // Merge source candidates: explicit sourceVideos prop (from niche) + category.videos fallback
   const availableSourceVideos = useMemo(() => {
-    const fromProp = (sourceVideos || []).map(v => ({
-      id: v.id,
-      url: v.url || v.cloudUrl,
-      name: v.name || v.originalName || 'Video',
-      thumbnailUrl: v.thumbnailUrl || v.thumbnail || null,
-      duration: v.duration || 0,
-    })).filter(v => v.url);
+    const fromProp = (sourceVideos || [])
+      .map((v) => ({
+        id: v.id,
+        url: v.url || v.cloudUrl,
+        name: v.name || v.originalName || 'Video',
+        thumbnailUrl: v.thumbnailUrl || v.thumbnail || null,
+        duration: v.duration || 0,
+      }))
+      .filter((v) => v.url);
     if (fromProp.length > 0) return fromProp;
     // Fallback to category.videos (pipelineCategory)
-    return (category?.videos || []).map(v => ({
-      id: v.id,
-      url: v.url || v.cloudUrl,
-      name: v.name || v.originalName || 'Video',
-      thumbnailUrl: v.thumbnailUrl || v.thumbnail || null,
-      duration: v.duration || 0,
-    })).filter(v => v.url);
+    return (category?.videos || [])
+      .map((v) => ({
+        id: v.id,
+        url: v.url || v.cloudUrl,
+        name: v.name || v.originalName || 'Video',
+        thumbnailUrl: v.thumbnailUrl || v.thumbnail || null,
+        duration: v.duration || 0,
+      }))
+      .filter((v) => v.url);
   }, [sourceVideos, category?.videos]);
 
   // ── Load existing data ──
@@ -218,10 +250,12 @@ const ClipperEditor = ({
     if (existingSession) {
       // Restore from clipper session
       if (existingSession.clips) {
-        setClips(existingSession.clips.map(c => ({
-          ...c,
-          bankIndex: typeof c.bankIndex === 'number' ? c.bankIndex : 0,
-        })));
+        setClips(
+          existingSession.clips.map((c) => ({
+            ...c,
+            bankIndex: typeof c.bankIndex === 'number' ? c.bankIndex : 0,
+          })),
+        );
       }
       if (existingSession.bankLabels?.length) {
         setBankLabels(existingSession.bankLabels);
@@ -233,16 +267,26 @@ const ClipperEditor = ({
       // Backward compat: old draft-based sessions with bucket strings
       if (existingVideo.clips) {
         const oldBuckets = existingVideo.buckets || ['Bucket 1'];
-        setClips(existingVideo.clips.map(c => ({
-          ...c,
-          bankIndex: typeof c.bankIndex === 'number' ? c.bankIndex : Math.max(0, oldBuckets.indexOf(c.bucket || oldBuckets[0])),
-        })));
+        setClips(
+          existingVideo.clips.map((c) => ({
+            ...c,
+            bankIndex:
+              typeof c.bankIndex === 'number'
+                ? c.bankIndex
+                : Math.max(0, oldBuckets.indexOf(c.bucket || oldBuckets[0])),
+          })),
+        );
         setBankLabels(oldBuckets);
       }
       if (existingVideo.sourceUrl) setSourceUrl(existingVideo.sourceUrl);
       if (existingVideo.sourceName) setSourceName(existingVideo.sourceName);
     } else if (existingVideo?.clips) {
-      setClips(existingVideo.clips.map(c => ({ ...c, bankIndex: typeof c.bankIndex === 'number' ? c.bankIndex : 0 })));
+      setClips(
+        existingVideo.clips.map((c) => ({
+          ...c,
+          bankIndex: typeof c.bankIndex === 'number' ? c.bankIndex : 0,
+        })),
+      );
       setSourceUrl(existingVideo.sourceUrl);
       setSourceName(existingVideo.sourceName || '');
     } else if (availableSourceVideos.length > 0) {
@@ -256,8 +300,11 @@ const ClipperEditor = ({
   const durationRef = useRef(duration);
   durationRef.current = duration;
   useEffect(() => {
-    if (!sourceUrl) { setSourceThumbnail(null); return; }
-    const match = availableSourceVideos.find(v => v.url === sourceUrl);
+    if (!sourceUrl) {
+      setSourceThumbnail(null);
+      return;
+    }
+    const match = availableSourceVideos.find((v) => v.url === sourceUrl);
     setSourceThumbnail(match?.thumbnailUrl || null);
     // Use stored duration immediately so timeline is interactive before video loads
     if (match?.duration > 0 && durationRef.current === 0) {
@@ -325,7 +372,9 @@ const ClipperEditor = ({
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, [isPlaying]);
 
   // ── Playback controls ──
@@ -337,7 +386,11 @@ const ClipperEditor = ({
     if (!video) return;
     const p = video.play();
     playPromiseRef.current = p;
-    if (p) p.catch(() => { playPromiseRef.current = null; setIsPlaying(false); });
+    if (p)
+      p.catch(() => {
+        playPromiseRef.current = null;
+        setIsPlaying(false);
+      });
     setIsPlaying(true);
   }, []);
   const safePause = useCallback(() => {
@@ -345,7 +398,11 @@ const ClipperEditor = ({
     if (!video) return;
     const pending = playPromiseRef.current;
     if (pending) {
-      pending.then(() => { video.pause(); }).catch(() => {});
+      pending
+        .then(() => {
+          video.pause();
+        })
+        .catch(() => {});
       playPromiseRef.current = null;
     } else {
       video.pause();
@@ -397,14 +454,29 @@ const ClipperEditor = ({
 
   // ── Pixel timeline + zoom + waveform hooks ──
   const { pxPerSec, timelinePx, rulerTicks, handleRulerMouseDown, downsample } = usePixelTimeline({
-    timelineScale, timelineDuration: duration, timelineRef,
-    handleSeek: seekTo, isPlaying, setIsPlaying, setPlayheadDragging, wasPlayingRef,
+    timelineScale,
+    timelineDuration: duration,
+    timelineRef,
+    handleSeek: seekTo,
+    isPlaying,
+    setIsPlaying,
+    setPlayheadDragging,
+    wasPlayingRef,
   });
   pxPerSecRef.current = pxPerSec;
-  useTimelineZoom(timelineRef, { zoom: timelineScale, setZoom: setTimelineScale, minZoom: 0.3, maxZoom: 3, basePixelsPerSecond: 40 });
-  const sourceWaveformClips = useMemo(() =>
-    sourceUrl && duration > 0 ? [{ id: 'source', url: sourceUrl, duration, file: sourceFile || undefined }] : [],
-    [sourceUrl, duration, sourceFile]
+  useTimelineZoom(timelineRef, {
+    zoom: timelineScale,
+    setZoom: setTimelineScale,
+    minZoom: 0.3,
+    maxZoom: 3,
+    basePixelsPerSecond: 40,
+  });
+  const sourceWaveformClips = useMemo(
+    () =>
+      sourceUrl && duration > 0
+        ? [{ id: 'source', url: sourceUrl, duration, file: sourceFile || undefined }]
+        : [],
+    [sourceUrl, duration, sourceFile],
   );
   const { clipWaveforms, clipWaveformsLoading } = useWaveform({
     selectedAudio: null,
@@ -418,7 +490,7 @@ const ClipperEditor = ({
     const handleResizeMove = (e) => {
       const deltaX = e.clientX - clipResize.startX;
       const deltaSec = deltaX / pxPerSecRef.current;
-      setClips(prev => {
+      setClips((prev) => {
         const updated = [...prev];
         const clip = updated[clipResize.clipIndex];
         if (!clip) return prev;
@@ -428,7 +500,11 @@ const ClipperEditor = ({
           const prevClip = updated[clipResize.clipIndex - 1];
           if (prevClip) newStart = Math.max(prevClip.end, newStart);
           if (clip.end - newStart < 0.5) newStart = clip.end - 0.5;
-          updated[clipResize.clipIndex] = { ...clip, start: newStart, duration: clip.end - newStart };
+          updated[clipResize.clipIndex] = {
+            ...clip,
+            start: newStart,
+            duration: clip.end - newStart,
+          };
         } else {
           let newEnd = clipResize.startEnd + deltaSec;
           newEnd = Math.min(duration, newEnd);
@@ -441,7 +517,14 @@ const ClipperEditor = ({
       });
     };
     const handleResizeEnd = () => {
-      setClipResize({ active: false, clipIndex: -1, edge: null, startX: 0, startStart: 0, startEnd: 0 });
+      setClipResize({
+        active: false,
+        clipIndex: -1,
+        edge: null,
+        startX: 0,
+        startStart: 0,
+        startEnd: 0,
+      });
       document.body.style.cursor = '';
     };
     document.body.style.cursor = 'ew-resize';
@@ -463,7 +546,7 @@ const ClipperEditor = ({
     const handleCutLineMove = (e) => {
       const deltaX = e.clientX - startX;
       const deltaSec = deltaX / pxPerSecRef.current;
-      setClips(prev => {
+      setClips((prev) => {
         const updated = [...prev];
         const prevClip = updated[clipIndex];
         const nextClip = updated[clipIndex + 1];
@@ -471,8 +554,16 @@ const ClipperEditor = ({
         let newBoundary = origPrevEnd + deltaSec;
         newBoundary = Math.max(prevClip.start + 0.5, newBoundary);
         newBoundary = Math.min(nextClip.end - 0.5, newBoundary);
-        updated[clipIndex] = { ...prevClip, end: newBoundary, duration: newBoundary - prevClip.start };
-        updated[clipIndex + 1] = { ...nextClip, start: newBoundary, duration: nextClip.end - newBoundary };
+        updated[clipIndex] = {
+          ...prevClip,
+          end: newBoundary,
+          duration: newBoundary - prevClip.start,
+        };
+        updated[clipIndex + 1] = {
+          ...nextClip,
+          start: newBoundary,
+          duration: nextClip.end - newBoundary,
+        };
         return updated;
       });
     };
@@ -506,7 +597,9 @@ const ClipperEditor = ({
     };
     const handleUp = () => {
       setPlayheadDragging(false);
-      if (wasPlayingRef.current) { safePlay(); }
+      if (wasPlayingRef.current) {
+        safePlay();
+      }
     };
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
@@ -517,18 +610,21 @@ const ClipperEditor = ({
   }, [playheadDragging, seekTo]);
 
   // ── Source file selection ──
-  const handleFileSelect = useCallback((e) => {
-    const file = e.target.files?.[0];
-    if (!file || !file.type.startsWith('video/')) return;
-    if (sourceUrl?.startsWith('blob:')) URL.revokeObjectURL(sourceUrl);
-    setSourceFile(file);
-    setSourceUrl(URL.createObjectURL(file));
-    setSourceName(file.name.replace(/\.[^/.]+$/, ''));
-    setClips([]);
-    markInRef.current = null;
-    setMarkIn(null);
-    e.target.value = '';
-  }, [sourceUrl]);
+  const handleFileSelect = useCallback(
+    (e) => {
+      const file = e.target.files?.[0];
+      if (!file || !file.type.startsWith('video/')) return;
+      if (sourceUrl?.startsWith('blob:')) URL.revokeObjectURL(sourceUrl);
+      setSourceFile(file);
+      setSourceUrl(URL.createObjectURL(file));
+      setSourceName(file.name.replace(/\.[^/.]+$/, ''));
+      setClips([]);
+      markInRef.current = null;
+      setMarkIn(null);
+      e.target.value = '';
+    },
+    [sourceUrl],
+  );
 
   // ── Mark in/out (reads video.currentTime directly for frame-accurate timing) ──
   const handleMarkIn = useCallback(() => {
@@ -544,7 +640,7 @@ const ClipperEditor = ({
     const start = Math.min(mi, time);
     const end = Math.max(mi, time);
     if (end - start < 0.1) return;
-    setClips(prev => {
+    setClips((prev) => {
       const newClip = {
         id: `clip_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
         start,
@@ -580,8 +676,8 @@ const ClipperEditor = ({
 
   // ── Clip management ──
   const removeClip = useCallback((idx) => {
-    setClips(prev => prev.filter((_, i) => i !== idx));
-    setActiveClipIdx(prev => {
+    setClips((prev) => prev.filter((_, i) => i !== idx));
+    setActiveClipIdx((prev) => {
       if (prev === null) return null;
       if (prev === idx) return null;
       if (prev > idx) return prev - 1;
@@ -590,57 +686,68 @@ const ClipperEditor = ({
   }, []);
 
   const renameClip = useCallback((idx, name) => {
-    setClips(prev => prev.map((c, i) => i === idx ? { ...c, name } : c));
+    setClips((prev) => prev.map((c, i) => (i === idx ? { ...c, name } : c)));
   }, []);
 
-  const jumpToClip = useCallback((clip) => {
-    seekTo(clip.start);
-  }, [seekTo]);
+  const jumpToClip = useCallback(
+    (clip) => {
+      seekTo(clip.start);
+    },
+    [seekTo],
+  );
 
   const moveClipToBank = useCallback((clipIdx, newBankIndex) => {
-    setClips(prev => prev.map((c, i) => i === clipIdx ? { ...c, bankIndex: newBankIndex } : c));
+    setClips((prev) => prev.map((c, i) => (i === clipIdx ? { ...c, bankIndex: newBankIndex } : c)));
   }, []);
 
   // ── Bank management ──
   const addBank = useCallback(() => {
     if (bankLabels.length >= 10) return;
-    setBankLabels(prev => [...prev, `Bucket ${prev.length + 1}`]);
+    setBankLabels((prev) => [...prev, `Bucket ${prev.length + 1}`]);
   }, [bankLabels.length]);
 
-  const removeBank = useCallback((bankIdx) => {
-    if (bankLabels.length <= 1) return;
-    setBankLabels(prev => prev.filter((_, i) => i !== bankIdx));
-    // Re-index clips: clips in removed bank go to bank 0, clips above shift down
-    setClips(prev => prev.map(c => {
-      if (c.bankIndex === bankIdx) return { ...c, bankIndex: 0 };
-      if (c.bankIndex > bankIdx) return { ...c, bankIndex: c.bankIndex - 1 };
-      return c;
-    }));
-    if (activeBankIndex === bankIdx) setActiveBankIndex(0);
-    else if (activeBankIndex > bankIdx) setActiveBankIndex(activeBankIndex - 1);
-  }, [bankLabels.length, activeBankIndex, setActiveBankIndex]);
+  const removeBank = useCallback(
+    (bankIdx) => {
+      if (bankLabels.length <= 1) return;
+      setBankLabels((prev) => prev.filter((_, i) => i !== bankIdx));
+      // Re-index clips: clips in removed bank go to bank 0, clips above shift down
+      setClips((prev) =>
+        prev.map((c) => {
+          if (c.bankIndex === bankIdx) return { ...c, bankIndex: 0 };
+          if (c.bankIndex > bankIdx) return { ...c, bankIndex: c.bankIndex - 1 };
+          return c;
+        }),
+      );
+      if (activeBankIndex === bankIdx) setActiveBankIndex(0);
+      else if (activeBankIndex > bankIdx) setActiveBankIndex(activeBankIndex - 1);
+    },
+    [bankLabels.length, activeBankIndex, setActiveBankIndex],
+  );
 
   const renameBank = useCallback((bankIdx, newName) => {
     if (!newName.trim()) return;
-    setBankLabels(prev => prev.map((b, i) => i === bankIdx ? newName : b));
+    setBankLabels((prev) => prev.map((b, i) => (i === bankIdx ? newName : b)));
   }, []);
 
   const toggleBankCollapse = useCallback((bankIdx) => {
-    setCollapsedBanks(prev => ({ ...prev, [bankIdx]: !prev[bankIdx] }));
+    setCollapsedBanks((prev) => ({ ...prev, [bankIdx]: !prev[bankIdx] }));
   }, []);
 
   // ── Track click-to-seek (pixel-based using timelineRef) ──
-  const handleTrackClick = useCallback((e) => {
-    const container = timelineRef.current;
-    if (!container) return;
-    const d = videoRef.current?.duration;
-    if (!d || d <= 0) return;
-    const rect = container.getBoundingClientRect();
-    const clickX = e.clientX - rect.left + container.scrollLeft;
-    seekTo(Math.max(0, Math.min(d, clickX / pxPerSecRef.current)));
-    // Deselect active clip when clicking empty space on the timeline
-    setActiveClipIdx(null);
-  }, [seekTo]);
+  const handleTrackClick = useCallback(
+    (e) => {
+      const container = timelineRef.current;
+      if (!container) return;
+      const d = videoRef.current?.duration;
+      if (!d || d <= 0) return;
+      const rect = container.getBoundingClientRect();
+      const clickX = e.clientX - rect.left + container.scrollLeft;
+      seekTo(Math.max(0, Math.min(d, clickX / pxPerSecRef.current)));
+      // Deselect active clip when clicking empty space on the timeline
+      setActiveClipIdx(null);
+    },
+    [seekTo],
+  );
 
   // ── Build session data from current state ──
   const buildSessionData = useCallback(() => {
@@ -654,16 +761,22 @@ const ClipperEditor = ({
       sourceVideoUrl: sourceUrl?.startsWith('blob:') ? null : sourceUrl,
       sourceVideoName: sourceName,
       bankLabels,
-      clips: clips.map(c => ({
-        id: c.id, name: c.name, start: c.start, end: c.end,
-        duration: c.duration, bankIndex: c.bankIndex,
+      clips: clips.map((c) => ({
+        id: c.id,
+        name: c.name,
+        start: c.start,
+        end: c.end,
+        duration: c.duration,
+        bankIndex: c.bankIndex,
         exported: !!c.exportedMediaId,
         exportedMediaId: c.exportedMediaId || null,
         exportedUrl: c.exportedUrl || null,
       })),
+      nicheId: category?.id || null,
+      projectId: category?.projectId || null,
       createdAt: existingSession?.createdAt || new Date().toISOString(),
     };
-  }, [existingSession?.createdAt, videoName, sourceUrl, sourceName, bankLabels, clips]);
+  }, [existingSession?.createdAt, videoName, sourceUrl, sourceName, bankLabels, clips, category]);
 
   // ── Save session (markers only, instant) ──
   const handleSaveSession = useCallback(() => {
@@ -671,7 +784,12 @@ const ClipperEditor = ({
     const sessionData = buildSessionData();
     onSaveSession(sessionData);
     setSavedClean(true);
-    savedClipsSnapshotRef.current = clips.map(c => ({ id: c.id, start: c.start, end: c.end, bankIndex: c.bankIndex }));
+    savedClipsSnapshotRef.current = clips.map((c) => ({
+      id: c.id,
+      start: c.start,
+      end: c.end,
+      bankIndex: c.bankIndex,
+    }));
     toastSuccess('Session saved');
   }, [onSaveSession, buildSessionData, clips, toastSuccess]);
 
@@ -689,11 +807,16 @@ const ClipperEditor = ({
       // 1. Extract audio (cap at 600s, mono 16kHz to stay under Whisper 25MB limit)
       const audioSource = sourceFile || sourceUrl;
       const capDuration = Math.min(duration || 600, 600);
-      const audioFile = await extractAudioSnippet(audioSource, 0, capDuration, { mono: true, targetSampleRate: 16000 });
+      const audioFile = await extractAudioSnippet(audioSource, 0, capDuration, {
+        mono: true,
+        targetSampleRate: 16000,
+      });
 
       // 2. Transcribe via Whisper
       setDetectProgress('Transcribing lyrics...');
-      const transcription = await transcribeAudio(audioFile, 'team', (msg) => setDetectProgress(msg));
+      const transcription = await transcribeAudio(audioFile, 'team', (msg) =>
+        setDetectProgress(msg),
+      );
 
       // 3. Check for enough words
       if (!transcription.words || transcription.words.length < 5) {
@@ -709,7 +832,9 @@ const ClipperEditor = ({
         setDetectProgress('Identifying song...');
         const recognition = await recognizeSong(audioSource);
         if (recognition?.found && recognition.artist && recognition.title) {
-          setDetectProgress(`Found: ${recognition.artist} — ${recognition.title}. Fetching lyrics...`);
+          setDetectProgress(
+            `Found: ${recognition.artist} — ${recognition.title}. Fetching lyrics...`,
+          );
           const lyricsResult = await fetchSyncedLyrics(recognition.artist, recognition.title);
           if (lyricsResult?.plainLyrics) {
             publishedLyrics = lyricsResult.plainLyrics;
@@ -721,8 +846,15 @@ const ClipperEditor = ({
       }
 
       // 5. Analyze structure via Claude (with published lyrics if available)
-      setDetectProgress(publishedLyrics ? 'Analyzing with published lyrics...' : 'Analyzing song structure...');
-      const result = await analyzeSongStructure(transcription, capDuration, (msg) => setDetectProgress(msg), publishedLyrics);
+      setDetectProgress(
+        publishedLyrics ? 'Analyzing with published lyrics...' : 'Analyzing song structure...',
+      );
+      const result = await analyzeSongStructure(
+        transcription,
+        capDuration,
+        (msg) => setDetectProgress(msg),
+        publishedLyrics,
+      );
 
       if (!result.sections || result.sections.length === 0) {
         toastError('Could not identify song sections');
@@ -733,7 +865,9 @@ const ClipperEditor = ({
 
       // 5. Pre-select all sections
       const selMap = {};
-      result.sections.forEach((_, i) => { selMap[i] = true; });
+      result.sections.forEach((_, i) => {
+        selMap[i] = true;
+      });
       setDetectedSections(result.sections);
       setSelectedSections(selMap);
       toastSuccess(`Found ${result.sections.length} sections`);
@@ -762,7 +896,7 @@ const ClipperEditor = ({
       });
     });
     if (newClips.length === 0) return;
-    setClips(prev => {
+    setClips((prev) => {
       const merged = [...prev, ...newClips].sort((a, b) => a.start - b.start);
       return merged;
     });
@@ -772,19 +906,23 @@ const ClipperEditor = ({
   }, [detectedSections, selectedSections, toastSuccess]);
 
   const toggleSectionSelect = useCallback((idx) => {
-    setSelectedSections(prev => ({ ...prev, [idx]: !prev[idx] }));
+    setSelectedSections((prev) => ({ ...prev, [idx]: !prev[idx] }));
   }, []);
 
-  const selectedSectionCount = useMemo(() =>
-    Object.values(selectedSections).filter(Boolean).length
-  , [selectedSections]);
+  const selectedSectionCount = useMemo(
+    () => Object.values(selectedSections).filter(Boolean).length,
+    [selectedSections],
+  );
 
   // ── Export clips to banks (replaces handleExport) ──
   const handleExportToBanks = useCallback(async () => {
     // Use the selection-aware list: if a clip is selected, only that one; otherwise all unexported
-    const toExport = activeClipIdx !== null && activeClipIdx >= 0 && activeClipIdx < clips.length
-      ? (clips[activeClipIdx] && !clips[activeClipIdx].exportedMediaId ? [clips[activeClipIdx]] : [])
-      : clips.filter(c => !c.exportedMediaId);
+    const toExport =
+      activeClipIdx !== null && activeClipIdx >= 0 && activeClipIdx < clips.length
+        ? clips[activeClipIdx] && !clips[activeClipIdx].exportedMediaId
+          ? [clips[activeClipIdx]]
+          : []
+        : clips.filter((c) => !c.exportedMediaId);
     if (toExport.length === 0) {
       toastSuccess('All clips already exported');
       return;
@@ -801,7 +939,7 @@ const ClipperEditor = ({
       let clipPct;
       if (typeof phase === 'object') {
         // Upload progress: { upload: 0-100 }
-        clipPct = 25 + (phase.upload * 0.55);
+        clipPct = 25 + phase.upload * 0.55;
       } else {
         clipPct = phase === 0 ? 0 : phase === 1 ? 10 : phase === 2 ? 25 : phase === 3 ? 80 : 100;
       }
@@ -836,11 +974,16 @@ const ClipperEditor = ({
           // Phase 1: FFmpeg stream-copy extract
           updateProgress(i, 1);
           await ffmpeg.exec([
-            '-ss', clip.start.toFixed(3),
-            '-i', inputName,
-            '-t', clipDuration.toFixed(3),
-            '-c', 'copy',
-            '-avoid_negative_ts', 'make_zero',
+            '-ss',
+            clip.start.toFixed(3),
+            '-i',
+            inputName,
+            '-t',
+            clipDuration.toFixed(3),
+            '-c',
+            'copy',
+            '-avoid_negative_ts',
+            'make_zero',
             outputName,
           ]);
 
@@ -865,14 +1008,19 @@ const ClipperEditor = ({
             vidEl.playsInline = true;
             const blobUrl = URL.createObjectURL(blob);
             vidEl.src = blobUrl;
-            await new Promise((res, rej) => { vidEl.onloadeddata = res; vidEl.onerror = rej; });
+            await new Promise((res, rej) => {
+              vidEl.onloadeddata = res;
+              vidEl.onerror = rej;
+            });
             vidEl.currentTime = 0.1;
-            await new Promise(res => { vidEl.onseeked = res; });
+            await new Promise((res) => {
+              vidEl.onseeked = res;
+            });
             const canvas = document.createElement('canvas');
             canvas.width = vidEl.videoWidth;
             canvas.height = vidEl.videoHeight;
             canvas.getContext('2d').drawImage(vidEl, 0, 0);
-            const thumbBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.7));
+            const thumbBlob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.7));
             thumbBlob.name = `thumb_${clip.name || `clip_${i + 1}`}.jpg`;
             URL.revokeObjectURL(blobUrl);
             const { url: uploadedThumbUrl } = await uploadFile(thumbBlob, 'thumbnails', null);
@@ -937,10 +1085,14 @@ const ClipperEditor = ({
     } finally {
       // Update clips with exported info (partial success supported)
       if (results.length > 0) {
-        setClips(prev => prev.map(c => {
-          const result = results.find(r => r.clipId === c.id);
-          return result ? { ...c, exportedMediaId: result.mediaId, exportedUrl: result.cloudUrl } : c;
-        }));
+        setClips((prev) =>
+          prev.map((c) => {
+            const result = results.find((r) => r.clipId === c.id);
+            return result
+              ? { ...c, exportedMediaId: result.mediaId, exportedUrl: result.cloudUrl }
+              : c;
+          }),
+        );
       }
       setExporting(false);
 
@@ -950,9 +1102,16 @@ const ClipperEditor = ({
         setTimeout(() => {
           const sessionData = buildSessionData();
           // Merge export results into the clip data
-          sessionData.clips = sessionData.clips.map(c => {
-            const result = exportResults.find(r => r.clipId === c.id);
-            return result ? { ...c, exported: true, exportedMediaId: result.mediaId, exportedUrl: result.cloudUrl } : c;
+          sessionData.clips = sessionData.clips.map((c) => {
+            const result = exportResults.find((r) => r.clipId === c.id);
+            return result
+              ? {
+                  ...c,
+                  exported: true,
+                  exportedMediaId: result.mediaId,
+                  exportedUrl: result.cloudUrl,
+                }
+              : c;
           });
           onSaveSession(sessionData);
         }, 0);
@@ -962,12 +1121,34 @@ const ClipperEditor = ({
         toastSuccess(`Exported ${results.length} clip${results.length !== 1 ? 's' : ''} to banks`);
       }
     }
-  }, [clips, activeClipIdx, sourceFile, sourceUrl, sourceName, videoName, bankLabels, buildSessionData, onSaveSession, toastSuccess, toastError, artistId, db, nicheId, projectId, exportDestinations]);
+  }, [
+    clips,
+    activeClipIdx,
+    sourceFile,
+    sourceUrl,
+    sourceName,
+    videoName,
+    bankLabels,
+    buildSessionData,
+    onSaveSession,
+    toastSuccess,
+    toastError,
+    artistId,
+    db,
+    nicheId,
+    projectId,
+    exportDestinations,
+  ]);
 
   // ── Keyboard shortcuts (reads video.currentTime directly for accuracy) ──
   useEffect(() => {
     const onKeyDown = (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+      if (
+        e.target.tagName === 'INPUT' ||
+        e.target.tagName === 'TEXTAREA' ||
+        e.target.tagName === 'SELECT'
+      )
+        return;
       switch (e.key) {
         case ' ':
           e.preventDefault();
@@ -995,7 +1176,8 @@ const ClipperEditor = ({
           seekTo(t + (e.shiftKey ? 5 : 1));
           break;
         }
-        default: break;
+        default:
+          break;
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -1023,7 +1205,7 @@ const ClipperEditor = ({
       const selected = clips[activeClipIdx];
       return selected && !selected.exportedMediaId ? [selected] : [];
     }
-    return clips.filter(c => !c.exportedMediaId);
+    return clips.filter((c) => !c.exportedMediaId);
   }, [clips, activeClipIdx]);
   const unexportedCount = clipsToExport.length;
 
@@ -1037,7 +1219,13 @@ const ClipperEditor = ({
     if (snapshot.length !== clips.length) return true;
     return snapshot.some((sc, i) => {
       const c = clips[i];
-      return !c || sc.id !== c.id || sc.start !== c.start || sc.end !== c.end || sc.bankIndex !== c.bankIndex;
+      return (
+        !c ||
+        sc.id !== c.id ||
+        sc.start !== c.start ||
+        sc.end !== c.end ||
+        sc.bankIndex !== c.bankIndex
+      );
     });
   }, [savedClean, clips]);
   const hasUnsavedWork = (clips.length > 0 || !!sourceUrl) && (!savedClean || hasNewEditsAfterSave);
@@ -1062,28 +1250,37 @@ const ClipperEditor = ({
         onExport={handleExportToBanks}
         exportDisabled={unexportedCount === 0 || exporting}
         exportLoading={exporting}
-        exportLabel={exporting ? `Exporting… ${exportProgress}%` : `Export ${unexportedCount} to Banks`}
+        exportLabel={
+          exporting ? `Exporting… ${exportProgress}%` : `Export ${unexportedCount} to Banks`
+        }
       />
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* ── Left panel: Video + Timeline ── */}
-        <div className={`flex flex-col flex-1 min-w-0 bg-black ${isMobile ? '' : 'border-r border-neutral-200'}`}>
+        <div
+          className={`flex flex-col flex-1 min-w-0 bg-black ${isMobile ? '' : 'border-r border-neutral-200'}`}
+        >
           {!hasSource ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 px-8">
               <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-neutral-100/50 border border-neutral-200">
                 <FeatherScissors className="text-neutral-500" style={{ width: 32, height: 32 }} />
               </div>
-              <span className="text-heading-3 font-heading-3 text-white">Select a source video</span>
+              <span className="text-heading-3 font-heading-3 text-white">
+                Select a source video
+              </span>
               <span className="text-body font-body text-neutral-400 text-center max-w-sm">
-                Choose a video to split into multiple clips using stream-copy (instant, no quality loss)
+                Choose a video to split into multiple clips using stream-copy (instant, no quality
+                loss)
               </span>
 
               {/* Niche source video selector grid */}
               {availableSourceVideos.length > 0 && (
                 <div className="flex flex-col gap-2 w-full max-w-lg">
-                  <span className="text-caption-bold font-caption-bold text-neutral-400">Source Videos</span>
+                  <span className="text-caption-bold font-caption-bold text-neutral-400">
+                    Source Videos
+                  </span>
                   <div className="grid grid-cols-3 gap-2">
-                    {availableSourceVideos.map(v => (
+                    {availableSourceVideos.map((v) => (
                       <div
                         key={v.id}
                         className="relative group rounded-lg overflow-hidden bg-neutral-100 aspect-video cursor-pointer border border-neutral-200 hover:border-indigo-500/50 transition-colors"
@@ -1096,14 +1293,23 @@ const ClipperEditor = ({
                         }}
                       >
                         {v.thumbnailUrl ? (
-                          <img src={v.thumbnailUrl} alt={v.name} className="w-full h-full object-cover" />
+                          <img
+                            src={v.thumbnailUrl}
+                            alt={v.name}
+                            className="w-full h-full object-cover"
+                          />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
-                            <FeatherPlay className="text-neutral-500" style={{ width: 24, height: 24 }} />
+                            <FeatherPlay
+                              className="text-neutral-500"
+                              style={{ width: 24, height: 24 }}
+                            />
                           </div>
                         )}
                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 px-2 py-1">
-                          <span className="text-[11px] text-neutral-300 line-clamp-1">{v.name}</span>
+                          <span className="text-[11px] text-neutral-300 line-clamp-1">
+                            {v.name}
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -1112,11 +1318,22 @@ const ClipperEditor = ({
               )}
 
               <div className="flex items-center gap-3">
-                <Button variant="brand-primary" size="medium" icon={<FeatherUpload />} onClick={() => fileInputRef.current?.click()}>
+                <Button
+                  variant="brand-primary"
+                  size="medium"
+                  icon={<FeatherUpload />}
+                  onClick={() => fileInputRef.current?.click()}
+                >
                   Upload Video
                 </Button>
               </div>
-              <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={handleFileSelect} />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
             </div>
           ) : (
             <>
@@ -1124,7 +1341,11 @@ const ClipperEditor = ({
               <div className="flex flex-1 items-center justify-center bg-black min-h-0 p-4 relative">
                 {!videoReady && sourceThumbnail && (
                   <div className="absolute inset-0 flex items-center justify-center z-10">
-                    <img src={sourceThumbnail} alt="" className="max-w-full max-h-full object-contain rounded-lg" />
+                    <img
+                      src={sourceThumbnail}
+                      alt=""
+                      className="max-w-full max-h-full object-contain rounded-lg"
+                    />
                     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/60 rounded-full px-3 py-1">
                       <div className="h-3 w-3 animate-spin rounded-full border border-white/60 border-t-transparent" />
                       <span className="text-[11px] text-white/70">Loading video...</span>
@@ -1134,7 +1355,9 @@ const ClipperEditor = ({
                 {!videoReady && !sourceThumbnail && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10">
                     <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-                    <span className="text-caption font-caption text-neutral-400">Loading video...</span>
+                    <span className="text-caption font-caption text-neutral-400">
+                      Loading video...
+                    </span>
                   </div>
                 )}
                 <video
@@ -1154,25 +1377,40 @@ const ClipperEditor = ({
                 <div className="flex w-full items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-heading-3 font-heading-3 text-white">Timeline</span>
-                    <Badge variant="neutral">{formatTimePrecise(currentTime)} / {formatTime(duration)}</Badge>
+                    <Badge variant="neutral">
+                      {formatTimePrecise(currentTime)} / {formatTime(duration)}
+                    </Badge>
                   </div>
                   <div className="flex items-center gap-2">
                     {/* Target bank for new clips */}
                     <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getBankColor(activeBankIndex).primary }} />
+                      <div
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: getBankColor(activeBankIndex).primary }}
+                      />
                       <select
                         className="bg-neutral-100 text-caption font-caption text-neutral-300 border border-neutral-200 rounded px-2 py-1 cursor-pointer outline-none"
                         value={activeBankIndex}
-                        onChange={e => setActiveBankIndex(Number(e.target.value))}
+                        onChange={(e) => setActiveBankIndex(Number(e.target.value))}
                       >
-                        {bankLabels.map((label, i) => <option key={i} value={i}>{label}</option>)}
+                        {bankLabels.map((label, i) => (
+                          <option key={i} value={i}>
+                            {label}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     {markIn !== null && (
                       <Badge variant="success">IN: {formatTimePrecise(markIn)}</Badge>
                     )}
                     {markIn !== null && (
-                      <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />} aria-label="Clear mark" onClick={clearMarkIn} />
+                      <IconButton
+                        variant="neutral-tertiary"
+                        size="small"
+                        icon={<FeatherX />}
+                        aria-label="Clear mark"
+                        onClick={clearMarkIn}
+                      />
                     )}
                     <Button
                       variant={markIn !== null ? 'brand-primary' : 'neutral-secondary'}
@@ -1191,8 +1429,13 @@ const ClipperEditor = ({
                         max="3"
                         step="0.05"
                         value={timelineScale}
-                        onChange={e => setTimelineScale(parseFloat(e.target.value))}
-                        style={{ width: '80px', height: '4px', accentColor: '#6366f1', cursor: 'pointer' }}
+                        onChange={(e) => setTimelineScale(parseFloat(e.target.value))}
+                        style={{
+                          width: '80px',
+                          height: '4px',
+                          accentColor: '#6366f1',
+                          cursor: 'pointer',
+                        }}
                         title={`Zoom: ${Math.round(timelineScale * 100)}%`}
                       />
                       <FeatherZoomIn style={{ width: 12, height: 12, color: '#737373' }} />
@@ -1224,7 +1467,13 @@ const ClipperEditor = ({
                     className="flex-1 overflow-x-auto relative"
                     style={{ userSelect: 'none' }}
                   >
-                    <div style={{ width: `${Math.max(timelinePx, 1)}px`, position: 'relative', minWidth: '100%' }}>
+                    <div
+                      style={{
+                        width: `${Math.max(timelinePx, 1)}px`,
+                        position: 'relative',
+                        minWidth: '100%',
+                      }}
+                    >
                       {/* Ruler track */}
                       <div
                         className="h-6 relative border-b border-neutral-200/50"
@@ -1232,16 +1481,30 @@ const ClipperEditor = ({
                         style={{ cursor: 'pointer' }}
                       >
                         {rulerTicks.map((tick, i) => (
-                          <div key={i} style={{
-                            position: 'absolute', left: `${tick.time * pxPerSec}px`,
-                            top: tick.isLabel ? 0 : '50%', bottom: 0,
-                            width: '1px', backgroundColor: tick.isLabel ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
-                          }}>
+                          <div
+                            key={i}
+                            style={{
+                              position: 'absolute',
+                              left: `${tick.time * pxPerSec}px`,
+                              top: tick.isLabel ? 0 : '50%',
+                              bottom: 0,
+                              width: '1px',
+                              backgroundColor: tick.isLabel
+                                ? 'rgba(255,255,255,0.2)'
+                                : 'rgba(255,255,255,0.08)',
+                            }}
+                          >
                             {tick.isLabel && (
-                              <span style={{
-                                position: 'absolute', left: '4px', top: '0px',
-                                fontSize: '9px', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap',
-                              }}>
+                              <span
+                                style={{
+                                  position: 'absolute',
+                                  left: '4px',
+                                  top: '0px',
+                                  fontSize: '9px',
+                                  color: 'rgba(255,255,255,0.4)',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
                                 {formatTime(tick.time)}
                               </span>
                             )}
@@ -1252,7 +1515,9 @@ const ClipperEditor = ({
                       {/* Clips track */}
                       <div
                         className="h-10 relative border-b border-neutral-200/30"
-                        onClick={(e) => { if (e.target === e.currentTarget) handleTrackClick(e); }}
+                        onClick={(e) => {
+                          if (e.target === e.currentTarget) handleTrackClick(e);
+                        }}
                       >
                         {clips.map((clip, i) => {
                           const leftPx = clip.start * pxPerSec;
@@ -1273,7 +1538,9 @@ const ClipperEditor = ({
                                 bottom: '2px',
                                 borderRadius: '4px',
                                 cursor: 'pointer',
-                                backgroundColor: isActive ? `${bankColor.primary}66` : `${bankColor.primary}33`,
+                                backgroundColor: isActive
+                                  ? `${bankColor.primary}66`
+                                  : `${bankColor.primary}33`,
                                 border: `2px solid ${isActive ? bankColor.primary : `${bankColor.primary}66`}`,
                                 display: 'flex',
                                 alignItems: 'center',
@@ -1281,21 +1548,55 @@ const ClipperEditor = ({
                                 zIndex: isActive ? 10 : 5,
                                 boxShadow: isActive ? `0 0 8px ${bankColor.primary}66` : 'none',
                               }}
-                              onClick={(e) => { e.stopPropagation(); setActiveClipIdx(i); jumpToClip(clip); }}
-                              onDoubleClick={(e) => { e.stopPropagation(); setRenamingClipId(clip.id); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveClipIdx(i);
+                                jumpToClip(clip);
+                              }}
+                              onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                setRenamingClipId(clip.id);
+                              }}
                             >
                               {/* Left resize handle */}
                               <div
-                                style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px', cursor: 'ew-resize', zIndex: 2 }}
+                                style={{
+                                  position: 'absolute',
+                                  left: 0,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: '6px',
+                                  cursor: 'ew-resize',
+                                  zIndex: 2,
+                                }}
                                 onPointerDown={(e) => {
-                                  e.stopPropagation(); e.preventDefault();
-                                  setClipResize({ active: true, clipIndex: i, edge: 'left', startX: e.clientX, startStart: clip.start, startEnd: clip.end });
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  setClipResize({
+                                    active: true,
+                                    clipIndex: i,
+                                    edge: 'left',
+                                    startX: e.clientX,
+                                    startStart: clip.start,
+                                    startEnd: clip.end,
+                                  });
                                 }}
                               />
                               {/* Clip content */}
-                              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '2px', padding: '0 8px' }}>
+                              <div
+                                style={{
+                                  flex: 1,
+                                  minWidth: 0,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '2px',
+                                  padding: '0 8px',
+                                }}
+                              >
                                 {isExported && (
-                                  <FeatherCheck style={{ width: 8, height: 8, color: '#22c55e', flexShrink: 0 }} />
+                                  <FeatherCheck
+                                    style={{ width: 8, height: 8, color: '#22c55e', flexShrink: 0 }}
+                                  />
                                 )}
                                 {isRenaming ? (
                                   <input
@@ -1304,25 +1605,51 @@ const ClipperEditor = ({
                                     value={clip.name}
                                     onChange={(e2) => renameClip(i, e2.target.value)}
                                     onBlur={() => setRenamingClipId(null)}
-                                    onKeyDown={(e2) => { if (e2.key === 'Enter' || e2.key === 'Escape') setRenamingClipId(null); }}
+                                    onKeyDown={(e2) => {
+                                      if (e2.key === 'Enter' || e2.key === 'Escape')
+                                        setRenamingClipId(null);
+                                    }}
                                     onClick={(e2) => e2.stopPropagation()}
                                   />
                                 ) : (
-                                  <span style={{
-                                    fontSize: '10px', fontWeight: 600, color: '#fff',
-                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                    pointerEvents: 'none', textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-                                  }}>
+                                  <span
+                                    style={{
+                                      fontSize: '10px',
+                                      fontWeight: 600,
+                                      color: '#fff',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                      pointerEvents: 'none',
+                                      textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                                    }}
+                                  >
                                     {clip.name}
                                   </span>
                                 )}
                               </div>
                               {/* Right resize handle */}
                               <div
-                                style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '6px', cursor: 'ew-resize', zIndex: 2 }}
+                                style={{
+                                  position: 'absolute',
+                                  right: 0,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: '6px',
+                                  cursor: 'ew-resize',
+                                  zIndex: 2,
+                                }}
                                 onPointerDown={(e) => {
-                                  e.stopPropagation(); e.preventDefault();
-                                  setClipResize({ active: true, clipIndex: i, edge: 'right', startX: e.clientX, startStart: clip.start, startEnd: clip.end });
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  setClipResize({
+                                    active: true,
+                                    clipIndex: i,
+                                    edge: 'right',
+                                    startX: e.clientX,
+                                    startStart: clip.start,
+                                    startEnd: clip.end,
+                                  });
                                 }}
                               />
                             </div>
@@ -1333,27 +1660,42 @@ const ClipperEditor = ({
                         <div
                           ref={pendingRegionRef}
                           style={{
-                            position: 'absolute', left: '0px', width: '0px', top: 0, bottom: 0,
+                            position: 'absolute',
+                            left: '0px',
+                            width: '0px',
+                            top: 0,
+                            bottom: 0,
                             backgroundColor: 'rgba(34, 197, 94, 0.15)',
                             borderLeft: '2px solid #22c55e',
                             borderRight: '2px solid rgba(34, 197, 94, 0.5)',
-                            zIndex: 3, pointerEvents: 'none', display: 'none',
+                            zIndex: 3,
+                            pointerEvents: 'none',
+                            display: 'none',
                           }}
                         />
 
                         {/* Mark-in line (static position) */}
                         {markIn !== null && duration > 0 && (
-                          <div style={{
-                            position: 'absolute', left: `${markIn * pxPerSec}px`,
-                            top: 0, bottom: 0, width: '2px', backgroundColor: '#22c55e',
-                            zIndex: 15, pointerEvents: 'none',
-                          }} />
+                          <div
+                            style={{
+                              position: 'absolute',
+                              left: `${markIn * pxPerSec}px`,
+                              top: 0,
+                              bottom: 0,
+                              width: '2px',
+                              backgroundColor: '#22c55e',
+                              zIndex: 15,
+                              pointerEvents: 'none',
+                            }}
+                          />
                         )}
 
                         {/* Empty hint */}
                         {clips.length === 0 && markIn === null && (
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <span className="text-[10px] text-neutral-600">Press I to mark in, O to mark out</span>
+                            <span className="text-[10px] text-neutral-600">
+                              Press I to mark in, O to mark out
+                            </span>
                           </div>
                         )}
                       </div>
@@ -1361,18 +1703,33 @@ const ClipperEditor = ({
                       {/* Source track */}
                       <div
                         className="h-7 relative border-b border-neutral-200/30"
-                        onClick={(e) => { if (e.target === e.currentTarget) handleTrackClick(e); }}
+                        onClick={(e) => {
+                          if (e.target === e.currentTarget) handleTrackClick(e);
+                        }}
                       >
-                        <div style={{
-                          position: 'absolute', left: 0, top: 0, bottom: 0,
-                          width: `${duration * pxPerSec}px`,
-                          background: 'linear-gradient(90deg, rgba(99,102,241,0.06) 0%, rgba(99,102,241,0.02) 100%)',
-                          borderRadius: '4px',
-                        }} />
-                        <span style={{
-                          position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)',
-                          fontSize: '10px', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none',
-                        }}>
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: `${duration * pxPerSec}px`,
+                            background:
+                              'linear-gradient(90deg, rgba(99,102,241,0.06) 0%, rgba(99,102,241,0.02) 100%)',
+                            borderRadius: '4px',
+                          }}
+                        />
+                        <span
+                          style={{
+                            position: 'absolute',
+                            left: '8px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            fontSize: '10px',
+                            color: 'rgba(255,255,255,0.35)',
+                            pointerEvents: 'none',
+                          }}
+                        >
                           {sourceName || 'No source'}
                         </span>
                       </div>
@@ -1380,7 +1737,9 @@ const ClipperEditor = ({
                       {/* Audio waveform track */}
                       <div
                         className="h-8 relative"
-                        onClick={(e) => { if (e.target === e.currentTarget) handleTrackClick(e); }}
+                        onClick={(e) => {
+                          if (e.target === e.currentTarget) handleTrackClick(e);
+                        }}
                       >
                         {(() => {
                           const wfData = clipWaveforms?.source || [];
@@ -1390,7 +1749,9 @@ const ClipperEditor = ({
                                 {clipWaveformsLoading ? (
                                   <>
                                     <div className="h-3 w-3 animate-spin rounded-full border border-indigo-500 border-t-transparent" />
-                                    <span className="text-[10px] text-indigo-400">Loading waveform...</span>
+                                    <span className="text-[10px] text-indigo-400">
+                                      Loading waveform...
+                                    </span>
                                   </>
                                 ) : (
                                   <span className="text-[10px] text-neutral-600">No audio</span>
@@ -1402,7 +1763,15 @@ const ClipperEditor = ({
                           const maxBars = Math.max(50, Math.round(audioPx / 3));
                           const bars = downsample(wfData, maxBars);
                           return (
-                            <div style={{ width: `${audioPx}px`, height: '100%', display: 'flex', alignItems: 'flex-end', padding: '0 1px 2px' }}>
+                            <div
+                              style={{
+                                width: `${audioPx}px`,
+                                height: '100%',
+                                display: 'flex',
+                                alignItems: 'flex-end',
+                                padding: '0 1px 2px',
+                              }}
+                            >
                               {bars.map((val, j) => (
                                 <div
                                   key={j}
@@ -1422,53 +1791,75 @@ const ClipperEditor = ({
                       </div>
 
                       {/* Cut lines — between adjacent clips (within 1s gap) */}
-                      {clips.length > 1 && clips.map((clip, i) => {
-                        if (i >= clips.length - 1) return null;
-                        const next = clips[i + 1];
-                        const gap = next.start - clip.end;
-                        if (gap < -0.5 || gap > 1.0) return null; // skip if overlapping >0.5s or gap >1s
-                        const boundary = gap <= 0 ? clip.end : (clip.end + next.start) / 2; // midpoint for small gaps
-                        return (
-                          <div key={`cut-${i}`}>
-                            <div style={{
-                              position: 'absolute', top: '24px', bottom: 0,
-                              left: `${boundary * pxPerSec}px`, width: '2px',
-                              backgroundColor: 'rgba(255,255,255,0.5)',
-                              zIndex: 12, pointerEvents: 'none',
-                            }} />
-                            <div
-                              style={{
-                                position: 'absolute', top: '24px', bottom: 0,
-                                left: `${boundary * pxPerSec - 6}px`, width: '12px',
-                                cursor: 'col-resize', zIndex: 13,
-                              }}
-                              onMouseDown={(e) => {
-                                e.stopPropagation(); e.preventDefault();
-                                setCutLineDrag({
-                                  active: true, clipIndex: i, startX: e.clientX,
-                                  origPrevEnd: clip.end,
-                                });
-                              }}
-                            />
-                          </div>
-                        );
-                      })}
+                      {clips.length > 1 &&
+                        clips.map((clip, i) => {
+                          if (i >= clips.length - 1) return null;
+                          const next = clips[i + 1];
+                          const gap = next.start - clip.end;
+                          if (gap < -0.5 || gap > 1.0) return null; // skip if overlapping >0.5s or gap >1s
+                          const boundary = gap <= 0 ? clip.end : (clip.end + next.start) / 2; // midpoint for small gaps
+                          return (
+                            <div key={`cut-${i}`}>
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  top: '24px',
+                                  bottom: 0,
+                                  left: `${boundary * pxPerSec}px`,
+                                  width: '2px',
+                                  backgroundColor: 'rgba(255,255,255,0.5)',
+                                  zIndex: 12,
+                                  pointerEvents: 'none',
+                                }}
+                              />
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  top: '24px',
+                                  bottom: 0,
+                                  left: `${boundary * pxPerSec - 6}px`,
+                                  width: '12px',
+                                  cursor: 'col-resize',
+                                  zIndex: 13,
+                                }}
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  setCutLineDrag({
+                                    active: true,
+                                    clipIndex: i,
+                                    startX: e.clientX,
+                                    origPrevEnd: clip.end,
+                                  });
+                                }}
+                              />
+                            </div>
+                          );
+                        })}
 
                       {/* Playhead (rAF-positioned via ref — pixel-based) */}
                       {duration > 0 && (
                         <div
                           ref={playheadRef}
                           style={{
-                            position: 'absolute', left: '0px', top: 0, bottom: 0,
-                            width: '2px', backgroundColor: '#ef4444',
-                            zIndex: 20, pointerEvents: 'auto', cursor: 'ew-resize',
+                            position: 'absolute',
+                            left: '0px',
+                            top: 0,
+                            bottom: 0,
+                            width: '2px',
+                            backgroundColor: '#ef4444',
+                            zIndex: 20,
+                            pointerEvents: 'auto',
+                            cursor: 'ew-resize',
                           }}
                           onMouseDown={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
                             document.body.style.userSelect = 'none';
                             const wasPlaying = isPlaying;
-                            if (isPlaying) { safePause(); }
+                            if (isPlaying) {
+                              safePause();
+                            }
                             const handleDragMove = (moveE) => {
                               const container = timelineRef.current;
                               if (!container) return;
@@ -1483,19 +1874,38 @@ const ClipperEditor = ({
                               window.removeEventListener('mousemove', handleDragMove);
                               window.removeEventListener('mouseup', handleDragEnd);
                               window.removeEventListener('pointercancel', handleDragEnd);
-                              if (wasPlaying) { safePlay(); }
+                              if (wasPlaying) {
+                                safePlay();
+                              }
                             };
                             window.addEventListener('mousemove', handleDragMove);
                             window.addEventListener('mouseup', handleDragEnd);
                             window.addEventListener('pointercancel', handleDragEnd);
                           }}
                         >
-                          <div style={{ position: 'absolute', left: '-6px', right: '-6px', top: 0, bottom: 0, cursor: 'ew-resize' }} />
-                          <div style={{
-                            position: 'absolute', top: '-2px', left: '50%', transform: 'translateX(-50%)',
-                            width: '10px', height: '10px', backgroundColor: '#ef4444', borderRadius: '2px',
-                            clipPath: 'polygon(0 0, 100% 0, 50% 100%)',
-                          }} />
+                          <div
+                            style={{
+                              position: 'absolute',
+                              left: '-6px',
+                              right: '-6px',
+                              top: 0,
+                              bottom: 0,
+                              cursor: 'ew-resize',
+                            }}
+                          />
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: '-2px',
+                              left: '50%',
+                              transform: 'translateX(-50%)',
+                              width: '10px',
+                              height: '10px',
+                              backgroundColor: '#ef4444',
+                              borderRadius: '2px',
+                              clipPath: 'polygon(0 0, 100% 0, 50% 100%)',
+                            }}
+                          />
                         </div>
                       )}
                     </div>
@@ -1504,10 +1914,34 @@ const ClipperEditor = ({
 
                 {/* Playback controls */}
                 <div className="flex w-full items-center justify-center gap-3">
-                  <IconButton variant="neutral-tertiary" size="small" icon={<FeatherSkipBack />} aria-label="Skip to start" onClick={() => seekTo(0)} />
-                  <IconButton variant="neutral-secondary" size="medium" icon={isPlaying ? <FeatherPause /> : <FeatherPlay />} aria-label={isPlaying ? 'Pause' : 'Play'} onClick={togglePlay} />
-                  <IconButton variant="neutral-tertiary" size="small" icon={<FeatherSkipForward />} aria-label="Skip to end" onClick={() => seekTo(duration)} />
-                  <IconButton variant="neutral-tertiary" size="small" icon={isMuted ? <FeatherVolumeX /> : <FeatherVolume2 />} aria-label={isMuted ? 'Unmute' : 'Mute'} onClick={toggleMute} />
+                  <IconButton
+                    variant="neutral-tertiary"
+                    size="small"
+                    icon={<FeatherSkipBack />}
+                    aria-label="Skip to start"
+                    onClick={() => seekTo(0)}
+                  />
+                  <IconButton
+                    variant="neutral-secondary"
+                    size="medium"
+                    icon={isPlaying ? <FeatherPause /> : <FeatherPlay />}
+                    aria-label={isPlaying ? 'Pause' : 'Play'}
+                    onClick={togglePlay}
+                  />
+                  <IconButton
+                    variant="neutral-tertiary"
+                    size="small"
+                    icon={<FeatherSkipForward />}
+                    aria-label="Skip to end"
+                    onClick={() => seekTo(duration)}
+                  />
+                  <IconButton
+                    variant="neutral-tertiary"
+                    size="small"
+                    icon={isMuted ? <FeatherVolumeX /> : <FeatherVolume2 />}
+                    aria-label={isMuted ? 'Unmute' : 'Mute'}
+                    onClick={toggleMute}
+                  />
                 </div>
 
                 {/* Keyboard hints */}
@@ -1533,7 +1967,8 @@ const ClipperEditor = ({
                 <Badge variant="neutral">{clips.length}</Badge>
                 {hasSource && clips.length > 0 && (
                   <IconButton
-                    variant="neutral-tertiary" size="small"
+                    variant="neutral-tertiary"
+                    size="small"
                     icon={<FeatherZap />}
                     aria-label="Auto-detect sections"
                     onClick={handleAutoDetect}
@@ -1542,7 +1977,12 @@ const ClipperEditor = ({
                 )}
               </div>
               {hasSource && (
-                <Button variant="neutral-secondary" size="small" icon={<FeatherUpload />} onClick={() => fileInputRef.current?.click()}>
+                <Button
+                  variant="neutral-secondary"
+                  size="small"
+                  icon={<FeatherUpload />}
+                  onClick={() => fileInputRef.current?.click()}
+                >
                   Change Source
                 </Button>
               )}
@@ -1552,19 +1992,28 @@ const ClipperEditor = ({
             {hasSource && (
               <div className="flex flex-col border-b border-neutral-200">
                 <div className="flex items-center gap-2 px-4 py-2 bg-neutral-50/50">
-                  <FeatherPlay className="text-neutral-500 flex-none" style={{ width: 12, height: 12 }} />
-                  <span className="text-caption font-caption text-neutral-400 truncate">{sourceName}</span>
-                  <span className="text-caption font-caption text-neutral-600 flex-none">{formatTime(duration)}</span>
+                  <FeatherPlay
+                    className="text-neutral-500 flex-none"
+                    style={{ width: 12, height: 12 }}
+                  />
+                  <span className="text-caption font-caption text-neutral-400 truncate">
+                    {sourceName}
+                  </span>
+                  <span className="text-caption font-caption text-neutral-600 flex-none">
+                    {formatTime(duration)}
+                  </span>
                 </div>
                 {availableSourceVideos.length > 1 && (
                   <div className="flex gap-1 px-3 py-2 overflow-x-auto">
-                    {availableSourceVideos.map(v => {
+                    {availableSourceVideos.map((v) => {
                       const isActive = sourceUrl === v.url;
                       return (
                         <div
                           key={v.id}
                           className={`relative flex-none w-14 h-10 rounded overflow-hidden cursor-pointer border transition-colors ${
-                            isActive ? 'border-indigo-500' : 'border-neutral-200 hover:border-neutral-500'
+                            isActive
+                              ? 'border-indigo-500'
+                              : 'border-neutral-200 hover:border-neutral-500'
                           }`}
                           title={v.name}
                           onClick={() => {
@@ -1577,10 +2026,17 @@ const ClipperEditor = ({
                           }}
                         >
                           {v.thumbnailUrl ? (
-                            <img src={v.thumbnailUrl} alt={v.name} className="w-full h-full object-cover" />
+                            <img
+                              src={v.thumbnailUrl}
+                              alt={v.name}
+                              className="w-full h-full object-cover"
+                            />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center bg-neutral-100">
-                              <FeatherPlay className="text-neutral-600" style={{ width: 10, height: 10 }} />
+                              <FeatherPlay
+                                className="text-neutral-600"
+                                style={{ width: 10, height: 10 }}
+                              />
                             </div>
                           )}
                         </div>
@@ -1595,8 +2051,13 @@ const ClipperEditor = ({
             {/* Auto-detect loading state */}
             {detecting && (
               <div className="flex flex-col items-center justify-center px-4 py-6 gap-3">
-                <FeatherLoader className="text-indigo-400 animate-spin" style={{ width: 24, height: 24 }} />
-                <span className="text-caption font-caption text-neutral-400 text-center">{detectProgress || 'Detecting...'}</span>
+                <FeatherLoader
+                  className="text-indigo-400 animate-spin"
+                  style={{ width: 24, height: 24 }}
+                />
+                <span className="text-caption font-caption text-neutral-400 text-center">
+                  {detectProgress || 'Detecting...'}
+                </span>
               </div>
             )}
 
@@ -1604,20 +2065,36 @@ const ClipperEditor = ({
             {!detecting && detectedSections && detectedSections.length > 0 && (
               <div className="flex flex-col border-b border-neutral-200">
                 <div className="flex items-center justify-between px-3 py-2 bg-indigo-500/10">
-                  <span className="text-caption-bold font-caption-bold text-indigo-400">Detected Sections</span>
+                  <span className="text-caption-bold font-caption-bold text-indigo-400">
+                    Detected Sections
+                  </span>
                   <div className="flex items-center gap-1">
                     <button
                       className="text-[10px] text-neutral-400 hover:text-white px-1"
                       onClick={() => {
                         const allSelected = selectedSectionCount === detectedSections.length;
                         const next = {};
-                        if (!allSelected) detectedSections.forEach((_, i) => { next[i] = true; });
+                        if (!allSelected)
+                          detectedSections.forEach((_, i) => {
+                            next[i] = true;
+                          });
                         setSelectedSections(next);
                       }}
                     >
-                      {selectedSectionCount === detectedSections.length ? 'Deselect All' : 'Select All'}
+                      {selectedSectionCount === detectedSections.length
+                        ? 'Deselect All'
+                        : 'Select All'}
                     </button>
-                    <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />} aria-label="Dismiss" onClick={() => { setDetectedSections(null); setSelectedSections({}); }} />
+                    <IconButton
+                      variant="neutral-tertiary"
+                      size="small"
+                      icon={<FeatherX />}
+                      aria-label="Dismiss"
+                      onClick={() => {
+                        setDetectedSections(null);
+                        setSelectedSections({});
+                      }}
+                    />
                   </div>
                 </div>
                 <div className="flex flex-col gap-0.5 px-2 py-2 max-h-[240px] overflow-y-auto">
@@ -1629,14 +2106,22 @@ const ClipperEditor = ({
                       }`}
                       onClick={() => toggleSectionSelect(i)}
                     >
-                      <div className={`w-4 h-4 rounded border flex-none flex items-center justify-center ${
-                        selectedSections[i] ? 'bg-indigo-500 border-indigo-500' : 'border-neutral-300'
-                      }`}>
-                        {selectedSections[i] && <FeatherCheck className="text-white" style={{ width: 10, height: 10 }} />}
+                      <div
+                        className={`w-4 h-4 rounded border flex-none flex items-center justify-center ${
+                          selectedSections[i]
+                            ? 'bg-indigo-500 border-indigo-500'
+                            : 'border-neutral-300'
+                        }`}
+                      >
+                        {selectedSections[i] && (
+                          <FeatherCheck className="text-white" style={{ width: 10, height: 10 }} />
+                        )}
                       </div>
                       <div className="flex flex-col gap-0.5 flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-white font-medium truncate">{section.name}</span>
+                          <span className="text-xs text-white font-medium truncate">
+                            {section.name}
+                          </span>
                           <Badge variant="neutral">{section.type}</Badge>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1644,27 +2129,36 @@ const ClipperEditor = ({
                             {formatTime(section.startTime)} → {formatTime(section.endTime)}
                           </span>
                           {section.lyricSnippet && (
-                            <span className="text-[10px] text-neutral-600 truncate italic">"{section.lyricSnippet}"</span>
+                            <span className="text-[10px] text-neutral-600 truncate italic">
+                              "{section.lyricSnippet}"
+                            </span>
                           )}
                         </div>
                       </div>
                       <IconButton
-                        variant="neutral-tertiary" size="small"
+                        variant="neutral-tertiary"
+                        size="small"
                         icon={<FeatherPlay />}
                         aria-label="Seek to section"
-                        onClick={(e) => { e.stopPropagation(); seekTo(section.startTime); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          seekTo(section.startTime);
+                        }}
                       />
                     </div>
                   ))}
                 </div>
                 <div className="px-3 py-2 border-t border-neutral-200/50">
                   <Button
-                    variant="brand-primary" size="small"
+                    variant="brand-primary"
+                    size="small"
                     icon={<FeatherPlus />}
                     disabled={selectedSectionCount === 0}
                     onClick={handleAddDetectedClips}
                   >
-                    {selectedSectionCount > 0 ? `Add ${selectedSectionCount} as Clips` : 'Select sections'}
+                    {selectedSectionCount > 0
+                      ? `Add ${selectedSectionCount} as Clips`
+                      : 'Select sections'}
                   </Button>
                 </div>
               </div>
@@ -1674,11 +2168,14 @@ const ClipperEditor = ({
               <div className="flex flex-1 flex-col items-center justify-center px-4 gap-3">
                 <FeatherScissors className="text-neutral-700" style={{ width: 24, height: 24 }} />
                 <span className="text-caption font-caption text-neutral-500 text-center">
-                  {hasSource ? 'Use I/O keys or the Mark In/Out button to define clip segments' : 'Select a source video first'}
+                  {hasSource
+                    ? 'Use I/O keys or the Mark In/Out button to define clip segments'
+                    : 'Select a source video first'}
                 </span>
                 {hasSource && !detectedSections && (
                   <Button
-                    variant="neutral-secondary" size="small"
+                    variant="neutral-secondary"
+                    size="small"
                     icon={<FeatherZap />}
                     onClick={handleAutoDetect}
                   >
@@ -1699,11 +2196,21 @@ const ClipperEditor = ({
                         className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-neutral-100/50 border-b border-neutral-200/50"
                         onClick={() => toggleBankCollapse(bIdx)}
                       >
-                        {isCollapsed
-                          ? <FeatherChevronRight className="text-neutral-500 flex-none" style={{ width: 14, height: 14 }} />
-                          : <FeatherChevronDown className="text-neutral-500 flex-none" style={{ width: 14, height: 14 }} />
-                        }
-                        <div className="w-2.5 h-2.5 rounded-full flex-none" style={{ backgroundColor: bankColor.primary }} />
+                        {isCollapsed ? (
+                          <FeatherChevronRight
+                            className="text-neutral-500 flex-none"
+                            style={{ width: 14, height: 14 }}
+                          />
+                        ) : (
+                          <FeatherChevronDown
+                            className="text-neutral-500 flex-none"
+                            style={{ width: 14, height: 14 }}
+                          />
+                        )}
+                        <div
+                          className="w-2.5 h-2.5 rounded-full flex-none"
+                          style={{ backgroundColor: bankColor.primary }}
+                        />
                         <input
                           className="bg-transparent text-caption-bold font-caption-bold text-neutral-300 outline-none flex-1 min-w-0"
                           value={bankLabel}
@@ -1713,10 +2220,14 @@ const ClipperEditor = ({
                         <Badge variant="neutral">{bankClips.length}</Badge>
                         {bankLabels.length > 1 && (
                           <IconButton
-                            variant="neutral-tertiary" size="small"
+                            variant="neutral-tertiary"
+                            size="small"
                             icon={<FeatherTrash2 />}
                             aria-label="Delete bank"
-                            onClick={(e) => { e.stopPropagation(); removeBank(bIdx); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeBank(bIdx);
+                            }}
                           />
                         )}
                       </div>
@@ -1735,13 +2246,26 @@ const ClipperEditor = ({
                                     ? 'border border-solid'
                                     : 'bg-neutral-100/40 border border-transparent hover:bg-neutral-100/70'
                                 }`}
-                                style={isActive ? { backgroundColor: `${bankColor.primary}66`, borderColor: bankColor.primary } : {}}
-                                onClick={() => { setActiveClipIdx(clip._idx); jumpToClip(clip); }}
+                                style={
+                                  isActive
+                                    ? {
+                                        backgroundColor: `${bankColor.primary}66`,
+                                        borderColor: bankColor.primary,
+                                      }
+                                    : {}
+                                }
+                                onClick={() => {
+                                  setActiveClipIdx(clip._idx);
+                                  jumpToClip(clip);
+                                }}
                               >
                                 {/* Exported indicator */}
                                 {isExported && (
                                   <div className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500/20 flex-none">
-                                    <FeatherCheck className="text-green-400" style={{ width: 10, height: 10 }} />
+                                    <FeatherCheck
+                                      className="text-green-400"
+                                      style={{ width: 10, height: 10 }}
+                                    />
                                   </div>
                                 )}
                                 <div className="flex flex-col gap-0.5 flex-1 min-w-0">
@@ -1753,9 +2277,12 @@ const ClipperEditor = ({
                                   />
                                   <div className="flex items-center gap-2">
                                     <span className="text-[11px] text-neutral-500">
-                                      {formatTimePrecise(clip.start)} → {formatTimePrecise(clip.end)}
+                                      {formatTimePrecise(clip.start)} →{' '}
+                                      {formatTimePrecise(clip.end)}
                                     </span>
-                                    <Badge variant="neutral">{formatTimePrecise(clip.duration)}</Badge>
+                                    <Badge variant="neutral">
+                                      {formatTimePrecise(clip.duration)}
+                                    </Badge>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1">
@@ -1763,18 +2290,29 @@ const ClipperEditor = ({
                                     <select
                                       className="bg-neutral-100 text-[10px] text-neutral-400 border border-neutral-200 rounded px-1 py-0.5 cursor-pointer outline-none w-14"
                                       value={clip.bankIndex}
-                                      onChange={(e) => { e.stopPropagation(); moveClipToBank(clip._idx, Number(e.target.value)); }}
+                                      onChange={(e) => {
+                                        e.stopPropagation();
+                                        moveClipToBank(clip._idx, Number(e.target.value));
+                                      }}
                                       onClick={(e) => e.stopPropagation()}
                                       title="Move to bank"
                                     >
-                                      {bankLabels.map((bl, bi) => <option key={bi} value={bi}>{bl}</option>)}
+                                      {bankLabels.map((bl, bi) => (
+                                        <option key={bi} value={bi}>
+                                          {bl}
+                                        </option>
+                                      ))}
                                     </select>
                                   )}
                                   <IconButton
-                                    variant="neutral-tertiary" size="small"
+                                    variant="neutral-tertiary"
+                                    size="small"
                                     icon={<FeatherTrash2 />}
                                     aria-label="Remove clip"
-                                    onClick={(e) => { e.stopPropagation(); removeClip(clip._idx); }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      removeClip(clip._idx);
+                                    }}
                                   />
                                 </div>
                               </div>
@@ -1789,7 +2327,12 @@ const ClipperEditor = ({
                 {/* Add bank button */}
                 {bankLabels.length < 10 && (
                   <div className="px-3 py-2">
-                    <Button variant="neutral-tertiary" size="small" icon={<FeatherPlus />} onClick={addBank}>
+                    <Button
+                      variant="neutral-tertiary"
+                      size="small"
+                      icon={<FeatherPlus />}
+                      onClick={addBank}
+                    >
                       Add Bank
                     </Button>
                   </div>
@@ -1803,17 +2346,26 @@ const ClipperEditor = ({
                 {exporting && (
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-caption font-caption text-neutral-400">Exporting {exportedCount}/{unexportedCount}...</span>
-                      <span className="text-caption font-caption text-neutral-500">{exportProgress}%</span>
+                      <span className="text-caption font-caption text-neutral-400">
+                        Exporting {exportedCount}/{unexportedCount}...
+                      </span>
+                      <span className="text-caption font-caption text-neutral-500">
+                        {exportProgress}%
+                      </span>
                     </div>
                     <div className="w-full h-1.5 rounded-full bg-neutral-100">
-                      <div className="h-full rounded-full bg-indigo-500" style={{ width: `${exportProgress}%` }} />
+                      <div
+                        className="h-full rounded-full bg-indigo-500"
+                        style={{ width: `${exportProgress}%` }}
+                      />
                     </div>
                   </div>
                 )}
                 {/* Destination picker (multi-select) */}
                 <div className="relative">
-                  <span className="text-caption font-caption text-neutral-500 mb-1 block">Destinations</span>
+                  <span className="text-caption font-caption text-neutral-500 mb-1 block">
+                    Destinations
+                  </span>
                   <button
                     className="flex w-full items-center gap-2 rounded-md border border-solid border-neutral-200 bg-[#1a1a1aff] px-3 py-2 hover:bg-[#262626] transition text-left"
                     onClick={() => setDestPickerOpen(!destPickerOpen)}
@@ -1823,17 +2375,26 @@ const ClipperEditor = ({
                     </span>
                     <FeatherChevronDown
                       className="text-neutral-400 flex-none transition-transform"
-                      style={{ width: 14, height: 14, transform: destPickerOpen ? 'rotate(180deg)' : 'none' }}
+                      style={{
+                        width: 14,
+                        height: 14,
+                        transform: destPickerOpen ? 'rotate(180deg)' : 'none',
+                      }}
                     />
                   </button>
                   {destPickerOpen && (
                     <div className="absolute bottom-full left-0 right-0 mb-1 flex flex-col gap-0.5 px-2 py-2 bg-[#111111] border border-neutral-200 rounded-lg max-h-48 overflow-y-auto shadow-xl z-20">
                       {[
-                        { value: 'current-niche', label: `Current Niche${category?.name ? ` — ${category.name}` : ''}` },
+                        {
+                          value: 'current-niche',
+                          label: `Current Niche${category?.name ? ` — ${category.name}` : ''}`,
+                        },
                         { value: 'project-pool', label: 'Project Pool' },
                         { value: 'library-only', label: 'All Media Only' },
-                        ...projectNiches.filter(n => n.id !== nicheId).map(n => ({ value: n.id, label: n.name })),
-                      ].map(opt => {
+                        ...projectNiches
+                          .filter((n) => n.id !== nicheId)
+                          .map((n) => ({ value: n.id, label: n.name })),
+                      ].map((opt) => {
                         const isSelected = exportDestinations.has(opt.value);
                         return (
                           <button
@@ -1843,12 +2404,23 @@ const ClipperEditor = ({
                             }`}
                             onClick={() => toggleDestination(opt.value)}
                           >
-                            <div className={`w-3.5 h-3.5 rounded border flex-none flex items-center justify-center ${
-                              isSelected ? 'bg-indigo-500 border-indigo-500' : 'border-neutral-300'
-                            }`}>
-                              {isSelected && <FeatherCheck className="text-white" style={{ width: 8, height: 8 }} />}
+                            <div
+                              className={`w-3.5 h-3.5 rounded border flex-none flex items-center justify-center ${
+                                isSelected
+                                  ? 'bg-indigo-500 border-indigo-500'
+                                  : 'border-neutral-300'
+                              }`}
+                            >
+                              {isSelected && (
+                                <FeatherCheck
+                                  className="text-white"
+                                  style={{ width: 8, height: 8 }}
+                                />
+                              )}
                             </div>
-                            <span className="text-caption font-caption text-white truncate grow">{opt.label}</span>
+                            <span className="text-caption font-caption text-white truncate grow">
+                              {opt.label}
+                            </span>
                           </button>
                         );
                       })}
@@ -1856,9 +2428,11 @@ const ClipperEditor = ({
                   )}
                 </div>
                 <Button
-                  variant="brand-primary" size="medium"
+                  variant="brand-primary"
+                  size="medium"
                   icon={exporting ? undefined : <FeatherDownload />}
-                  disabled={unexportedCount === 0 || exporting} loading={exporting}
+                  disabled={unexportedCount === 0 || exporting}
+                  loading={exporting}
                   onClick={handleExportToBanks}
                 >
                   {exporting
@@ -1871,7 +2445,13 @@ const ClipperEditor = ({
             )}
 
             {/* Hidden file input */}
-            <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={handleFileSelect} />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="video/*"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
           </div>
         )}
       </div>
@@ -1882,20 +2462,45 @@ const ClipperEditor = ({
           {clips.map((clip, i) => {
             const isExported = !!clip.exportedMediaId;
             return (
-              <div key={clip.id} className="flex items-center gap-2 rounded-lg px-3 py-2 bg-neutral-100/50">
-                <div className="w-2 h-2 rounded-full flex-none" style={{ backgroundColor: getBankColor(typeof clip.bankIndex === 'number' ? clip.bankIndex : 0).primary }} />
-                {isExported && <FeatherCheck className="text-green-400 flex-none" style={{ width: 10, height: 10 }} />}
+              <div
+                key={clip.id}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 bg-neutral-100/50"
+              >
+                <div
+                  className="w-2 h-2 rounded-full flex-none"
+                  style={{
+                    backgroundColor: getBankColor(
+                      typeof clip.bankIndex === 'number' ? clip.bankIndex : 0,
+                    ).primary,
+                  }}
+                />
+                {isExported && (
+                  <FeatherCheck
+                    className="text-green-400 flex-none"
+                    style={{ width: 10, height: 10 }}
+                  />
+                )}
                 <span className="text-sm text-white flex-1 truncate">{clip.name}</span>
-                <span className="text-[11px] text-neutral-500">{formatTimePrecise(clip.start)}→{formatTimePrecise(clip.end)}</span>
-                <IconButton variant="neutral-tertiary" size="small" icon={<FeatherTrash2 />} aria-label="Remove" onClick={() => removeClip(i)} />
+                <span className="text-[11px] text-neutral-500">
+                  {formatTimePrecise(clip.start)}→{formatTimePrecise(clip.end)}
+                </span>
+                <IconButton
+                  variant="neutral-tertiary"
+                  size="small"
+                  icon={<FeatherTrash2 />}
+                  aria-label="Remove"
+                  onClick={() => removeClip(i)}
+                />
               </div>
             );
           })}
           {/* Mobile export button */}
           <Button
-            variant="brand-primary" size="medium"
+            variant="brand-primary"
+            size="medium"
             icon={<FeatherDownload />}
-            disabled={unexportedCount === 0 || exporting} loading={exporting}
+            disabled={unexportedCount === 0 || exporting}
+            loading={exporting}
             onClick={handleExportToBanks}
           >
             {unexportedCount > 0 ? `Export ${unexportedCount} → ${destSummary}` : 'All Exported'}

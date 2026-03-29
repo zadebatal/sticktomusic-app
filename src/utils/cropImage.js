@@ -22,8 +22,14 @@ export default function getCroppedImg(imageSrc, pixelCrop) {
       // Draw the cropped region scaled to 256x256
       ctx.drawImage(
         image,
-        pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height,
-        0, 0, size, size
+        pixelCrop.x,
+        pixelCrop.y,
+        pixelCrop.width,
+        pixelCrop.height,
+        0,
+        0,
+        size,
+        size,
       );
 
       canvas.toBlob(
@@ -32,7 +38,7 @@ export default function getCroppedImg(imageSrc, pixelCrop) {
           resolve(blob);
         },
         'image/jpeg',
-        0.9
+        0.9,
       );
     };
     image.onerror = () => reject(new Error('Failed to load image'));

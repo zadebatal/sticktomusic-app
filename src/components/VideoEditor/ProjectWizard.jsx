@@ -57,12 +57,12 @@ const ProjectWizard = ({
 
   // All accounts (Late + manual) for linked page dropdown
   const allAccounts = useMemo(() => {
-    const accounts = [...(latePages.filter(p => p.artistId === artistId))];
-    (manualAccounts || []).forEach(ma => {
+    const accounts = [...latePages.filter((p) => p.artistId === artistId)];
+    (manualAccounts || []).forEach((ma) => {
       const handle = ma.handle?.replace('@', '');
-      const alreadyCovered = accounts.some(lp => lp.handle?.replace('@', '') === handle);
+      const alreadyCovered = accounts.some((lp) => lp.handle?.replace('@', '') === handle);
       if (!alreadyCovered) {
-        (ma.platforms || []).forEach(plat => {
+        (ma.platforms || []).forEach((plat) => {
           accounts.push({
             id: `manual-${ma.handle}-${plat}`,
             handle: ma.handle?.startsWith('@') ? ma.handle : `@${ma.handle}`,
@@ -78,7 +78,7 @@ const ProjectWizard = ({
 
   const uniquePages = useMemo(() => {
     const seen = new Set();
-    return allAccounts.filter(p => {
+    return allAccounts.filter((p) => {
       const key = `${p.handle}_${p.platform}`;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -91,11 +91,15 @@ const ProjectWizard = ({
     if (!projectName.trim()) return;
     try {
       localStorage.removeItem(`stm_projects_deleted_${artistId}`);
-      const project = createProject(artistId, {
-        name: projectName.trim(),
-        linkedPage,
-        color: PIPELINE_COLORS[Math.floor(Math.random() * PIPELINE_COLORS.length)],
-      }, db);
+      const project = createProject(
+        artistId,
+        {
+          name: projectName.trim(),
+          linkedPage,
+          color: PIPELINE_COLORS[Math.floor(Math.random() * PIPELINE_COLORS.length)],
+        },
+        db,
+      );
       setProjectId(project.id);
       hasCreatedDataRef.current = true;
       setStep(2);
@@ -120,7 +124,7 @@ const ProjectWizard = ({
 
       // Delete niches for deselected formats (user went back and unchecked)
       for (const [fmtId, nicheId] of Object.entries(createdNicheMap)) {
-        if (!selectedFormats.find(f => f.id === fmtId)) {
+        if (!selectedFormats.find((f) => f.id === fmtId)) {
           markCollectionPendingDeletion(nicheId);
           await deleteCollectionAsync(db, artistId, nicheId);
           clearPendingDeletion(nicheId);
@@ -186,38 +190,52 @@ const ProjectWizard = ({
   }, [onCancel]);
 
   // Step 1 name change: update project in storage if already created
-  const handleProjectNameChange = useCallback(async (name) => {
-    setProjectName(name);
-    if (projectId && name.trim()) {
-      const cols = getUserCollections(artistId);
-      const idx = cols.findIndex(c => c.id === projectId);
-      if (idx !== -1) {
-        cols[idx].name = name.trim();
-        cols[idx].updatedAt = new Date().toISOString();
-        saveCollections(artistId, cols);
-        if (db) {
-          try { await saveCollectionToFirestore(db, artistId, cols[idx]); } catch (e) { /* ok */ }
+  const handleProjectNameChange = useCallback(
+    async (name) => {
+      setProjectName(name);
+      if (projectId && name.trim()) {
+        const cols = getUserCollections(artistId);
+        const idx = cols.findIndex((c) => c.id === projectId);
+        if (idx !== -1) {
+          cols[idx].name = name.trim();
+          cols[idx].updatedAt = new Date().toISOString();
+          saveCollections(artistId, cols);
+          if (db) {
+            try {
+              await saveCollectionToFirestore(db, artistId, cols[idx]);
+            } catch (e) {
+              /* ok */
+            }
+          }
         }
       }
-    }
-  }, [projectId, artistId, db]);
+    },
+    [projectId, artistId, db],
+  );
 
   // Step 1 linked page change: update project in storage if already created
-  const handleLinkedPageChange = useCallback(async (page) => {
-    setLinkedPage(page);
-    if (projectId) {
-      const cols = getUserCollections(artistId);
-      const idx = cols.findIndex(c => c.id === projectId);
-      if (idx !== -1) {
-        cols[idx].linkedPage = page;
-        cols[idx].updatedAt = new Date().toISOString();
-        saveCollections(artistId, cols);
-        if (db) {
-          try { await saveCollectionToFirestore(db, artistId, cols[idx]); } catch (e) { /* ok */ }
+  const handleLinkedPageChange = useCallback(
+    async (page) => {
+      setLinkedPage(page);
+      if (projectId) {
+        const cols = getUserCollections(artistId);
+        const idx = cols.findIndex((c) => c.id === projectId);
+        if (idx !== -1) {
+          cols[idx].linkedPage = page;
+          cols[idx].updatedAt = new Date().toISOString();
+          saveCollections(artistId, cols);
+          if (db) {
+            try {
+              await saveCollectionToFirestore(db, artistId, cols[idx]);
+            } catch (e) {
+              /* ok */
+            }
+          }
         }
       }
-    }
-  }, [projectId, artistId, db]);
+    },
+    [projectId, artistId, db],
+  );
 
   // Get niche IDs as array for Step 3
   const nicheIds = useMemo(() => Object.values(createdNicheMap), [createdNicheMap]);
@@ -232,13 +250,20 @@ const ProjectWizard = ({
             size="medium"
             icon={step === 1 ? <FeatherX /> : <FeatherArrowLeft />}
             aria-label={step === 1 ? 'Cancel' : 'Back'}
-            onClick={step === 1 ? handleCancelClick : (step === 2 ? handleStep2Back : handleStep3Back)}
+            onClick={
+              step === 1 ? handleCancelClick : step === 2 ? handleStep2Back : handleStep3Back
+            }
           />
           <span className="text-heading-3 font-heading-3 text-[#ffffffff] truncate">
             {projectId ? `New Project: ${projectName}` : 'New Project'}
           </span>
         </div>
-        <Button variant="neutral-tertiary" size="small" onClick={handleCancelClick} disabled={isCancelling}>
+        <Button
+          variant="neutral-tertiary"
+          size="small"
+          onClick={handleCancelClick}
+          disabled={isCancelling}
+        >
           Cancel
         </Button>
       </div>
@@ -297,17 +322,35 @@ const ProjectWizard = ({
 
       {/* Cancel confirmation dialog */}
       {showCancelConfirm && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80" onClick={() => setShowCancelConfirm(false)}>
-          <div className="w-full max-w-sm rounded-xl border border-neutral-200 bg-[#111111] p-6" onClick={e => e.stopPropagation()}>
-            <span className="text-heading-3 font-heading-3 text-[#ffffffff] block mb-2">Cancel project creation?</span>
+        <div
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80"
+          onClick={() => setShowCancelConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-neutral-200 bg-[#111111] p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="text-heading-3 font-heading-3 text-[#ffffffff] block mb-2">
+              Cancel project creation?
+            </span>
             <span className="text-body font-body text-neutral-400 block mb-6">
-              The project and its niches will be deleted. Any uploaded media will remain in your library.
+              The project and its niches will be deleted. Any uploaded media will remain in your
+              library.
             </span>
             <div className="flex items-center justify-end gap-3">
-              <Button variant="neutral-secondary" size="medium" onClick={() => setShowCancelConfirm(false)}>
+              <Button
+                variant="neutral-secondary"
+                size="medium"
+                onClick={() => setShowCancelConfirm(false)}
+              >
                 Keep editing
               </Button>
-              <Button variant="destructive-primary" size="medium" onClick={handleCancel} loading={isCancelling}>
+              <Button
+                variant="destructive-primary"
+                size="medium"
+                onClick={handleCancel}
+                loading={isCancelling}
+              >
                 Delete & cancel
               </Button>
             </div>

@@ -12,11 +12,11 @@ const PROXY_URL = '/api/web-import';
 
 // Platform detection (client-side, no network call)
 const PLATFORM_PATTERNS = [
-  { name: 'YouTube',   icon: '▶',  pattern: /(?:youtube\.com|youtu\.be)/i },
-  { name: 'TikTok',    icon: '♪',  pattern: /tiktok\.com/i },
+  { name: 'YouTube', icon: '▶', pattern: /(?:youtube\.com|youtu\.be)/i },
+  { name: 'TikTok', icon: '♪', pattern: /tiktok\.com/i },
   { name: 'Pinterest', icon: '📌', pattern: /(?:pinterest\.com|pin\.it)/i },
   { name: 'Instagram', icon: '📷', pattern: /instagram\.com/i },
-  { name: 'Twitter/X', icon: '𝕏',  pattern: /(?:twitter\.com|x\.com)/i },
+  { name: 'Twitter/X', icon: '𝕏', pattern: /(?:twitter\.com|x\.com)/i },
 ];
 
 /**
@@ -62,7 +62,7 @@ export async function analyzeUrl(url) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ url }),
   });
@@ -92,7 +92,7 @@ export async function startDownload(url, artistId, maxItems, audioOnly = false) 
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(body),
   });
@@ -110,7 +110,7 @@ export async function startDownload(url, artistId, maxItems, audioOnly = false) 
 export async function checkStatus(jobId) {
   const token = await getToken();
   const resp = await fetch(`${PROXY_URL}?action=status&jobId=${encodeURIComponent(jobId)}`, {
-    headers: { 'Authorization': `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}` },
   });
 
   const data = await resp.json();

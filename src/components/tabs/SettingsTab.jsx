@@ -7,9 +7,17 @@ import { Button } from '../../ui/components/Button';
 import { Badge } from '../../ui/components/Badge';
 import { TextField } from '../../ui/components/TextField';
 import {
-  FeatherLogOut, FeatherAlertTriangle, FeatherCloud,
-  FeatherUsers, FeatherUser, FeatherCreditCard, FeatherMail,
-  FeatherCheck, FeatherCamera, FeatherEdit2, FeatherTrash2,
+  FeatherLogOut,
+  FeatherAlertTriangle,
+  FeatherCloud,
+  FeatherUsers,
+  FeatherUser,
+  FeatherCreditCard,
+  FeatherMail,
+  FeatherCheck,
+  FeatherCamera,
+  FeatherEdit2,
+  FeatherTrash2,
   FeatherHardDrive,
 } from '@subframe/core';
 import { formatStorageSize } from '../../services/storageQuotaService';
@@ -38,7 +46,15 @@ const DRIVE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID;
 const DRIVE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;
 const DROPBOX_APP_KEY = process.env.REACT_APP_DROPBOX_APP_KEY;
 
-const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = [], firestoreArtists = [] }) => {
+const SettingsTab = ({
+  user,
+  onLogout,
+  db,
+  artistId,
+  onPhotoUpdated,
+  allUsers = [],
+  firestoreArtists = [],
+}) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteStatus, setInviteStatus] = useState(null); // 'sending' | 'success' | 'error'
@@ -65,8 +81,12 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
   // Load cloud settings on mount
   useEffect(() => {
     if (!db || !artistId) return;
-    getDriveSettings(db, artistId).then(setDriveSettings).catch(() => {});
-    getDropboxSettings(db, artistId).then(setDropboxSettings).catch(() => {});
+    getDriveSettings(db, artistId)
+      .then(setDriveSettings)
+      .catch(() => {});
+    getDropboxSettings(db, artistId)
+      .then(setDropboxSettings)
+      .catch(() => {});
   }, [db, artistId]);
 
   const handleConnectDrive = useCallback(async () => {
@@ -80,7 +100,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
       await driveAuth();
       const settings = { connected: true, connectedAt: new Date().toISOString() };
       await saveDriveSettings(db, artistId, settings);
-      setDriveSettings(prev => ({ ...prev, ...settings }));
+      setDriveSettings((prev) => ({ ...prev, ...settings }));
       toastSuccess('Google Drive connected');
     } catch (err) {
       toastError('Drive connection failed: ' + (err?.message || String(err)));
@@ -92,7 +112,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
     driveDisconnect();
     const settings = { connected: false };
     await saveDriveSettings(db, artistId, settings);
-    setDriveSettings(prev => ({ ...prev, ...settings }));
+    setDriveSettings((prev) => ({ ...prev, ...settings }));
     toastSuccess('Google Drive disconnected');
   }, [db, artistId, toastSuccess]);
 
@@ -107,7 +127,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
       await dbxAuth();
       const settings = { connected: true, connectedAt: new Date().toISOString() };
       await saveDropboxSettings(db, artistId, settings);
-      setDropboxSettings(prev => ({ ...prev, ...settings }));
+      setDropboxSettings((prev) => ({ ...prev, ...settings }));
       toastSuccess('Dropbox connected');
     } catch (err) {
       toastError('Dropbox connection failed: ' + (err?.message || String(err)));
@@ -119,17 +139,19 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
     dbxDisconnect();
     const settings = { connected: false };
     await saveDropboxSettings(db, artistId, settings);
-    setDropboxSettings(prev => ({ ...prev, ...settings }));
+    setDropboxSettings((prev) => ({ ...prev, ...settings }));
     toastSuccess('Dropbox disconnected');
   }, [db, artistId, toastSuccess]);
 
-  const canCancel = shouldShowPaymentUI(user) && user?.subscriptionId && user?.subscriptionStatus === 'active';
+  const canCancel =
+    shouldShowPaymentUI(user) && user?.subscriptionId && user?.subscriptionStatus === 'active';
 
   const handleCancelSubscription = () => {
     setConfirmDialog({
       isOpen: true,
       title: 'Cancel Subscription',
-      message: 'Are you sure you want to cancel your subscription? Your access will continue until the end of the billing period.',
+      message:
+        'Are you sure you want to cancel your subscription? Your access will continue until the end of the billing period.',
       confirmLabel: 'Cancel Subscription',
       onConfirm: async () => {
         setConfirmDialog({ isOpen: false });
@@ -140,7 +162,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
           const token = await auth.currentUser?.getIdToken();
           const response = await fetch('/api/cancel-subscription', {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           });
           const data = await response.json();
           if (data.success) {
@@ -181,13 +203,16 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
         role,
         status: 'active',
         createdAt: new Date().toISOString(),
-        invitedBy: user?.email || 'unknown'
+        invitedBy: user?.email || 'unknown',
       });
 
       setInviteEmail('');
       setInviteStatus('success');
       setInviteMessage(`Invited ${email} as ${role}.`);
-      setTimeout(() => { setInviteStatus(null); setInviteMessage(''); }, 4000);
+      setTimeout(() => {
+        setInviteStatus(null);
+        setInviteMessage('');
+      }, 4000);
     } catch (err) {
       log.error('[Settings] Invite failed:', err);
       setInviteStatus('error');
@@ -226,7 +251,10 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
         title: 'Deactivate User',
         message: `Deactivate ${email}? They will lose access until reactivated.`,
         confirmLabel: 'Deactivate',
-        onConfirm: () => { setConfirmDialog({ isOpen: false }); doToggle(); },
+        onConfirm: () => {
+          setConfirmDialog({ isOpen: false });
+          doToggle();
+        },
       });
     } else {
       doToggle();
@@ -245,29 +273,46 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
 
   const getLinkedArtistName = (u) => {
     if (!u?.linkedArtistId) return null;
-    const artist = firestoreArtists.find(a => a.id === u.linkedArtistId);
+    const artist = firestoreArtists.find((a) => a.id === u.linkedArtistId);
     return artist?.name || u.linkedArtistId;
   };
 
-  const initials = (user?.name || user?.email || '?').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  const initials = (user?.name || user?.email || '?')
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
 
   return (
     <div className="flex-1 overflow-auto bg-black px-4 md:px-12 py-8">
       <span className="text-heading-1 font-heading-1 text-white">Settings</span>
 
       {/* ═══ PROFILE HERO ═══ */}
-      <div className="mt-6 flex w-full items-center gap-6 rounded-xl border border-solid border-neutral-200 p-6"
-        style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' }}>
+      <div
+        className="mt-6 flex w-full items-center gap-6 rounded-xl border border-solid border-neutral-200 p-6"
+        style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' }}
+      >
         <div
           className="relative cursor-pointer"
           tabIndex={0}
           role="button"
           aria-label="Change profile picture"
           onClick={() => setShowPfpUpload(true)}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowPfpUpload(true); } }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setShowPfpUpload(true);
+            }
+          }}
         >
           {user?.photoURL ? (
-            <img src={user.photoURL} alt="" className="h-20 w-20 rounded-full object-cover ring-2 ring-white/20" />
+            <img
+              src={user.photoURL}
+              alt=""
+              className="h-20 w-20 rounded-full object-cover ring-2 ring-white/20"
+              referrerPolicy="no-referrer"
+            />
           ) : (
             <div className="flex h-20 w-20 items-center justify-center rounded-full bg-brand-600 text-2xl font-bold text-white ring-2 ring-white/20">
               {initials}
@@ -281,7 +326,11 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
           <span className="text-heading-2 font-heading-2 text-white">{user?.name || 'User'}</span>
           <span className="text-body font-body text-neutral-300">{user?.email || ''}</span>
           <div className="flex items-center gap-2 mt-1">
-            {user?.role && <Badge variant="brand" className="capitalize">{user.role}</Badge>}
+            {user?.role && (
+              <Badge variant="brand" className="capitalize">
+                {user.role}
+              </Badge>
+            )}
             <Badge variant="success">Active</Badge>
           </div>
         </div>
@@ -289,7 +338,6 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
 
       {/* ═══ TWO-COLUMN GRID ═══ */}
       <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-
         {/* ── TEAM ── */}
         {isConductor ? (
           <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-neutral-50 p-6 col-span-2">
@@ -331,7 +379,9 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
               </Button>
             </div>
             {inviteMessage && (
-              <span className={`text-caption font-caption ${inviteStatus === 'success' ? 'text-success-600' : 'text-error-600'}`}>
+              <span
+                className={`text-caption font-caption ${inviteStatus === 'success' ? 'text-success-600' : 'text-error-600'}`}
+              >
                 {inviteMessage}
               </span>
             )}
@@ -355,7 +405,9 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
                     const linkedName = getLinkedArtistName(u);
                     return (
                       <tr key={u.email || u.id} className="border-b border-neutral-200/50">
-                        <td className="py-3 pr-4 text-white">{u.name || u.email?.split('@')[0] || '—'}</td>
+                        <td className="py-3 pr-4 text-white">
+                          {u.name || u.email?.split('@')[0] || '—'}
+                        </td>
                         <td className="py-3 pr-4 text-neutral-400">{u.email || '—'}</td>
                         <td className="py-3 pr-4">
                           {editingUser === u.email ? (
@@ -371,15 +423,29 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
                                 <option value="artist">Artist</option>
                                 <option value="collaborator">Collaborator</option>
                               </select>
-                              <Button variant="brand-primary" size="small" disabled={loadingAction === u.email || editRole === u.role} onClick={() => handleRoleChange(u.email, editRole)}>
+                              <Button
+                                variant="brand-primary"
+                                size="small"
+                                disabled={loadingAction === u.email || editRole === u.role}
+                                onClick={() => handleRoleChange(u.email, editRole)}
+                              >
                                 Save
                               </Button>
-                              <Button variant="neutral-tertiary" size="small" onClick={() => setEditingUser(null)}>
+                              <Button
+                                variant="neutral-tertiary"
+                                size="small"
+                                onClick={() => setEditingUser(null)}
+                              >
                                 Cancel
                               </Button>
                             </div>
                           ) : (
-                            <Badge variant={u.role === 'conductor' ? 'brand' : 'neutral'} className="capitalize">{u.role || 'operator'}</Badge>
+                            <Badge
+                              variant={u.role === 'conductor' ? 'brand' : 'neutral'}
+                              className="capitalize"
+                            >
+                              {u.role || 'operator'}
+                            </Badge>
                           )}
                         </td>
                         <td className="py-3 pr-4 text-neutral-400">{linkedName || '—'}</td>
@@ -391,7 +457,11 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
                               onClick={() => handleToggleStatus(u.email, u.status || 'active')}
                               className="cursor-pointer"
                             >
-                              <Badge variant={(u.status || 'active') === 'active' ? 'success' : 'neutral'}>
+                              <Badge
+                                variant={
+                                  (u.status || 'active') === 'active' ? 'success' : 'neutral'
+                                }
+                              >
                                 {(u.status || 'active') === 'active' ? 'Active' : 'Inactive'}
                               </Badge>
                             </button>
@@ -403,7 +473,10 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
                           ) : (
                             <div className="flex items-center gap-1">
                               <button
-                                onClick={() => { setEditingUser(u.email); setEditRole(u.role || 'operator'); }}
+                                onClick={() => {
+                                  setEditingUser(u.email);
+                                  setEditRole(u.role || 'operator');
+                                }}
                                 className="p-1.5 rounded hover:bg-white/10 text-neutral-400 hover:text-white transition-colors"
                                 title="Edit role"
                               >
@@ -411,8 +484,20 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
                               </button>
                               {deleteConfirm === u.email ? (
                                 <div className="flex items-center gap-1 ml-1">
-                                  <Button variant="destructive-primary" size="small" onClick={() => handleDeleteUser(u.email)}>Confirm</Button>
-                                  <Button variant="neutral-secondary" size="small" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+                                  <Button
+                                    variant="destructive-primary"
+                                    size="small"
+                                    onClick={() => handleDeleteUser(u.email)}
+                                  >
+                                    Confirm
+                                  </Button>
+                                  <Button
+                                    variant="neutral-secondary"
+                                    size="small"
+                                    onClick={() => setDeleteConfirm(null)}
+                                  >
+                                    Cancel
+                                  </Button>
                                 </div>
                               ) : (
                                 <button
@@ -464,7 +549,9 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
               </Button>
             </div>
             {inviteMessage && (
-              <span className={`text-caption font-caption ${inviteStatus === 'success' ? 'text-success-600' : 'text-error-600'}`}>
+              <span
+                className={`text-caption font-caption ${inviteStatus === 'success' ? 'text-success-600' : 'text-error-600'}`}
+              >
                 {inviteMessage}
               </span>
             )}
@@ -487,12 +574,12 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
           <div className="flex w-full items-center justify-between rounded-lg bg-white/[0.03] px-4 py-3">
             <div className="flex items-center gap-3">
               <svg viewBox="0 0 24 24" style={{ width: 20, height: 20 }}>
-                <path d="M7.71 3.5L1.15 15l3.43 5.95L11.14 9.45z" fill="#0066DA"/>
-                <path d="M22.85 15H15.71l-3.43 5.95h10.14z" fill="#00AC47"/>
-                <path d="M7.71 3.5h7.14L22.85 15l-3.43-5.95z" fill="#EA4335"/>
-                <path d="M7.71 3.5L1.15 15h7.14l3.43-5.95z" fill="#00832D" opacity="0.5"/>
-                <path d="M14.85 3.5L22.85 15h-7.14z" fill="#2684FC" opacity="0.5"/>
-                <path d="M8.29 15l3.43 5.95L15.15 15z" fill="#FFBA00" opacity="0.5"/>
+                <path d="M7.71 3.5L1.15 15l3.43 5.95L11.14 9.45z" fill="#0066DA" />
+                <path d="M22.85 15H15.71l-3.43 5.95h10.14z" fill="#00AC47" />
+                <path d="M7.71 3.5h7.14L22.85 15l-3.43-5.95z" fill="#EA4335" />
+                <path d="M7.71 3.5L1.15 15h7.14l3.43-5.95z" fill="#00832D" opacity="0.5" />
+                <path d="M14.85 3.5L22.85 15h-7.14z" fill="#2684FC" opacity="0.5" />
+                <path d="M8.29 15l3.43 5.95L15.15 15z" fill="#FFBA00" opacity="0.5" />
               </svg>
               <span className="text-body font-body text-white">Google Drive</span>
               <Badge variant={driveSettings?.connected ? 'success' : 'neutral'}>
@@ -500,9 +587,16 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
               </Badge>
             </div>
             {driveSettings?.connected ? (
-              <Button variant="neutral-secondary" size="small" onClick={handleDisconnectDrive}>Disconnect</Button>
+              <Button variant="neutral-secondary" size="small" onClick={handleDisconnectDrive}>
+                Disconnect
+              </Button>
             ) : (
-              <Button variant="brand-secondary" size="small" disabled={driveConnecting} onClick={handleConnectDrive}>
+              <Button
+                variant="brand-secondary"
+                size="small"
+                disabled={driveConnecting}
+                onClick={handleConnectDrive}
+              >
                 {driveConnecting ? 'Connecting...' : 'Connect'}
               </Button>
             )}
@@ -512,11 +606,11 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
           <div className="flex w-full items-center justify-between rounded-lg bg-white/[0.03] px-4 py-3">
             <div className="flex items-center gap-3">
               <svg viewBox="0 0 24 24" style={{ width: 20, height: 20 }}>
-                <path d="M6 2l6 3.75L6 9.5 0 5.75z" fill="#0061FF"/>
-                <path d="M18 2l6 3.75-6 3.75-6-3.75z" fill="#0061FF"/>
-                <path d="M0 13.25L6 9.5l6 3.75-6 3.75z" fill="#0061FF"/>
-                <path d="M18 9.5l6 3.75-6 3.75-6-3.75z" fill="#0061FF"/>
-                <path d="M6 17.75l6-3.75 6 3.75-6 3.75z" fill="#0061FF"/>
+                <path d="M6 2l6 3.75L6 9.5 0 5.75z" fill="#0061FF" />
+                <path d="M18 2l6 3.75-6 3.75-6-3.75z" fill="#0061FF" />
+                <path d="M0 13.25L6 9.5l6 3.75-6 3.75z" fill="#0061FF" />
+                <path d="M18 9.5l6 3.75-6 3.75-6-3.75z" fill="#0061FF" />
+                <path d="M6 17.75l6-3.75 6 3.75-6 3.75z" fill="#0061FF" />
               </svg>
               <span className="text-body font-body text-white">Dropbox</span>
               <Badge variant={dropboxSettings?.connected ? 'success' : 'neutral'}>
@@ -524,9 +618,16 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
               </Badge>
             </div>
             {dropboxSettings?.connected ? (
-              <Button variant="neutral-secondary" size="small" onClick={handleDisconnectDropbox}>Disconnect</Button>
+              <Button variant="neutral-secondary" size="small" onClick={handleDisconnectDropbox}>
+                Disconnect
+              </Button>
             ) : (
-              <Button variant="brand-secondary" size="small" disabled={dropboxConnecting} onClick={handleConnectDropbox}>
+              <Button
+                variant="brand-secondary"
+                size="small"
+                disabled={dropboxConnecting}
+                onClick={handleConnectDropbox}
+              >
                 {dropboxConnecting ? 'Connecting...' : 'Connect'}
               </Button>
             )}
@@ -540,9 +641,10 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
               <FeatherHardDrive style={{ width: 18, height: 18, color: '#8b5cf6' }} />
             </div>
             <span className="text-body-bold font-body-bold text-white">Storage</span>
-            {user?.storageQuotaBytes != null && user.storageUsedBytes / user.storageQuotaBytes >= 0.8 && (
-              <Badge variant="warning">Running low</Badge>
-            )}
+            {user?.storageQuotaBytes != null &&
+              user.storageUsedBytes / user.storageQuotaBytes >= 0.8 && (
+                <Badge variant="warning">Running low</Badge>
+              )}
           </div>
 
           {(() => {
@@ -556,8 +658,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
                 <span className="text-caption font-caption text-neutral-400">
                   {isUnlimited
                     ? `${formatStorageSize(used)} used (Unlimited)`
-                    : `${formatStorageSize(used)} / ${formatStorageSize(quota)} used`
-                  }
+                    : `${formatStorageSize(used)} / ${formatStorageSize(quota)} used`}
                 </span>
 
                 {!isUnlimited && (
@@ -594,10 +695,13 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
           {canCancel ? (
             <>
               <span className="text-caption font-caption text-neutral-400">
-                Your subscription is active. Cancelling will take effect at the end of your billing period.
+                Your subscription is active. Cancelling will take effect at the end of your billing
+                period.
               </span>
               {cancelMessage && (
-                <span className={`text-caption font-caption ${cancelMessage.includes('Failed') ? 'text-error-600' : 'text-success-600'}`}>
+                <span
+                  className={`text-caption font-caption ${cancelMessage.includes('Failed') ? 'text-error-600' : 'text-success-600'}`}
+                >
                   {cancelMessage}
                 </span>
               )}
@@ -648,7 +752,10 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
         message="Log out of your account?"
         confirmLabel="Log Out"
         confirmVariant="destructive"
-        onConfirm={() => { setShowLogoutConfirm(false); onLogout(); }}
+        onConfirm={() => {
+          setShowLogoutConfirm(false);
+          onLogout();
+        }}
         onCancel={() => setShowLogoutConfirm(false)}
       />
 

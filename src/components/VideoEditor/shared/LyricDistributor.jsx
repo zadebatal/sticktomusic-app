@@ -17,15 +17,19 @@ const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose })
   const lastClickedRef = useRef(null);
 
   // Parse lines from textarea
-  const lines = useMemo(() =>
-    editedText.split('\n').map(l => l.trim()).filter(Boolean),
-    [editedText]
+  const lines = useMemo(
+    () =>
+      editedText
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean),
+    [editedText],
   );
 
   // Set of all assigned line indices
   const assignedSet = useMemo(() => {
     const s = new Set();
-    Object.values(assignments).forEach(arr => arr.forEach(i => s.add(i)));
+    Object.values(assignments).forEach((arr) => arr.forEach((i) => s.add(i)));
     return s;
   }, [assignments]);
 
@@ -33,7 +37,9 @@ const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose })
   const lineSlotMap = useMemo(() => {
     const map = {};
     Object.entries(assignments).forEach(([bankIdx, lineIdxs]) => {
-      lineIdxs.forEach(i => { map[i] = parseInt(bankIdx); });
+      lineIdxs.forEach((i) => {
+        map[i] = parseInt(bankIdx);
+      });
     });
     return map;
   }, [assignments]);
@@ -43,13 +49,13 @@ const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose })
     if (e.shiftKey && lastClickedRef.current != null) {
       const start = Math.min(lastClickedRef.current, lineIdx);
       const end = Math.max(lastClickedRef.current, lineIdx);
-      setSelectedLines(prev => {
+      setSelectedLines((prev) => {
         const next = new Set(prev);
         for (let i = start; i <= end; i++) next.add(i);
         return next;
       });
     } else {
-      setSelectedLines(prev => {
+      setSelectedLines((prev) => {
         const next = new Set(prev);
         if (next.has(lineIdx)) next.delete(lineIdx);
         else next.add(lineIdx);
@@ -60,28 +66,33 @@ const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose })
   }, []);
 
   // Assign selected lines to a slot
-  const handleAssignToSlot = useCallback((bankIdx) => {
-    if (selectedLines.size === 0) return;
-    setAssignments(prev => {
-      // Remove selected lines from any existing slot
-      const cleaned = {};
-      Object.entries(prev).forEach(([k, arr]) => {
-        const filtered = arr.filter(i => !selectedLines.has(i));
-        if (filtered.length > 0) cleaned[k] = filtered;
+  const handleAssignToSlot = useCallback(
+    (bankIdx) => {
+      if (selectedLines.size === 0) return;
+      setAssignments((prev) => {
+        // Remove selected lines from any existing slot
+        const cleaned = {};
+        Object.entries(prev).forEach(([k, arr]) => {
+          const filtered = arr.filter((i) => !selectedLines.has(i));
+          if (filtered.length > 0) cleaned[k] = filtered;
+        });
+        // Add to target slot
+        const existing = cleaned[bankIdx] || [];
+        const newIndices = [...selectedLines]
+          .filter((i) => !existing.includes(i))
+          .sort((a, b) => a - b);
+        cleaned[bankIdx] = [...existing, ...newIndices];
+        return cleaned;
       });
-      // Add to target slot
-      const existing = cleaned[bankIdx] || [];
-      const newIndices = [...selectedLines].filter(i => !existing.includes(i)).sort((a, b) => a - b);
-      cleaned[bankIdx] = [...existing, ...newIndices];
-      return cleaned;
-    });
-    setSelectedLines(new Set());
-  }, [selectedLines]);
+      setSelectedLines(new Set());
+    },
+    [selectedLines],
+  );
 
   // Unassign a line from a slot
   const handleUnassign = useCallback((bankIdx, lineIdx) => {
-    setAssignments(prev => {
-      const arr = (prev[bankIdx] || []).filter(i => i !== lineIdx);
+    setAssignments((prev) => {
+      const arr = (prev[bankIdx] || []).filter((i) => i !== lineIdx);
       const next = { ...prev };
       if (arr.length > 0) next[bankIdx] = arr;
       else delete next[bankIdx];
@@ -113,7 +124,7 @@ const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose })
   const handleConfirm = useCallback(() => {
     const result = {};
     Object.entries(assignments).forEach(([bankIdx, lineIdxs]) => {
-      const texts = lineIdxs.map(i => lines[i]).filter(Boolean);
+      const texts = lineIdxs.map((i) => lines[i]).filter(Boolean);
       if (texts.length > 0) result[bankIdx] = texts;
     });
     onConfirm(result);
@@ -122,15 +133,29 @@ const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose })
   const totalAssigned = assignedSet.size;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={onClose}>
-      <div className="flex w-full max-w-4xl flex-col rounded-xl border border-neutral-200 bg-[#111111] overflow-hidden max-h-[85vh]" onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+      onClick={onClose}
+    >
+      <div
+        className="flex w-full max-w-4xl flex-col rounded-xl border border-neutral-200 bg-[#111111] overflow-hidden max-h-[85vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 flex-none">
           <div className="flex items-center gap-3">
-            <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Distribute Lyrics</span>
+            <span className="text-heading-2 font-heading-2 text-[#ffffffff]">
+              Distribute Lyrics
+            </span>
             <Badge variant="neutral">{lines.length} lines</Badge>
           </div>
-          <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close" onClick={onClose} />
+          <IconButton
+            variant="neutral-tertiary"
+            size="medium"
+            icon={<FeatherX />}
+            aria-label="Close"
+            onClick={onClose}
+          />
         </div>
 
         {/* Body — two columns */}
@@ -142,7 +167,7 @@ const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose })
               style={{ height: 100 }}
               placeholder="Paste or edit lyrics..."
               value={editedText}
-              onChange={e => {
+              onChange={(e) => {
                 setEditedText(e.target.value);
                 setAssignments({});
                 setSelectedLines(new Set());
@@ -153,7 +178,9 @@ const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose })
                 Click lines to select, shift-click for range
               </span>
               {selectedLines.size > 0 && (
-                <span className="text-caption font-caption text-indigo-400">{selectedLines.size} selected</span>
+                <span className="text-caption font-caption text-indigo-400">
+                  {selectedLines.size} selected
+                </span>
               )}
             </div>
             <div className="flex flex-col gap-1 flex-1 min-h-0 overflow-y-auto">
@@ -174,17 +201,28 @@ const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose })
                     }`}
                     onClick={(e) => handleLineClick(idx, e)}
                   >
-                    <span className="text-caption font-caption text-neutral-500 w-5 text-right flex-none">{idx + 1}</span>
+                    <span className="text-caption font-caption text-neutral-500 w-5 text-right flex-none">
+                      {idx + 1}
+                    </span>
                     {slotColor && (
-                      <span className="h-2 w-2 rounded-full flex-none" style={{ backgroundColor: slotColor }} />
+                      <span
+                        className="h-2 w-2 rounded-full flex-none"
+                        style={{ backgroundColor: slotColor }}
+                      />
                     )}
-                    <span className={`text-body font-body truncate ${isAssigned ? 'text-neutral-500' : 'text-white'}`}>{line}</span>
+                    <span
+                      className={`text-body font-body truncate ${isAssigned ? 'text-neutral-500' : 'text-white'}`}
+                    >
+                      {line}
+                    </span>
                   </div>
                 );
               })}
               {lines.length === 0 && (
                 <div className="flex items-center justify-center py-8">
-                  <span className="text-body font-body text-neutral-500">Edit the text above to see lines</span>
+                  <span className="text-body font-body text-neutral-500">
+                    Edit the text above to see lines
+                  </span>
                 </div>
               )}
             </div>
@@ -192,29 +230,42 @@ const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose })
 
           {/* Right — Slide slots */}
           <div className="flex w-72 flex-none flex-col gap-3 p-4 overflow-y-auto">
-            <span className="text-caption-bold font-caption-bold text-neutral-300 flex-none">Slide Slots</span>
+            <span className="text-caption-bold font-caption-bold text-neutral-300 flex-none">
+              Slide Slots
+            </span>
             {Array.from({ length: slideCount }).map((_, bankIdx) => {
               const label = slideLabels?.[bankIdx] || `Slide ${bankIdx + 1}`;
               const color = getBankColor(bankIdx).primary;
               const assignedIdxs = assignments[bankIdx] || [];
               return (
-                <div key={bankIdx} className="flex flex-col gap-1 rounded-lg border border-solid border-neutral-200 overflow-hidden">
+                <div
+                  key={bankIdx}
+                  className="flex flex-col gap-1 rounded-lg border border-solid border-neutral-200 overflow-hidden"
+                >
                   <div
                     className="flex items-center justify-between px-3 py-2 cursor-pointer hover:opacity-90 transition-opacity"
                     style={{ backgroundColor: color }}
                     onClick={() => handleAssignToSlot(bankIdx)}
-                    title={selectedLines.size > 0 ? `Assign ${selectedLines.size} lines here` : 'Select lines first'}
+                    title={
+                      selectedLines.size > 0
+                        ? `Assign ${selectedLines.size} lines here`
+                        : 'Select lines first'
+                    }
                   >
                     <span className="text-caption-bold font-caption-bold text-white">{label}</span>
                     <Badge variant="neutral">{assignedIdxs.length}</Badge>
                   </div>
                   <div className="flex flex-col gap-0.5 px-2 py-1.5 min-h-[32px] bg-[#1a1a1a]">
                     {assignedIdxs.length === 0 ? (
-                      <span className="text-caption font-caption text-neutral-600 py-1">No lines assigned</span>
+                      <span className="text-caption font-caption text-neutral-600 py-1">
+                        No lines assigned
+                      </span>
                     ) : (
-                      assignedIdxs.map(lineIdx => (
+                      assignedIdxs.map((lineIdx) => (
                         <div key={lineIdx} className="flex items-center gap-1.5 group">
-                          <span className="text-caption font-caption text-neutral-300 truncate flex-1">{lines[lineIdx]}</span>
+                          <span className="text-caption font-caption text-neutral-300 truncate flex-1">
+                            {lines[lineIdx]}
+                          </span>
                           <button
                             className="text-neutral-600 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 transition-opacity flex-none"
                             onClick={() => handleUnassign(bankIdx, lineIdx)}
@@ -233,15 +284,28 @@ const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose })
 
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-neutral-200 px-6 py-4 flex-none">
-          <Button variant="neutral-secondary" size="medium" icon={<FeatherZap />} onClick={handleAutoDistribute}>
+          <Button
+            variant="neutral-secondary"
+            size="medium"
+            icon={<FeatherZap />}
+            onClick={handleAutoDistribute}
+          >
             Auto-distribute
           </Button>
           <div className="flex items-center gap-3">
             <span className="text-caption font-caption text-neutral-400">
               {totalAssigned}/{lines.length} assigned
             </span>
-            <Button variant="neutral-secondary" size="medium" onClick={onClose}>Cancel</Button>
-            <Button variant="brand-primary" size="medium" icon={<FeatherCheck />} disabled={totalAssigned === 0} onClick={handleConfirm}>
+            <Button variant="neutral-secondary" size="medium" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              variant="brand-primary"
+              size="medium"
+              icon={<FeatherCheck />}
+              disabled={totalAssigned === 0}
+              onClick={handleConfirm}
+            >
               Add to Banks
             </Button>
           </div>

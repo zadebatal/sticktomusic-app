@@ -10,7 +10,10 @@ const TABLET_BREAKPOINT = 1024;
 export default function useIsMobile() {
   const [state, setState] = useState(() => ({
     isMobile: typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false,
-    isTablet: typeof window !== 'undefined' ? window.innerWidth >= MOBILE_BREAKPOINT && window.innerWidth < TABLET_BREAKPOINT : false,
+    isTablet:
+      typeof window !== 'undefined'
+        ? window.innerWidth >= MOBILE_BREAKPOINT && window.innerWidth < TABLET_BREAKPOINT
+        : false,
     windowWidth: typeof window !== 'undefined' ? window.innerWidth : 1024,
   }));
 

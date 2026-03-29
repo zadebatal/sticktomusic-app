@@ -10,10 +10,10 @@ import log from '../utils/logger';
 
 // Canvas dimensions based on aspect ratio
 const DIMENSIONS = {
-  '4:5': { width: 1080, height: 1350 },  // Instagram carousel (standard)
-  '1:1': { width: 1080, height: 1080 },  // Square
+  '4:5': { width: 1080, height: 1350 }, // Instagram carousel (standard)
+  '1:1': { width: 1080, height: 1080 }, // Square
   '9:16': { width: 1080, height: 1920 }, // Story/TikTok
-  '4:3': { width: 1080, height: 1440 }   // Legacy
+  '4:3': { width: 1080, height: 1440 }, // Legacy
 };
 
 /**
@@ -58,13 +58,19 @@ const wrapText = (ctx, text, maxWidth) => {
   const wrapped = [];
   for (const para of paragraphs) {
     const words = para.split(/\s+/).filter(Boolean);
-    if (words.length === 0) { wrapped.push(''); continue; }
+    if (words.length === 0) {
+      wrapped.push('');
+      continue;
+    }
     let currentLine = '';
     for (let i = 0; i < words.length; i++) {
       const word = words[i];
       // Break long words that exceed maxWidth on their own
       if (ctx.measureText(word).width > maxWidth) {
-        if (currentLine) { wrapped.push(currentLine); currentLine = ''; }
+        if (currentLine) {
+          wrapped.push(currentLine);
+          currentLine = '';
+        }
         const chunks = breakWord(ctx, word, maxWidth);
         for (let c = 0; c < chunks.length - 1; c++) wrapped.push(chunks[c]);
         currentLine = chunks[chunks.length - 1] || '';
@@ -214,7 +220,7 @@ const renderSlideToCanvas = async (slide, dimensions) => {
 
   // Draw text overlays
   if (slide.textOverlays && slide.textOverlays.length > 0) {
-    slide.textOverlays.forEach(overlay => {
+    slide.textOverlays.forEach((overlay) => {
       drawTextOverlay(ctx, overlay, dimensions);
     });
   }
@@ -230,7 +236,7 @@ const renderSlideToCanvas = async (slide, dimensions) => {
         }
       },
       'image/jpeg',
-      0.85 // 85% quality
+      0.85, // 85% quality
     );
   });
 };
@@ -263,13 +269,12 @@ export const exportSlideshowAsImages = async (slideshow, onProgress = () => {}) 
   // Phase 2: Upload all blobs to Firebase in parallel (~slow, now parallel)
   const uploadPromises = blobs.map((blob, i) => {
     const filename = `${safeName}_slide_${i + 1}.jpg`;
-    return uploadFile(
-      new File([blob], filename, { type: 'image/jpeg' }),
-      'slideshows'
-    ).then(({ url, path }) => {
-      log(`[Export] Slide ${i + 1}/${totalSlides} exported:`, filename);
-      return { url, path, slideIndex: i, filename };
-    });
+    return uploadFile(new File([blob], filename, { type: 'image/jpeg' }), 'slideshows').then(
+      ({ url, path }) => {
+        log(`[Export] Slide ${i + 1}/${totalSlides} exported:`, filename);
+        return { url, path, slideIndex: i, filename };
+      },
+    );
   });
 
   const exportedImages = await Promise.all(uploadPromises);
@@ -289,7 +294,7 @@ export const generateSlideThumbnail = async (slide, aspectRatio = '9:16') => {
   // Use smaller dimensions for thumbnail (0.5x for readable text)
   const thumbnailDimensions = {
     width: Math.round(fullDimensions.width * 0.5),
-    height: Math.round(fullDimensions.height * 0.5)
+    height: Math.round(fullDimensions.height * 0.5),
   };
 
   const canvas = document.createElement('canvas');
@@ -333,10 +338,13 @@ export const generateSlideThumbnail = async (slide, aspectRatio = '9:16') => {
   // Draw text overlays scaled to thumbnail size
   if (slide.textOverlays && slide.textOverlays.length > 0) {
     const scale = thumbnailDimensions.width / fullDimensions.width;
-    slide.textOverlays.forEach(overlay => {
+    slide.textOverlays.forEach((overlay) => {
       const scaledOverlay = {
         ...overlay,
-        style: { ...overlay.style, fontSize: Math.max(6, Math.round(overlay.style.fontSize * scale)) }
+        style: {
+          ...overlay.style,
+          fontSize: Math.max(6, Math.round(overlay.style.fontSize * scale)),
+        },
       };
       drawTextOverlay(ctx, scaledOverlay, thumbnailDimensions);
     });
@@ -347,5 +355,5 @@ export const generateSlideThumbnail = async (slide, aspectRatio = '9:16') => {
 
 export default {
   exportSlideshowAsImages,
-  generateSlideThumbnail
+  generateSlideThumbnail,
 };

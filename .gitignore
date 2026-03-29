@@ -23,10 +23,9 @@ node_modules/
 build/
 *.mp4
 
-# Voice Bridge
-voice-bridge/node_modules/
-voice-bridge/.env
-voice-bridge/.temp-*
+# Separate repos (have their own .git)
+stm-media-importer/
+voice-bridge/
 
 # Playwright
 e2e/auth/storage-state.json
@@ -47,6 +46,7 @@ playwright-report/
 # Claude Code
 .claude/
 .mcp.json
+.agents/
 
 # QA docs
 QA_CLAUDE_DESKTOP_PROMPT.md

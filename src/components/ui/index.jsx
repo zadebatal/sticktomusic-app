@@ -1,4 +1,6 @@
 import React, { useEffect, useCallback, useState, useRef, createContext, useContext } from 'react';
+import { toast as sonnerToast, Toaster } from 'sonner';
+import { motion, AnimatePresence } from 'framer-motion';
 import log from '../../utils/logger';
 import useIsMobile from '../../hooks/useIsMobile';
 
@@ -26,7 +28,8 @@ export const useFocusTrap = (active = true) => {
     if (!active || !containerRef.current) return;
 
     const container = containerRef.current;
-    const FOCUSABLE = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+    const FOCUSABLE =
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
 
     // Auto-focus first focusable element (or the container itself)
     const firstFocusable = container.querySelector(FOCUSABLE);
@@ -88,50 +91,37 @@ export const useToast = () => {
 };
 
 export const ToastProvider = ({ children }) => {
-  const [toasts, setToasts] = useState([]);
-  const timeoutRefs = useRef(new Map()); // M-21: track timeouts for cleanup
-
-  // M-21: Clean up all timeouts on unmount
-  useEffect(() => {
-    const refs = timeoutRefs.current;
-    return () => {
-      refs.forEach(timeoutId => clearTimeout(timeoutId));
-      refs.clear();
-    };
-  }, []);
-
-  const addToast = useCallback((message, type = 'success', duration = 4000) => {
-    const id = Date.now() + Math.random();
-    setToasts(prev => {
-      // Max 3 toasts
-      const updated = [...prev, { id, message, type }].slice(-3);
-      return updated;
-    });
-    const timeoutId = setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-      timeoutRefs.current.delete(id);
-    }, duration);
-    timeoutRefs.current.set(id, timeoutId);
-    return id;
-  }, []);
-
-  const removeToast = useCallback((id) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  }, []);
-
   const value = {
-    toasts,
-    toast: addToast,
-    success: (msg) => addToast(msg, 'success'),
-    error: (msg) => addToast(msg, 'error'),
-    info: (msg) => addToast(msg, 'info'),
-    removeToast,
+    toasts: [],
+    toast: (msg, type = 'success') => {
+      if (type === 'success') sonnerToast.success(msg);
+      else if (type === 'error') sonnerToast.error(msg);
+      else if (type === 'info') sonnerToast.info(msg);
+      else sonnerToast(msg);
+    },
+    success: (msg) => sonnerToast.success(msg),
+    error: (msg) => sonnerToast.error(msg),
+    info: (msg) => sonnerToast.info(msg),
+    toastSuccess: (msg) => sonnerToast.success(msg),
+    toastError: (msg) => sonnerToast.error(msg),
+    toastInfo: (msg) => sonnerToast.info(msg),
+    removeToast: () => {},
   };
 
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <Toasts toasts={toasts} onRemove={removeToast} />
+      <Toaster
+        position="bottom-right"
+        theme="dark"
+        toastOptions={{
+          style: {
+            background: '#18181b',
+            border: '1px solid #27272a',
+            color: '#fff',
+          },
+        }}
+      />
     </ToastContext.Provider>
   );
 };
@@ -141,25 +131,30 @@ export const Toasts = ({ toasts = [], onRemove }) => {
   if (!toasts.length) return null;
 
   return (
-    <div style={{
-      position: 'fixed',
-      bottom: isMobile ? 80 : 16,
-      right: 16,
-      zIndex: 1000,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 8,
-      pointerEvents: 'none',
-      ...(isMobile ? { left: 16 } : {}),
-    }}>
-      {toasts.map(toast => (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: isMobile ? 80 : 16,
+        right: 16,
+        zIndex: 1000,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        pointerEvents: 'none',
+        ...(isMobile ? { left: 16 } : {}),
+      }}
+    >
+      {toasts.map((toast) => (
         <div
           key={toast.id}
           className={`pointer-events-auto px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-slide-up min-w-[200px] max-w-[400px] ${
-            toast.type === 'success' ? 'bg-green-600 text-white' :
-            toast.type === 'error' ? 'bg-red-600 text-white' :
-            toast.type === 'info' ? 'bg-blue-600 text-white' :
-            'bg-zinc-800 text-white'
+            toast.type === 'success'
+              ? 'bg-green-600 text-white'
+              : toast.type === 'error'
+                ? 'bg-red-600 text-white'
+                : toast.type === 'info'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-zinc-800 text-white'
           }`}
           style={isMobile ? { maxWidth: '100%' } : undefined}
         >
@@ -170,7 +165,13 @@ export const Toasts = ({ toasts = [], onRemove }) => {
           {onRemove && (
             <button
               onClick={() => onRemove(toast.id)}
-              style={{ minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              style={{
+                minWidth: 44,
+                minHeight: 44,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
               className="ml-2 opacity-70 hover:opacity-100 flex-shrink-0"
             >
               ✕
@@ -189,12 +190,14 @@ export const LoadingSpinner = ({ size = 'md', message = 'Loading...' }) => {
   const sizeClasses = {
     sm: 'w-4 h-4',
     md: 'w-8 h-8',
-    lg: 'w-12 h-12'
+    lg: 'w-12 h-12',
   };
 
   return (
     <div className="flex flex-col items-center justify-center py-12 gap-4">
-      <div className={`${sizeClasses[size]} border-2 border-zinc-700 border-t-purple-500 rounded-full animate-spin`} />
+      <div
+        className={`${sizeClasses[size]} border-2 border-zinc-700 border-t-purple-500 rounded-full animate-spin`}
+      />
       <p className="text-sm text-zinc-400">{message}</p>
     </div>
   );
@@ -210,7 +213,7 @@ export const EmptyState = ({
   actionLabel,
   onAction,
   secondaryActionLabel,
-  onSecondaryAction
+  onSecondaryAction,
 }) => (
   <div className="bg-zinc-900/50 border border-zinc-800 border-dashed rounded-xl p-12 text-center">
     <div className="text-4xl mb-4">{icon}</div>
@@ -249,7 +252,7 @@ export const ConfirmDialog = ({
   confirmVariant = 'primary', // 'primary' | 'destructive'
   onConfirm,
   onCancel,
-  isLoading = false
+  isLoading = false,
 }) => {
   // BUG-030: Focus trap for modal accessibility
   const trapRef = useFocusTrap(isOpen);
@@ -277,42 +280,59 @@ export const ConfirmDialog = ({
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
-  const confirmButtonClasses = confirmVariant === 'destructive'
-    ? 'bg-red-600 hover:bg-red-500 text-white'
-    : 'bg-purple-600 hover:bg-purple-500 text-white';
+  const confirmButtonClasses =
+    confirmVariant === 'destructive'
+      ? 'bg-red-600 hover:bg-red-500 text-white'
+      : 'bg-purple-600 hover:bg-purple-500 text-white';
 
   return (
-    <div
-      className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4"
-      onClick={(e) => e.target === e.currentTarget && onCancel?.()}
-    >
-      <div ref={trapRef} className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-md shadow-2xl" role="dialog" aria-modal="true" aria-label={title}>
-        <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
-        <p className="text-sm text-zinc-400 mb-6">{message}</p>
-        <div className="flex gap-3 justify-end">
-          <button
-            onClick={onCancel}
-            disabled={isLoading}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium rounded-lg transition disabled:opacity-50"
-            autoFocus
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4"
+          onClick={(e) => e.target === e.currentTarget && onCancel?.()}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+        >
+          <motion.div
+            ref={trapRef}
+            className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-md shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label={title}
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ duration: 0.15 }}
           >
-            {cancelLabel}
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={isLoading}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition disabled:opacity-50 flex items-center gap-2 ${confirmButtonClasses}`}
-          >
-            {isLoading && (
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            )}
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+            <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
+            <p className="text-sm text-zinc-400 mb-6">{message}</p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={onCancel}
+                disabled={isLoading}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium rounded-lg transition disabled:opacity-50"
+                autoFocus
+              >
+                {cancelLabel}
+              </button>
+              <button
+                onClick={onConfirm}
+                disabled={isLoading}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition disabled:opacity-50 flex items-center gap-2 ${confirmButtonClasses}`}
+              >
+                {isLoading && (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                )}
+                {confirmLabel}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };
 
@@ -333,7 +353,11 @@ export const StatusPill = ({ status, size = 'sm' }) => {
     published: { bg: 'bg-green-900/50', text: 'text-green-400', label: 'Posted' }, // Late uses "published"
     completed: { bg: 'bg-green-900/50', text: 'text-green-400', label: 'Completed' },
     // Warning
-    'needs-attention': { bg: 'bg-yellow-900/50', text: 'text-yellow-400', label: 'Needs Attention' },
+    'needs-attention': {
+      bg: 'bg-yellow-900/50',
+      text: 'text-yellow-400',
+      label: 'Needs Attention',
+    },
     warning: { bg: 'bg-yellow-900/50', text: 'text-yellow-400', label: 'Warning' },
     review: { bg: 'bg-yellow-900/50', text: 'text-yellow-400', label: 'In Review' },
     // Negative
@@ -346,15 +370,15 @@ export const StatusPill = ({ status, size = 'sm' }) => {
   const config = statusConfig[status?.toLowerCase()] || {
     bg: 'bg-zinc-700',
     text: 'text-zinc-300',
-    label: status || 'Unknown'
+    label: status || 'Unknown',
   };
 
-  const sizeClasses = size === 'sm'
-    ? 'px-2 py-0.5 text-xs'
-    : 'px-3 py-1 text-sm';
+  const sizeClasses = size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm';
 
   return (
-    <span className={`${config.bg} ${config.text} ${sizeClasses} rounded-full font-medium inline-flex items-center`}>
+    <span
+      className={`${config.bg} ${config.text} ${sizeClasses} rounded-full font-medium inline-flex items-center`}
+    >
       {config.label}
     </span>
   );
@@ -381,8 +405,38 @@ export const Skeleton = ({ className = '', variant = 'text' }) => {
     card: 'h-32 w-full rounded-xl',
   };
 
-  return (
-    <div className={`bg-zinc-800 animate-pulse rounded ${variants[variant]} ${className}`} />
-  );
+  return <div className={`bg-zinc-800 animate-pulse rounded ${variants[variant]} ${className}`} />;
 };
 
+// ============================================
+// MODAL OVERLAY (Framer Motion animated)
+// ============================================
+export const ModalOverlay = ({
+  isOpen,
+  onClose,
+  children,
+  className = '',
+  align = 'center', // 'center' | 'top'
+}) => (
+  <AnimatePresence>
+    {isOpen && (
+      <motion.div
+        className={`fixed inset-0 bg-black/80 flex ${align === 'top' ? 'items-start pt-[20vh]' : 'items-center'} justify-center z-50 p-4 ${className}`}
+        onClick={(e) => e.target === e.currentTarget && onClose?.()}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 10 }}
+          transition={{ duration: 0.15 }}
+        >
+          {children}
+        </motion.div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+);

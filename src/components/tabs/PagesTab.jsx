@@ -6,7 +6,12 @@ import useIsMobile from '../../hooks/useIsMobile';
 import { Button } from '../../ui/components/Button';
 import { Badge } from '../../ui/components/Badge';
 
-import { PLATFORM_META, ALL_PLATFORMS, getProfileUrl, formatFollowers } from '../../utils/platformUtils';
+import {
+  PLATFORM_META,
+  ALL_PLATFORMS,
+  getProfileUrl,
+  formatFollowers,
+} from '../../utils/platformUtils';
 import log from '../../utils/logger';
 
 /**
@@ -68,7 +73,15 @@ const EMPTY_ROW = () => ({
   passwords: { tiktok: '', instagram: '', youtube: '', facebook: '' },
 });
 
-const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, onSave, onClose, isMobile }) => {
+const BulkAccountEntry = ({
+  artistId,
+  artistName,
+  latePages,
+  isLateConfigured,
+  onSave,
+  onClose,
+  isMobile,
+}) => {
   const { theme } = useTheme();
   const t = theme.tw;
 
@@ -77,48 +90,54 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
   const [results, setResults] = useState(null); // array of { handle, platform, status }
   const [showPasswords, setShowPasswords] = useState({});
 
-  const addRow = () => setRows(prev => [...prev, EMPTY_ROW()]);
+  const addRow = () => setRows((prev) => [...prev, EMPTY_ROW()]);
 
   const removeRow = (index) => {
-    setRows(prev => prev.length <= 1 ? [EMPTY_ROW()] : prev.filter((_, i) => i !== index));
+    setRows((prev) => (prev.length <= 1 ? [EMPTY_ROW()] : prev.filter((_, i) => i !== index)));
   };
 
   const updateHandle = (index, value) => {
     const detected = detectPlatformFromUrl(value);
-    setRows(prev => prev.map((row, i) => {
-      if (i !== index) return row;
-      if (detected) {
-        return {
-          ...row,
-          handle: detected.handle,
-          platforms: { ...row.platforms, [detected.platform]: true },
-        };
-      }
-      return { ...row, handle: value };
-    }));
+    setRows((prev) =>
+      prev.map((row, i) => {
+        if (i !== index) return row;
+        if (detected) {
+          return {
+            ...row,
+            handle: detected.handle,
+            platforms: { ...row.platforms, [detected.platform]: true },
+          };
+        }
+        return { ...row, handle: value };
+      }),
+    );
   };
 
   const togglePlatform = (index, platform) => {
-    setRows(prev => prev.map((row, i) => {
-      if (i !== index) return row;
-      return { ...row, platforms: { ...row.platforms, [platform]: !row.platforms[platform] } };
-    }));
+    setRows((prev) =>
+      prev.map((row, i) => {
+        if (i !== index) return row;
+        return { ...row, platforms: { ...row.platforms, [platform]: !row.platforms[platform] } };
+      }),
+    );
   };
 
   const updatePassword = (index, platform, value) => {
-    setRows(prev => prev.map((row, i) => {
-      if (i !== index) return row;
-      return { ...row, passwords: { ...row.passwords, [platform]: value } };
-    }));
+    setRows((prev) =>
+      prev.map((row, i) => {
+        if (i !== index) return row;
+        return { ...row, passwords: { ...row.passwords, [platform]: value } };
+      }),
+    );
   };
 
   const togglePasswordVisibility = (key) => {
-    setShowPasswords(prev => ({ ...prev, [key]: !prev[key] }));
+    setShowPasswords((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const getSelectedPlatforms = (row) => ALL_PLATFORMS.filter(p => row.platforms[p]);
+  const getSelectedPlatforms = (row) => ALL_PLATFORMS.filter((p) => row.platforms[p]);
 
-  const validRows = rows.filter(r => r.handle.trim() && getSelectedPlatforms(r).length > 0);
+  const validRows = rows.filter((r) => r.handle.trim() && getSelectedPlatforms(r).length > 0);
 
   const handleSave = async () => {
     if (!validRows.length) return;
@@ -126,9 +145,11 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
 
     // Expand rows into individual account entries
     const accounts = [];
-    validRows.forEach(row => {
-      const handle = row.handle.trim().startsWith('@') ? row.handle.trim() : `@${row.handle.trim()}`;
-      getSelectedPlatforms(row).forEach(platform => {
+    validRows.forEach((row) => {
+      const handle = row.handle.trim().startsWith('@')
+        ? row.handle.trim()
+        : `@${row.handle.trim()}`;
+      getSelectedPlatforms(row).forEach((platform) => {
         accounts.push({
           handle,
           platform,
@@ -145,10 +166,11 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
   // Check if a manual account matches a connected Late account
   const getAccountStatus = (handle, platform) => {
     const normalizedHandle = handle.replace(/^@/, '').toLowerCase();
-    const match = latePages.find(p =>
-      p.artistId === artistId &&
-      p.handle?.replace(/^@/, '').toLowerCase() === normalizedHandle &&
-      p.platform === platform
+    const match = latePages.find(
+      (p) =>
+        p.artistId === artistId &&
+        p.handle?.replace(/^@/, '').toLowerCase() === normalizedHandle &&
+        p.platform === platform,
     );
     if (match) return 'connected';
     if (isLateConfigured) return 'pending';
@@ -179,7 +201,9 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
           <button
             onClick={onClose}
             className={`text-2xl leading-none ${t.textMuted} hover:${t.textPrimary} transition ${isMobile ? 'min-w-[44px] min-h-[44px] flex items-center justify-center' : ''}`}
-          >&times;</button>
+          >
+            &times;
+          </button>
         </div>
 
         {!results ? (
@@ -189,10 +213,15 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
               {rows.map((row, rowIdx) => {
                 const selected = getSelectedPlatforms(row);
                 return (
-                  <div key={rowIdx} className={`p-4 rounded-xl border ${t.cardBorder} ${t.bgElevated}`}>
+                  <div
+                    key={rowIdx}
+                    className={`p-4 rounded-xl border ${t.cardBorder} ${t.bgElevated}`}
+                  >
                     {/* Row header: handle + remove */}
                     <div className="flex items-center gap-3 mb-3">
-                      <span className={`text-xs font-semibold ${t.textMuted} w-6`}>#{rowIdx + 1}</span>
+                      <span className={`text-xs font-semibold ${t.textMuted} w-6`}>
+                        #{rowIdx + 1}
+                      </span>
                       <input
                         type="text"
                         value={row.handle}
@@ -205,12 +234,14 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
                         onClick={() => removeRow(rowIdx)}
                         className={`text-lg ${t.textMuted} hover:text-red-400 transition ${isMobile ? 'min-w-[44px] min-h-[44px] flex items-center justify-center' : ''}`}
                         title="Remove row"
-                      >&times;</button>
+                      >
+                        &times;
+                      </button>
                     </div>
 
                     {/* Platform toggles */}
                     <div className={`flex gap-2 flex-wrap ${isMobile ? 'ml-0 mt-2' : 'ml-9'} mb-2`}>
-                      {ALL_PLATFORMS.map(platform => {
+                      {ALL_PLATFORMS.map((platform) => {
                         const meta = PLATFORM_META[platform];
                         const isSelected = row.platforms[platform];
                         return (
@@ -225,12 +256,10 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
                             style={{
                               ...(isSelected
                                 ? { backgroundColor: meta.color, borderColor: meta.color }
-                                : { borderColor: meta.color + '66', color: meta.color }
-                              ),
+                                : { borderColor: meta.color + '66', color: meta.color }),
                               ...(isMobile
                                 ? { minHeight: '44px', padding: '10px 16px' }
-                                : { padding: '6px 12px' }
-                              ),
+                                : { padding: '6px 12px' }),
                             }}
                           >
                             <span>{meta.icon}</span>
@@ -243,7 +272,7 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
                     {/* Per-platform password fields */}
                     {selected.length > 0 && (
                       <div className="ml-9 mt-3 space-y-2">
-                        {selected.map(platform => {
+                        {selected.map((platform) => {
                           const meta = PLATFORM_META[platform];
                           const pwKey = `${rowIdx}-${platform}`;
                           const isVisible = showPasswords[pwKey];
@@ -283,11 +312,22 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
             <div
               className={`px-6 py-4 border-t ${t.borderSubtle} flex items-center justify-between sticky bottom-0 ${t.bgPage} ${isMobile ? 'pb-[max(16px,env(safe-area-inset-bottom))] flex-wrap gap-3' : ''}`}
             >
-              <Button variant="neutral-tertiary" size="small" onClick={addRow}>+ Add Another</Button>
+              <Button variant="neutral-tertiary" size="small" onClick={addRow}>
+                + Add Another
+              </Button>
               <div className="flex gap-3">
-                <Button variant="neutral-secondary" onClick={onClose}>Cancel</Button>
-                <Button variant="brand-primary" onClick={handleSave} disabled={saving || validRows.length === 0} loading={saving}>
-                  {saving ? 'Saving...' : `Done (${validRows.length} handle${validRows.length !== 1 ? 's' : ''})`}
+                <Button variant="neutral-secondary" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="brand-primary"
+                  onClick={handleSave}
+                  disabled={saving || validRows.length === 0}
+                  loading={saving}
+                >
+                  {saving
+                    ? 'Saving...'
+                    : `Done (${validRows.length} handle${validRows.length !== 1 ? 's' : ''})`}
                 </Button>
               </div>
             </div>
@@ -301,34 +341,54 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
               </p>
               <div className="space-y-2">
                 {results.map((r, i) => {
-                  const meta = PLATFORM_META[r.platform] || { label: r.platform, icon: '🔗', color: '#888' };
+                  const meta = PLATFORM_META[r.platform] || {
+                    label: r.platform,
+                    icon: '🔗',
+                    color: '#888',
+                  };
                   const status = getAccountStatus(r.handle, r.platform);
                   const sl = statusLabels[status];
                   return (
-                    <div key={i} className={`flex items-center gap-3 px-4 py-2.5 rounded-lg border ${t.cardBorder} ${t.bgElevated}`}>
+                    <div
+                      key={i}
+                      className={`flex items-center gap-3 px-4 py-2.5 rounded-lg border ${t.cardBorder} ${t.bgElevated}`}
+                    >
                       <span className="text-sm">{meta.icon}</span>
-                      <span className={`text-sm font-medium ${t.textPrimary} flex-1`}>{r.handle}</span>
-                      <span className="text-xs font-medium" style={{ color: meta.color }}>{meta.label}</span>
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${sl.className}`}>{sl.text}</span>
+                      <span className={`text-sm font-medium ${t.textPrimary} flex-1`}>
+                        {r.handle}
+                      </span>
+                      <span className="text-xs font-medium" style={{ color: meta.color }}>
+                        {meta.label}
+                      </span>
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${sl.className}`}
+                      >
+                        {sl.text}
+                      </span>
                     </div>
                   );
                 })}
               </div>
-              {results.some(r => getAccountStatus(r.handle, r.platform) === 'pending') && (
+              {results.some((r) => getAccountStatus(r.handle, r.platform) === 'pending') && (
                 <p className={`text-xs ${t.textMuted} mt-4`}>
-                  Accounts marked "Needs OAuth" require you to connect them via Late's OAuth flow. Use the "Connect" button next to each account. If connection fails, double-check the password.
+                  Accounts marked "Needs OAuth" require you to connect them via Late's OAuth flow.
+                  Use the "Connect" button next to each account. If connection fails, double-check
+                  the password.
                 </p>
               )}
-              {results.some(r => getAccountStatus(r.handle, r.platform) === 'waiting') && (
+              {results.some((r) => getAccountStatus(r.handle, r.platform) === 'waiting') && (
                 <p className={`text-xs ${t.textMuted} mt-2`}>
-                  Accounts marked "Waiting for Late" will auto-connect once you set up the Late API key for this artist.
+                  Accounts marked "Waiting for Late" will auto-connect once you set up the Late API
+                  key for this artist.
                 </p>
               )}
             </div>
             <div
               className={`px-6 py-4 border-t ${t.borderSubtle} flex justify-end sticky bottom-0 ${t.bgPage} ${isMobile ? 'pb-[max(16px,env(safe-area-inset-bottom))]' : ''}`}
             >
-              <Button variant="brand-primary" onClick={onClose}>Close</Button>
+              <Button variant="brand-primary" onClick={onClose}>
+                Close
+              </Button>
             </div>
           </>
         )}
@@ -363,15 +423,18 @@ const PagesTab = ({
   const [expandedHandles, setExpandedHandles] = useState({});
   const [bulkEntryArtistId, setBulkEntryArtistId] = useState(null);
   const [showPasswords, setShowPasswords] = useState({});
-  const togglePw = (key) => setShowPasswords(prev => ({ ...prev, [key]: !prev[key] }));
+  const togglePw = (key) => setShowPasswords((prev) => ({ ...prev, [key]: !prev[key] }));
 
   // Social Set usage
   const socialSetsUsed = useMemo(() => {
-    const handles = new Set(latePages.map(p => p.handle).filter(Boolean));
+    const handles = new Set(latePages.map((p) => p.handle).filter(Boolean));
     return handles.size;
   }, [latePages]);
 
-  const isAtLimit = socialSetsAllowed > 0 && socialSetsUsed >= socialSetsAllowed && !(user?.paymentExempt || user?.role === 'conductor');
+  const isAtLimit =
+    socialSetsAllowed > 0 &&
+    socialSetsUsed >= socialSetsAllowed &&
+    !(user?.paymentExempt || user?.role === 'conductor');
   const [connectingPlatform, setConnectingPlatform] = useState(null); // { artistId, platform }
   const oauthPendingRef = useRef(false);
 
@@ -379,11 +442,12 @@ const PagesTab = ({
   const mergedPagesByArtist = useMemo(() => {
     const merged = {};
     // Add Late pages
-    latePages.forEach(page => {
+    latePages.forEach((page) => {
       const aid = page.artistId;
       if (!merged[aid]) merged[aid] = {};
       const norm = page.handle?.replace(/^@/, '').toLowerCase() || '';
-      if (!merged[aid][norm]) merged[aid][norm] = { displayHandle: page.handle, pages: [], manualEntries: [] };
+      if (!merged[aid][norm])
+        merged[aid][norm] = { displayHandle: page.handle, pages: [], manualEntries: [] };
       merged[aid][norm].pages.push(page);
       merged[aid][norm].displayHandle = page.handle; // prefer Late casing
     });
@@ -393,10 +457,11 @@ const PagesTab = ({
       if (!merged[artistId]) merged[artistId] = {};
       accounts.forEach((acc, idx) => {
         const norm = acc.handle?.replace(/^@/, '').toLowerCase() || '';
-        if (!merged[artistId][norm]) merged[artistId][norm] = { displayHandle: acc.handle, pages: [], manualEntries: [] };
+        if (!merged[artistId][norm])
+          merged[artistId][norm] = { displayHandle: acc.handle, pages: [], manualEntries: [] };
         const group = merged[artistId][norm];
         // Only add manual entry if Late doesn't already cover this handle+platform
-        const alreadyCovered = group.pages.some(p => p.platform === acc.platform);
+        const alreadyCovered = group.pages.some((p) => p.platform === acc.platform);
         if (!alreadyCovered) {
           group.manualEntries.push({ ...acc, _idx: idx });
         }
@@ -406,38 +471,39 @@ const PagesTab = ({
   }, [latePages, manualAccountsByArtist]);
 
   // Set of unconfigured artist IDs for quick lookup
-  const unconfiguredIds = useMemo(() =>
-    new Set(unconfiguredLateArtists.map(a => a.id)),
-    [unconfiguredLateArtists]
+  const unconfiguredIds = useMemo(
+    () => new Set(unconfiguredLateArtists.map((a) => a.id)),
+    [unconfiguredLateArtists],
   );
 
   // Set of artist IDs that have pages loaded (confirmed configured)
-  const configuredIds = useMemo(() =>
-    new Set(latePages.map(p => p.artistId)),
-    [latePages]
-  );
+  const configuredIds = useMemo(() => new Set(latePages.map((p) => p.artistId)), [latePages]);
 
   // Total stats (Late + manual-only)
   const totalAccounts = useMemo(() => {
     let count = latePages.length;
-    Object.values(mergedPagesByArtist).forEach(handles => {
-      Object.values(handles).forEach(group => { count += group.manualEntries.length; });
+    Object.values(mergedPagesByArtist).forEach((handles) => {
+      Object.values(handles).forEach((group) => {
+        count += group.manualEntries.length;
+      });
     });
     return count;
   }, [latePages.length, mergedPagesByArtist]);
 
   const totalHandles = useMemo(() => {
     let count = 0;
-    Object.values(mergedPagesByArtist).forEach(handles => { count += Object.keys(handles).length; });
+    Object.values(mergedPagesByArtist).forEach((handles) => {
+      count += Object.keys(handles).length;
+    });
     return count;
   }, [mergedPagesByArtist]);
 
   const toggleArtist = (artistId) => {
-    setExpandedArtists(prev => ({ ...prev, [artistId]: !prev[artistId] }));
+    setExpandedArtists((prev) => ({ ...prev, [artistId]: !prev[artistId] }));
   };
 
   const toggleHandle = (key) => {
-    setExpandedHandles(prev => ({ ...prev, [key]: !prev[key] }));
+    setExpandedHandles((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   // Late OAuth connect flow: get or create profile, then redirect to Late OAuth
@@ -501,30 +567,35 @@ const PagesTab = ({
   const isArtistExpanded = (artistId) => expandedArtists[artistId] !== false;
 
   // Bulk entry save handler — auto-triggers OAuth for newly saved accounts if Late is configured
-  const handleBulkSave = useCallback(async (artistId, accounts) => {
-    let result;
-    if (onAddManualAccounts) {
-      result = await onAddManualAccounts(artistId, accounts);
-    } else {
-      result = accounts.map(a => ({ ...a, status: 'saved' }));
-    }
-
-    // Auto-trigger OAuth for newly saved accounts if Late is configured
-    const isLateConfigured = !unconfiguredIds.has(artistId);
-    if (isLateConfigured) {
-      const savedAccounts = result.filter(r => r.status === 'saved');
-      const uniquePlatforms = [...new Set(savedAccounts.map(a => a.platform))];
-      if (uniquePlatforms.length > 0) {
-        toastSuccess(`Now connect ${uniquePlatforms.join(', ')} via OAuth...`);
-        // Auto-trigger first platform's OAuth
-        handleConnectPlatform(artistId, uniquePlatforms[0]);
+  const handleBulkSave = useCallback(
+    async (artistId, accounts) => {
+      let result;
+      if (onAddManualAccounts) {
+        result = await onAddManualAccounts(artistId, accounts);
+      } else {
+        result = accounts.map((a) => ({ ...a, status: 'saved' }));
       }
-    }
-    return result;
-  }, [onAddManualAccounts, unconfiguredIds, handleConnectPlatform, toastSuccess]);
+
+      // Auto-trigger OAuth for newly saved accounts if Late is configured
+      const isLateConfigured = !unconfiguredIds.has(artistId);
+      if (isLateConfigured) {
+        const savedAccounts = result.filter((r) => r.status === 'saved');
+        const uniquePlatforms = [...new Set(savedAccounts.map((a) => a.platform))];
+        if (uniquePlatforms.length > 0) {
+          toastSuccess(`Now connect ${uniquePlatforms.join(', ')} via OAuth...`);
+          // Auto-trigger first platform's OAuth
+          handleConnectPlatform(artistId, uniquePlatforms[0]);
+        }
+      }
+      return result;
+    },
+    [onAddManualAccounts, unconfiguredIds, handleConnectPlatform, toastSuccess],
+  );
 
   // Find the artist for bulk entry modal
-  const bulkEntryArtist = bulkEntryArtistId ? visibleArtists.find(a => a.id === bulkEntryArtistId) : null;
+  const bulkEntryArtist = bulkEntryArtistId
+    ? visibleArtists.find((a) => a.id === bulkEntryArtistId)
+    : null;
 
   return (
     <div className={`flex-1 overflow-auto ${isMobile ? 'p-3' : 'px-12 py-8'} ${t.bgPage}`}>
@@ -532,9 +603,13 @@ const PagesTab = ({
         {/* Header */}
         <div className={`flex items-center justify-between ${isMobile ? 'mb-5' : 'mb-8'}`}>
           <div>
-            <h1 className={`${isMobile ? 'text-xl' : 'text-2xl'} font-bold ${t.textPrimary}`}>Your Pages</h1>
+            <h1 className={`${isMobile ? 'text-xl' : 'text-2xl'} font-bold ${t.textPrimary}`}>
+              Your Pages
+            </h1>
             <p className={`text-sm ${t.textSecondary} mt-1`}>
-              {visibleArtists.length} artist{visibleArtists.length !== 1 ? 's' : ''} · {totalHandles} handle{totalHandles !== 1 ? 's' : ''} · {totalAccounts} account{totalAccounts !== 1 ? 's' : ''}
+              {visibleArtists.length} artist{visibleArtists.length !== 1 ? 's' : ''} ·{' '}
+              {totalHandles} handle{totalHandles !== 1 ? 's' : ''} · {totalAccounts} account
+              {totalAccounts !== 1 ? 's' : ''}
               {socialSetsAllowed > 0 && (
                 <span className={`ml-2 ${isAtLimit ? 'text-amber-400' : ''}`}>
                   · {socialSetsUsed}/{socialSetsAllowed} Social Sets
@@ -542,7 +617,13 @@ const PagesTab = ({
               )}
             </p>
           </div>
-          <Button variant="neutral-secondary" size="small" onClick={onLoadLatePages} disabled={loadingLatePages} loading={loadingLatePages}>
+          <Button
+            variant="neutral-secondary"
+            size="small"
+            onClick={onLoadLatePages}
+            disabled={loadingLatePages}
+            loading={loadingLatePages}
+          >
             {loadingLatePages ? 'Syncing...' : '↻ Sync All'}
           </Button>
         </div>
@@ -558,35 +639,44 @@ const PagesTab = ({
           </div>
         ) : (
           <div className="space-y-6">
-            {visibleArtists.map(artist => {
+            {visibleArtists.map((artist) => {
               const artistMerged = mergedPagesByArtist[artist.id] || {};
               const handleEntries = Object.entries(artistMerged);
               const hasPages = handleEntries.some(([, g]) => g.pages.length > 0);
               const hasAnyEntries = handleEntries.length > 0;
-              const isUnconfigured = unconfiguredIds.has(artist.id) || (!hasPages && !configuredIds.has(artist.id));
+              const isUnconfigured =
+                unconfiguredIds.has(artist.id) || (!hasPages && !configuredIds.has(artist.id));
               const isLateConfigured = !isUnconfigured || configuredIds.has(artist.id);
               const expanded = isArtistExpanded(artist.id);
 
               // Count total followers for this artist (Late only)
-              const artistFollowers = handleEntries.reduce((sum, [, group]) =>
-                sum + group.pages.reduce((s, p) => s + (p.followers || 0), 0), 0
+              const artistFollowers = handleEntries.reduce(
+                (sum, [, group]) => sum + group.pages.reduce((s, p) => s + (p.followers || 0), 0),
+                0,
               );
 
               // Artist profile picture: from artist doc, linked user, or first Late page
-              const artistPhoto = artist.photoURL ||
-                handleEntries.flatMap(([, g]) => g.pages).find(p => p.profileImage)?.profileImage ||
+              const artistPhoto =
+                artist.photoURL ||
+                handleEntries.flatMap(([, g]) => g.pages).find((p) => p.profileImage)
+                  ?.profileImage ||
                 null;
 
               // All platforms already connected (Late or manual) across all handles for this artist
               const allConnectedPlatforms = new Set();
               handleEntries.forEach(([, group]) => {
-                group.pages.forEach(p => allConnectedPlatforms.add(p.platform));
-                group.manualEntries.forEach(e => allConnectedPlatforms.add(e.platform));
+                group.pages.forEach((p) => allConnectedPlatforms.add(p.platform));
+                group.manualEntries.forEach((e) => allConnectedPlatforms.add(e.platform));
               });
-              const artistMissingPlatforms = ALL_PLATFORMS.filter(p => !allConnectedPlatforms.has(p));
+              const artistMissingPlatforms = ALL_PLATFORMS.filter(
+                (p) => !allConnectedPlatforms.has(p),
+              );
 
               return (
-                <div key={artist.id} className={`rounded-xl border ${t.cardBorder} overflow-hidden`}>
+                <div
+                  key={artist.id}
+                  className={`rounded-xl border ${t.cardBorder} overflow-hidden`}
+                >
                   {/* Artist Header */}
                   <div
                     onClick={() => toggleArtist(artist.id)}
@@ -594,37 +684,56 @@ const PagesTab = ({
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       {artistPhoto ? (
-                        <img src={artistPhoto} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
+                        <img
+                          src={artistPhoto}
+                          alt=""
+                          className="w-10 h-10 rounded-full object-cover shrink-0"
+                          referrerPolicy="no-referrer"
+                        />
                       ) : (
                         <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shrink-0 bg-indigo-500/15 text-indigo-500">
                           {artist.name?.[0]?.toUpperCase() || '?'}
                         </div>
                       )}
                       <div className="min-w-0 flex-1">
-                        <h2 className={`font-bold ${isMobile ? 'text-base' : 'text-lg'} ${t.textPrimary} truncate`}>{artist.name}</h2>
+                        <h2
+                          className={`font-bold ${isMobile ? 'text-base' : 'text-lg'} ${t.textPrimary} truncate`}
+                        >
+                          {artist.name}
+                        </h2>
                         <p className={`text-xs ${t.textSecondary}`}>
                           {hasAnyEntries
                             ? `${handleEntries.length} handle${handleEntries.length !== 1 ? 's' : ''}${artistFollowers > 0 ? ` · ${formatFollowers(artistFollowers)} followers` : ''}`
                             : isUnconfigured
                               ? 'Late not connected'
-                              : 'No pages found'
-                          }
+                              : 'No pages found'}
                         </p>
                       </div>
                     </div>
-                    <div className={`flex items-center ${isMobile ? 'gap-2' : 'gap-3'} shrink-0 flex-wrap justify-end`}>
+                    <div
+                      className={`flex items-center ${isMobile ? 'gap-2' : 'gap-3'} shrink-0 flex-wrap justify-end`}
+                    >
                       {/* Add Accounts button */}
-                      <Button variant="neutral-secondary" size="small" onClick={(e) => { e.stopPropagation(); setBulkEntryArtistId(artist.id); }}>+ Add Accounts</Button>
+                      <Button
+                        variant="neutral-secondary"
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setBulkEntryArtistId(artist.id);
+                        }}
+                      >
+                        + Add Accounts
+                      </Button>
                       {!isMobile && isUnconfigured && !hasAnyEntries && (
                         <Badge variant="warning">Setup Required</Badge>
                       )}
                       {!isMobile && hasAnyEntries && !hasPages && (
                         <Badge variant="neutral">Manual</Badge>
                       )}
-                      {!isMobile && hasPages && (
-                        <Badge variant="success">Connected</Badge>
-                      )}
-                      <span className={`text-lg transition-transform duration-200 ${expanded ? '' : '-rotate-90'} ${t.textSecondary}`}>
+                      {!isMobile && hasPages && <Badge variant="success">Connected</Badge>}
+                      <span
+                        className={`text-lg transition-transform duration-200 ${expanded ? '' : '-rotate-90'} ${t.textSecondary}`}
+                      >
                         ▼
                       </span>
                     </div>
@@ -641,11 +750,30 @@ const PagesTab = ({
                             Connect Late for {artist.name}
                           </h3>
                           <p className={`text-sm ${t.textSecondary} mb-5 max-w-md mx-auto`}>
-                            Add a Late.co API key to manage {artist.name}'s social media pages, or add accounts manually.
+                            Add a Late.co API key to manage {artist.name}'s social media pages, or
+                            add accounts manually.
                           </p>
-                          <div className={`flex gap-3 justify-center ${isMobile ? 'flex-col items-stretch px-4' : ''}`}>
-                            <Button variant="brand-primary" onClick={(e) => { e.stopPropagation(); onConfigureLate(artist.id); }}>Connect Late API Key</Button>
-                            <Button variant="neutral-secondary" onClick={(e) => { e.stopPropagation(); setBulkEntryArtistId(artist.id); }}>Add Accounts Manually</Button>
+                          <div
+                            className={`flex gap-3 justify-center ${isMobile ? 'flex-col items-stretch px-4' : ''}`}
+                          >
+                            <Button
+                              variant="brand-primary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onConfigureLate(artist.id);
+                              }}
+                            >
+                              Connect Late API Key
+                            </Button>
+                            <Button
+                              variant="neutral-secondary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setBulkEntryArtistId(artist.id);
+                              }}
+                            >
+                              Add Accounts Manually
+                            </Button>
                           </div>
                         </div>
                       )}
@@ -661,7 +789,16 @@ const PagesTab = ({
                               <p className={`text-sm ${t.textSecondary}`}>
                                 Connect Late to enable scheduling for {artist.name}'s accounts.
                               </p>
-                              <Button variant="brand-primary" size="small" onClick={(e) => { e.stopPropagation(); onConfigureLate(artist.id); }}>Connect Late</Button>
+                              <Button
+                                variant="brand-primary"
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onConfigureLate(artist.id);
+                                }}
+                              >
+                                Connect Late
+                              </Button>
                             </div>
                           )}
 
@@ -670,14 +807,26 @@ const PagesTab = ({
                               const { displayHandle, pages, manualEntries } = group;
                               const handleKey = `${artist.id}:${normalizedHandle}`;
                               const isHandleExpanded = expandedHandles[handleKey] || false;
-                              const totalHandleFollowers = pages.reduce((s, p) => s + (p.followers || 0), 0);
-                              const profilePic = pages.find(p => p.profileImage)?.profileImage;
-                              const firstPlatform = pages[0]?.platform || manualEntries[0]?.platform;
-                              const primaryMeta = PLATFORM_META[firstPlatform] || { label: 'Unknown', icon: '🔗', color: '#888' };
-                              const latePlatforms = pages.map(p => p.platform);
-                              const manualPlatforms = manualEntries.map(e => e.platform);
-                              const coveredPlatforms = [...new Set([...latePlatforms, ...manualPlatforms])];
-                              const missingPlatforms = ALL_PLATFORMS.filter(p => !coveredPlatforms.includes(p));
+                              const totalHandleFollowers = pages.reduce(
+                                (s, p) => s + (p.followers || 0),
+                                0,
+                              );
+                              const profilePic = pages.find((p) => p.profileImage)?.profileImage;
+                              const firstPlatform =
+                                pages[0]?.platform || manualEntries[0]?.platform;
+                              const primaryMeta = PLATFORM_META[firstPlatform] || {
+                                label: 'Unknown',
+                                icon: '🔗',
+                                color: '#888',
+                              };
+                              const latePlatforms = pages.map((p) => p.platform);
+                              const manualPlatforms = manualEntries.map((e) => e.platform);
+                              const coveredPlatforms = [
+                                ...new Set([...latePlatforms, ...manualPlatforms]),
+                              ];
+                              const missingPlatforms = ALL_PLATFORMS.filter(
+                                (p) => !coveredPlatforms.includes(p),
+                              );
 
                               return (
                                 <div key={handleKey}>
@@ -688,20 +837,39 @@ const PagesTab = ({
                                   >
                                     <div className="flex items-center gap-3 min-w-0 flex-1">
                                       {profilePic ? (
-                                        <img src={profilePic} alt={displayHandle} className="w-9 h-9 rounded-full object-cover shrink-0" />
+                                        <img
+                                          src={profilePic}
+                                          alt={displayHandle}
+                                          className="w-9 h-9 rounded-full object-cover shrink-0"
+                                          referrerPolicy="no-referrer"
+                                        />
                                       ) : (
-                                        <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-                                          style={{ backgroundColor: primaryMeta.color + '22', color: primaryMeta.color }}>
+                                        <div
+                                          className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                                          style={{
+                                            backgroundColor: primaryMeta.color + '22',
+                                            color: primaryMeta.color,
+                                          }}
+                                        >
                                           <span className="text-sm">{primaryMeta.icon}</span>
                                         </div>
                                       )}
                                       <div className="min-w-0 flex-1">
-                                        <span className={`font-semibold text-sm ${t.textPrimary}`}>{displayHandle}</span>
+                                        <span className={`font-semibold text-sm ${t.textPrimary}`}>
+                                          {displayHandle}
+                                        </span>
                                         <div className="flex gap-1.5 mt-1 flex-wrap">
                                           {/* Late platform badges (solid) */}
-                                          {pages.map(page => {
-                                            const meta = PLATFORM_META[page.platform] || { label: page.platform, icon: '🔗', color: '#888' };
-                                            const profileUrl = getProfileUrl(page.platform, page.handle);
+                                          {pages.map((page) => {
+                                            const meta = PLATFORM_META[page.platform] || {
+                                              label: page.platform,
+                                              icon: '🔗',
+                                              color: '#888',
+                                            };
+                                            const profileUrl = getProfileUrl(
+                                              page.platform,
+                                              page.handle,
+                                            );
                                             return (
                                               <a
                                                 key={page.platform}
@@ -712,7 +880,9 @@ const PagesTab = ({
                                                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white no-underline hover:brightness-110 transition"
                                                 style={{
                                                   backgroundColor: meta.color,
-                                                  ...(isMobile ? { minHeight: 32, padding: '6px 10px' } : {}),
+                                                  ...(isMobile
+                                                    ? { minHeight: 32, padding: '6px 10px' }
+                                                    : {}),
                                                 }}
                                                 title={`Open ${meta.label} profile`}
                                               >
@@ -722,15 +892,22 @@ const PagesTab = ({
                                             );
                                           })}
                                           {/* Manual-only platform badges (dashed border) */}
-                                          {manualEntries.map(entry => {
-                                            const meta = PLATFORM_META[entry.platform] || { label: entry.platform, icon: '🔗', color: '#888' };
+                                          {manualEntries.map((entry) => {
+                                            const meta = PLATFORM_META[entry.platform] || {
+                                              label: entry.platform,
+                                              icon: '🔗',
+                                              color: '#888',
+                                            };
                                             return (
                                               <span
                                                 key={`manual-${entry.platform}`}
                                                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border border-dashed"
                                                 style={{
-                                                  borderColor: meta.color, color: meta.color,
-                                                  ...(isMobile ? { minHeight: 32, padding: '6px 10px' } : {}),
+                                                  borderColor: meta.color,
+                                                  color: meta.color,
+                                                  ...(isMobile
+                                                    ? { minHeight: 32, padding: '6px 10px' }
+                                                    : {}),
                                                 }}
                                               >
                                                 <span>{meta.icon}</span>
@@ -739,16 +916,22 @@ const PagesTab = ({
                                             );
                                           })}
                                           {/* Missing platform connect buttons (inline) — opens bulk entry modal */}
-                                          {missingPlatforms.map(platform => {
+                                          {missingPlatforms.map((platform) => {
                                             const meta = PLATFORM_META[platform];
                                             return (
                                               <button
                                                 key={`add-${platform}`}
-                                                onClick={(e) => { e.stopPropagation(); setBulkEntryArtistId(artist.id); }}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setBulkEntryArtistId(artist.id);
+                                                }}
                                                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border border-dashed opacity-40 hover:opacity-80 transition"
                                                 style={{
-                                                  borderColor: meta.color + '66', color: meta.color,
-                                                  ...(isMobile ? { minHeight: 32, padding: '6px 10px' } : {}),
+                                                  borderColor: meta.color + '66',
+                                                  color: meta.color,
+                                                  ...(isMobile
+                                                    ? { minHeight: 32, padding: '6px 10px' }
+                                                    : {}),
                                                 }}
                                                 title={`Add ${meta.label}`}
                                               >
@@ -763,11 +946,21 @@ const PagesTab = ({
                                     <div className="flex items-center gap-4 shrink-0">
                                       {totalHandleFollowers > 0 && (
                                         <div className="text-right">
-                                          <span className={`text-sm font-semibold ${t.textPrimary}`}>{formatFollowers(totalHandleFollowers)}</span>
-                                          <span className={`text-xs ${t.textSecondary} ml-1`}>followers</span>
+                                          <span
+                                            className={`text-sm font-semibold ${t.textPrimary}`}
+                                          >
+                                            {formatFollowers(totalHandleFollowers)}
+                                          </span>
+                                          <span className={`text-xs ${t.textSecondary} ml-1`}>
+                                            followers
+                                          </span>
                                         </div>
                                       )}
-                                      <span className={`text-sm transition-transform duration-200 ${isHandleExpanded ? '' : '-rotate-90'} ${t.textSecondary}`}>▼</span>
+                                      <span
+                                        className={`text-sm transition-transform duration-200 ${isHandleExpanded ? '' : '-rotate-90'} ${t.textSecondary}`}
+                                      >
+                                        ▼
+                                      </span>
                                     </div>
                                   </div>
 
@@ -775,11 +968,17 @@ const PagesTab = ({
                                   {isHandleExpanded && (
                                     <div className={`${t.bgSurface} border-t ${t.borderSubtle}`}>
                                       {/* Late platform rows */}
-                                      {pages.map(page => {
-                                        const meta = PLATFORM_META[page.platform] || { label: page.platform, icon: '🔗', color: '#888' };
+                                      {pages.map((page) => {
+                                        const meta = PLATFORM_META[page.platform] || {
+                                          label: page.platform,
+                                          icon: '🔗',
+                                          color: '#888',
+                                        };
                                         return (
-                                          <div key={`${page.handle}-${page.platform}`}
-                                            className={`px-8 py-2.5 flex items-center justify-between border-b ${t.borderSubtle} last:border-b-0`}>
+                                          <div
+                                            key={`${page.handle}-${page.platform}`}
+                                            className={`px-8 py-2.5 flex items-center justify-between border-b ${t.borderSubtle} last:border-b-0`}
+                                          >
                                             <a
                                               href={getProfileUrl(page.platform, page.handle)}
                                               target="_blank"
@@ -788,11 +987,22 @@ const PagesTab = ({
                                               title={`Open ${meta.label} profile`}
                                             >
                                               <span className="text-base">{meta.icon}</span>
-                                              <span className="text-sm" style={{ color: meta.color }}>{meta.label}</span>
+                                              <span
+                                                className="text-sm"
+                                                style={{ color: meta.color }}
+                                              >
+                                                {meta.label}
+                                              </span>
                                             </a>
                                             <div className="flex items-center gap-4">
-                                              <span className={`text-sm ${t.textSecondary}`}>{formatFollowers(page.followers)}</span>
-                                              <Badge variant={page.status === 'active' ? 'success' : 'warning'}>
+                                              <span className={`text-sm ${t.textSecondary}`}>
+                                                {formatFollowers(page.followers)}
+                                              </span>
+                                              <Badge
+                                                variant={
+                                                  page.status === 'active' ? 'success' : 'warning'
+                                                }
+                                              >
                                                 {page.status === 'active' ? 'Active' : 'Inactive'}
                                               </Badge>
                                             </div>
@@ -801,20 +1011,37 @@ const PagesTab = ({
                                       })}
 
                                       {/* Manual-only platform rows */}
-                                      {manualEntries.map(entry => {
-                                        const meta = PLATFORM_META[entry.platform] || { label: entry.platform, icon: '🔗', color: '#888' };
+                                      {manualEntries.map((entry) => {
+                                        const meta = PLATFORM_META[entry.platform] || {
+                                          label: entry.platform,
+                                          icon: '🔗',
+                                          color: '#888',
+                                        };
                                         const pwKey = `manual-${entry._idx}`;
                                         const pwVisible = showPasswords[pwKey];
                                         return (
-                                          <div key={`manual-${entry.platform}-${entry._idx}`}
-                                            className={`px-8 py-2.5 flex items-center justify-between border-b ${t.borderSubtle} last:border-b-0`}>
+                                          <div
+                                            key={`manual-${entry.platform}-${entry._idx}`}
+                                            className={`px-8 py-2.5 flex items-center justify-between border-b ${t.borderSubtle} last:border-b-0`}
+                                          >
                                             <div className="flex items-center gap-3">
                                               <span className="text-base">{meta.icon}</span>
-                                              <span className="text-sm" style={{ color: meta.color }}>{meta.label}</span>
+                                              <span
+                                                className="text-sm"
+                                                style={{ color: meta.color }}
+                                              >
+                                                {meta.label}
+                                              </span>
                                               {entry.password && (
-                                                <span className={`text-xs ${t.textMuted} font-mono flex items-center gap-1 ml-2`}>
+                                                <span
+                                                  className={`text-xs ${t.textMuted} font-mono flex items-center gap-1 ml-2`}
+                                                >
                                                   {pwVisible ? entry.password : '••••••••'}
-                                                  <button onClick={() => togglePw(pwKey)} className={`text-xs ${t.textMuted}`} title={pwVisible ? 'Hide' : 'Show'}>
+                                                  <button
+                                                    onClick={() => togglePw(pwKey)}
+                                                    className={`text-xs ${t.textMuted}`}
+                                                    title={pwVisible ? 'Hide' : 'Show'}
+                                                  >
                                                     {pwVisible ? '🙈' : '👁'}
                                                   </button>
                                                 </span>
@@ -824,16 +1051,22 @@ const PagesTab = ({
                                               <Badge variant="neutral">Manual</Badge>
                                               {isLateConfigured && (
                                                 <button
-                                                  onClick={() => handleConnectPlatform(artist.id, entry.platform)}
+                                                  onClick={() =>
+                                                    handleConnectPlatform(artist.id, entry.platform)
+                                                  }
                                                   disabled={!!connectingPlatform}
                                                   className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-yellow-500/15 text-yellow-400 hover:bg-yellow-500/25 transition disabled:opacity-40"
                                                 >
-                                                  {connectingPlatform?.artistId === artist.id && connectingPlatform?.platform === entry.platform
-                                                    ? 'Connecting...' : 'Connect'}
+                                                  {connectingPlatform?.artistId === artist.id &&
+                                                  connectingPlatform?.platform === entry.platform
+                                                    ? 'Connecting...'
+                                                    : 'Connect'}
                                                 </button>
                                               )}
                                               <button
-                                                onClick={() => onRemoveManualAccount(artist.id, entry._idx)}
+                                                onClick={() =>
+                                                  onRemoveManualAccount(artist.id, entry._idx)
+                                                }
                                                 className={`text-xs ${t.textMuted} hover:text-red-400 transition`}
                                                 title="Remove"
                                               >
@@ -846,16 +1079,24 @@ const PagesTab = ({
 
                                       {/* Add missing platforms for this handle */}
                                       {missingPlatforms.length > 0 && isLateConfigured && (
-                                        <div className={`${isMobile ? 'px-4' : 'px-8'} py-3 border-t ${t.borderSubtle}`}>
-                                          <p className={`text-xs ${t.textMuted} mb-2`}>Connect another platform:</p>
+                                        <div
+                                          className={`${isMobile ? 'px-4' : 'px-8'} py-3 border-t ${t.borderSubtle}`}
+                                        >
+                                          <p className={`text-xs ${t.textMuted} mb-2`}>
+                                            Connect another platform:
+                                          </p>
                                           <div className="flex gap-2 flex-wrap">
-                                            {missingPlatforms.map(platform => {
+                                            {missingPlatforms.map((platform) => {
                                               const meta = PLATFORM_META[platform];
-                                              const isConnecting = connectingPlatform?.artistId === artist.id && connectingPlatform?.platform === platform;
+                                              const isConnecting =
+                                                connectingPlatform?.artistId === artist.id &&
+                                                connectingPlatform?.platform === platform;
                                               return (
                                                 <button
                                                   key={platform}
-                                                  onClick={() => handleConnectPlatform(artist.id, platform)}
+                                                  onClick={() =>
+                                                    handleConnectPlatform(artist.id, platform)
+                                                  }
                                                   disabled={!!connectingPlatform}
                                                   className="inline-flex items-center gap-1.5 rounded-lg text-xs font-medium border border-dashed transition hover:opacity-80 disabled:opacity-40"
                                                   style={{
@@ -863,12 +1104,13 @@ const PagesTab = ({
                                                     color: meta.color,
                                                     ...(isMobile
                                                       ? { minHeight: '44px', padding: '10px 16px' }
-                                                      : { padding: '6px 12px' }
-                                                    ),
+                                                      : { padding: '6px 12px' }),
                                                   }}
                                                 >
                                                   <span>{meta.icon}</span>
-                                                  {isConnecting ? 'Connecting...' : `+ ${meta.label}`}
+                                                  {isConnecting
+                                                    ? 'Connecting...'
+                                                    : `+ ${meta.label}`}
                                                 </button>
                                               );
                                             })}
@@ -884,11 +1126,15 @@ const PagesTab = ({
                             {/* Connect a new account — only show platforms not already connected */}
                             {isLateConfigured && artistMissingPlatforms.length > 0 && (
                               <div className={`${isMobile ? 'px-4' : 'px-6'} py-3 ${t.bgPage}`}>
-                                <p className={`text-xs ${t.textMuted} mb-2`}>Connect another platform:</p>
+                                <p className={`text-xs ${t.textMuted} mb-2`}>
+                                  Connect another platform:
+                                </p>
                                 <div className="flex gap-2 flex-wrap">
-                                  {artistMissingPlatforms.map(platform => {
+                                  {artistMissingPlatforms.map((platform) => {
                                     const meta = PLATFORM_META[platform];
-                                    const isConnecting = connectingPlatform?.artistId === artist.id && connectingPlatform?.platform === platform;
+                                    const isConnecting =
+                                      connectingPlatform?.artistId === artist.id &&
+                                      connectingPlatform?.platform === platform;
                                     return (
                                       <button
                                         key={platform}
@@ -900,8 +1146,7 @@ const PagesTab = ({
                                           color: meta.color,
                                           ...(isMobile
                                             ? { minHeight: '44px', padding: '10px 16px' }
-                                            : { padding: '6px 12px' }
-                                          ),
+                                            : { padding: '6px 12px' }),
                                         }}
                                       >
                                         <span>{meta.icon}</span>
@@ -924,12 +1169,17 @@ const PagesTab = ({
                             No pages connected yet
                           </h3>
                           <p className={`text-sm ${t.textSecondary} mb-5 max-w-md mx-auto`}>
-                            {artist.name}'s Late account is set up. Connect social media accounts to start scheduling.
+                            {artist.name}'s Late account is set up. Connect social media accounts to
+                            start scheduling.
                           </p>
-                          <div className={`flex gap-2 justify-center flex-wrap ${isMobile ? 'flex-col items-stretch px-4' : ''}`}>
-                            {ALL_PLATFORMS.map(platform => {
+                          <div
+                            className={`flex gap-2 justify-center flex-wrap ${isMobile ? 'flex-col items-stretch px-4' : ''}`}
+                          >
+                            {ALL_PLATFORMS.map((platform) => {
                               const meta = PLATFORM_META[platform];
-                              const isConnecting = connectingPlatform?.artistId === artist.id && connectingPlatform?.platform === platform;
+                              const isConnecting =
+                                connectingPlatform?.artistId === artist.id &&
+                                connectingPlatform?.platform === platform;
                               return (
                                 <button
                                   key={platform}
@@ -964,7 +1214,9 @@ const PagesTab = ({
           artistId={bulkEntryArtist.id}
           artistName={bulkEntryArtist.name}
           latePages={latePages}
-          isLateConfigured={!unconfiguredIds.has(bulkEntryArtist.id) || configuredIds.has(bulkEntryArtist.id)}
+          isLateConfigured={
+            !unconfiguredIds.has(bulkEntryArtist.id) || configuredIds.has(bulkEntryArtist.id)
+          }
           onSave={handleBulkSave}
           onClose={() => setBulkEntryArtistId(null)}
           isMobile={isMobile}

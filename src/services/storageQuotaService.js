@@ -93,7 +93,7 @@ export function formatStorageSize(bytes) {
   const value = bytes / Math.pow(k, i);
 
   // Show 1 decimal for GB+, 0 for smaller
-  const decimals = i >= 3 ? 1 : (i >= 2 ? 1 : 0);
+  const decimals = i >= 3 ? 1 : i >= 2 ? 1 : 0;
   return `${value.toFixed(decimals)} ${units[i]}`;
 }
 
@@ -116,9 +116,11 @@ export async function migrateExistingUsersQuota(db) {
       if (!('storageQuotaBytes' in data)) {
         promises.push(
           updateDoc(doc(db, 'allowedUsers', docSnap.id), {
-            storageQuotaBytes: null,  // unlimited for existing users
+            storageQuotaBytes: null, // unlimited for existing users
             storageUsedBytes: data.storageUsedBytes || 0,
-          }).then(() => { migrated++; })
+          }).then(() => {
+            migrated++;
+          }),
         );
       }
     });

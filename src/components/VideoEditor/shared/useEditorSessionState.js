@@ -15,7 +15,9 @@ import { useEffect, useRef, useCallback } from 'react';
  * @param {string|null} draftId — existing video ID (null for new drafts)
  */
 const useEditorSessionState = (artistId, editorMode, draftId) => {
-  const storageKey = artistId ? `editor_session_${artistId}_${editorMode}_${draftId || 'new'}` : null;
+  const storageKey = artistId
+    ? `editor_session_${artistId}_${editorMode}_${draftId || 'new'}`
+    : null;
   const saveTimerRef = useRef(null);
 
   // Load persisted state (returns null if none)
@@ -31,24 +33,36 @@ const useEditorSessionState = (artistId, editorMode, draftId) => {
   }, [storageKey]);
 
   // Debounced save (500ms)
-  const saveSession = useCallback((data) => {
-    if (!storageKey) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      try {
-        localStorage.setItem(storageKey, JSON.stringify({
-          ...data,
-          savedAt: Date.now(),
-        }));
-      } catch { /* quota exceeded */ }
-    }, 500);
-  }, [storageKey]);
+  const saveSession = useCallback(
+    (data) => {
+      if (!storageKey) return;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        try {
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify({
+              ...data,
+              savedAt: Date.now(),
+            }),
+          );
+        } catch {
+          /* quota exceeded */
+        }
+      }, 500);
+    },
+    [storageKey],
+  );
 
   // Clear session on close/save
   const clearSession = useCallback(() => {
     if (!storageKey) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {
+      /* ignore */
+    }
   }, [storageKey]);
 
   // Cleanup timer on unmount

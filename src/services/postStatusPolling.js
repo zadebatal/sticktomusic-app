@@ -23,8 +23,11 @@ import log from '../utils/logger';
 async function checkLatePostStatus(latePostId, artistId) {
   try {
     const token = await getAuth().currentUser?.getIdToken();
-    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-    const response = await fetch(`/api/late?action=getPost&postId=${latePostId}&artistId=${artistId}`, { headers });
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await fetch(
+      `/api/late?action=getPost&postId=${latePostId}&artistId=${artistId}`,
+      { headers },
+    );
     if (!response.ok) {
       log.warn('[StatusPolling] Failed to fetch post from Late.co:', latePostId);
       return null;
@@ -40,7 +43,7 @@ async function checkLatePostStatus(latePostId, artistId) {
       return {
         status: 'live',
         publishedAt: post.published_at || post.publishedAt || new Date().toISOString(),
-        platforms: post.platforms || {}
+        platforms: post.platforms || {},
       };
     }
 
@@ -48,7 +51,7 @@ async function checkLatePostStatus(latePostId, artistId) {
       return {
         status: 'failed',
         platforms: post.platforms || {},
-        error: post.error || 'Unknown error'
+        error: post.error || 'Unknown error',
       };
     }
 
@@ -72,7 +75,7 @@ export async function pollOverduePosts(db, artistId, posts, onStatusChange) {
   let updatedCount = 0;
 
   // Find SCHEDULED posts past their scheduled time (overdue by at least 5 min)
-  const overduePosts = posts.filter(p => {
+  const overduePosts = posts.filter((p) => {
     if (p.status !== 'scheduled') return false;
     if (!p.scheduledTime || !p.latePostId) return false;
 
@@ -97,9 +100,10 @@ export async function pollOverduePosts(db, artistId, posts, onStatusChange) {
   }
 
   for (const chunk of chunks) {
-    const results = await Promise.all(
-      chunk.map(post => checkLatePostStatus(post.latePostId, artistId))
+    const settled = await Promise.allSettled(
+      chunk.map((post) => checkLatePostStatus(post.latePostId, artistId)),
     );
+    const results = settled.map((r) => (r.status === 'fulfilled' ? r.value : null));
 
     for (let i = 0; i < chunk.length; i++) {
       const post = chunk[i];
@@ -112,24 +116,33 @@ export async function pollOverduePosts(db, artistId, posts, onStatusChange) {
         await updateScheduledPost(db, artistId, post.id, {
           status: 'posted',
           postedAt: result.publishedAt,
-          postResults: result.platforms || post.postResults || {}
+          postResults: result.platforms || post.postResults || {},
         });
         log(`[StatusPolling] ✓ Updated ${post.contentName} to POSTED`);
         updatedCount++;
         if (onStatusChange) {
-          onStatusChange({ type: 'posted', contentName: post.contentName, thumbnail: post.thumbnail, publishedAt: result.publishedAt });
+          onStatusChange({
+            type: 'posted',
+            contentName: post.contentName,
+            thumbnail: post.thumbnail,
+            publishedAt: result.publishedAt,
+          });
         }
       } else if (result.status === 'failed') {
         // Update to FAILED
         await updateScheduledPost(db, artistId, post.id, {
           status: 'failed',
           errorMessage: result.error || 'Post failed on Late.co',
-          postResults: result.platforms || {}
+          postResults: result.platforms || {},
         });
         log(`[StatusPolling] ✗ Updated ${post.contentName} to FAILED`);
         updatedCount++;
         if (onStatusChange) {
-          onStatusChange({ type: 'failed', contentName: post.contentName, errorMessage: result.error || 'Post failed on Late.co' });
+          onStatusChange({
+            type: 'failed',
+            contentName: post.contentName,
+            errorMessage: result.error || 'Post failed on Late.co',
+          });
         }
       }
       // If still 'scheduled', leave as-is (Late.co hasn't posted yet)
@@ -181,5 +194,5 @@ export function startPolling(db, artistId, getPosts, onStatusChange) {
 export default {
   pollOverduePosts,
   startPolling,
-  checkLatePostStatus
+  checkLatePostStatus,
 };

@@ -95,13 +95,20 @@ export async function saveSettings(db, artistId, patch) {
 
   try {
     const ref = doc(db, 'artists', artistId, 'settings', userId);
-    await setDoc(ref, {
-      ...patch,
-      lastSession: { updatedAt: serverTimestamp() }
-    }, { merge: true });
+    await setDoc(
+      ref,
+      {
+        ...patch,
+        lastSession: { updatedAt: serverTimestamp() },
+      },
+      { merge: true },
+    );
     log('[SettingsService] Saved to Firestore');
   } catch (err) {
-    log.debug('[SettingsService] Firestore save failed (localStorage fallback active):', err.message);
+    log.debug(
+      '[SettingsService] Firestore save failed (localStorage fallback active):',
+      err.message,
+    );
   }
 }
 
@@ -127,12 +134,12 @@ function loadLocalSettings() {
     return {
       editorPreferences: {
         activeTab: editorTab,
-        ...(zoom ? { zoom: parseFloat(zoom) } : {})
+        ...(zoom ? { zoom: parseFloat(zoom) } : {}),
       },
       onboarding: {
         completed: onboarding === 'true',
-        ...(onboarding ? { completedAt: onboarding } : {})
-      }
+        ...(onboarding ? { completedAt: onboarding } : {}),
+      },
     };
   } catch {
     return {};
@@ -161,8 +168,12 @@ function deepMerge(target, source) {
   const result = { ...target };
   for (const key of Object.keys(source)) {
     if (
-      source[key] && typeof source[key] === 'object' && !Array.isArray(source[key]) &&
-      target[key] && typeof target[key] === 'object' && !Array.isArray(target[key])
+      source[key] &&
+      typeof source[key] === 'object' &&
+      !Array.isArray(source[key]) &&
+      target[key] &&
+      typeof target[key] === 'object' &&
+      !Array.isArray(target[key])
     ) {
       result[key] = deepMerge(target[key], source[key]);
     } else {

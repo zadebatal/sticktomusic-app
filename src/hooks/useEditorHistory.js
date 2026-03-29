@@ -11,7 +11,13 @@ import { useRef, useState, useCallback, useEffect } from 'react';
  * @param {Array}    [opts.guardDeps]  — when any guardDep is truthy, skip auto-push (e.g. dragging)
  * @param {boolean}  [opts.isEditingText] — suppress keyboard shortcuts during text editing
  */
-export default function useEditorHistory({ getSnapshot, restoreSnapshot, deps, guardDeps = [], isEditingText = false }) {
+export default function useEditorHistory({
+  getSnapshot,
+  restoreSnapshot,
+  deps,
+  guardDeps = [],
+  isEditingText = false,
+}) {
   const historyRef = useRef([]);
   const historyIndexRef = useRef(-1);
   const isUndoRedoRef = useRef(false);
@@ -40,7 +46,9 @@ export default function useEditorHistory({ getSnapshot, restoreSnapshot, deps, g
   const guardDepsRef = useRef(guardDeps);
   guardDepsRef.current = guardDeps;
   // Create a stable key from deps for triggering the effect
-  const depsKey = deps.map(d => (typeof d === 'object' ? JSON.stringify(d) : String(d))).join('|');
+  const depsKey = deps
+    .map((d) => (typeof d === 'object' ? JSON.stringify(d) : String(d)))
+    .join('|');
 
   useEffect(() => {
     if (isUndoRedoRef.current) {
@@ -82,7 +90,8 @@ export default function useEditorHistory({ getSnapshot, restoreSnapshot, deps, g
     const handleKeyDown = (e) => {
       if (isEditingText) return;
       const tag = document.activeElement?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable)
+        return;
 
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
         e.preventDefault();

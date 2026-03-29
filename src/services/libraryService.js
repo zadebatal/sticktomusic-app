@@ -23,7 +23,7 @@ import {
   query,
   orderBy,
   onSnapshot,
-  serverTimestamp
+  serverTimestamp,
 } from 'firebase/firestore';
 import log from '../utils/logger';
 
@@ -31,26 +31,53 @@ import log from '../utils/logger';
 // Consumers continue to import from libraryService; these delegate to domain modules.
 export {
   createLyricsEntry,
-  getLyrics, saveLyrics, addLyrics, updateLyrics, deleteLyrics,
-  subscribeToLyrics, addLyricsAsync, updateLyricsAsync, deleteLyricsAsync
+  getLyrics,
+  saveLyrics,
+  addLyrics,
+  updateLyrics,
+  deleteLyrics,
+  subscribeToLyrics,
+  addLyricsAsync,
+  updateLyricsAsync,
+  deleteLyricsAsync,
 } from './lyricsService';
 
 export {
-  createCreatedVideo, createCreatedSlideshow,
+  createCreatedVideo,
+  createCreatedSlideshow,
   getAndClearLocallyDeletedContent,
-  getCreatedContent, saveCreatedContent,
-  addCreatedVideo, updateCreatedVideo, deleteCreatedVideo,
-  addCreatedSlideshow, addCreatedSlideshowsBatch, updateCreatedSlideshow, deleteCreatedSlideshow,
-  saveCreatedContentAsync, loadCreatedContentAsync, subscribeToCreatedContent,
-  addCreatedSlideshowAsync, updateCreatedSlideshowAsync, deleteCreatedSlideshowAsync,
-  softDeleteCreatedVideoAsync, restoreCreatedContentAsync,
-  getDeletedContentAsync, permanentlyDeleteContentAsync, addCreatedSlideshowsBatchAsync,
-  markContentScheduled, markContentScheduledAsync,
-  unmarkContentScheduled, unmarkContentScheduledAsync
+  getCreatedContent,
+  saveCreatedContent,
+  addCreatedVideo,
+  updateCreatedVideo,
+  deleteCreatedVideo,
+  addCreatedSlideshow,
+  addCreatedSlideshowsBatch,
+  updateCreatedSlideshow,
+  deleteCreatedSlideshow,
+  saveCreatedContentAsync,
+  loadCreatedContentAsync,
+  subscribeToCreatedContent,
+  addCreatedSlideshowAsync,
+  updateCreatedSlideshowAsync,
+  deleteCreatedSlideshowAsync,
+  softDeleteCreatedVideoAsync,
+  restoreCreatedContentAsync,
+  getDeletedContentAsync,
+  permanentlyDeleteContentAsync,
+  addCreatedSlideshowsBatchAsync,
+  markContentScheduled,
+  markContentScheduledAsync,
+  unmarkContentScheduled,
+  unmarkContentScheduledAsync,
 } from './createdContentService';
 
 // Internal imports needed by project/niche functions
-import { getCreatedContent, saveCreatedContent, saveCreatedContentAsync } from './createdContentService';
+import {
+  getCreatedContent,
+  saveCreatedContent,
+  saveCreatedContentAsync,
+} from './createdContentService';
 
 // ============================================================================
 // PENDING DELETION TRACKING (prevents subscription race conditions)
@@ -73,7 +100,9 @@ const _loadPendingDeletions = () => {
       localStorage.setItem(PENDING_DELETION_KEY, JSON.stringify(valid));
     }
     return new Map(valid);
-  } catch { return new Map(); }
+  } catch {
+    return new Map();
+  }
 };
 
 const pendingDeletionMap = _loadPendingDeletions();
@@ -108,11 +137,11 @@ export const isCollectionPendingDeletion = (id) => pendingDeletionMap.has(id);
 // ============================================================================
 const recentCollectionSnapshots = new Map(); // collectionId -> { mediaIds, banks, updatedAt, ts }
 export const getRecentCollectionSnapshots = () => recentCollectionSnapshots;
-const trackCollectionWrite = (collectionId, collection) => {
+export const trackCollectionWrite = (collectionId, collection) => {
   const ts = Date.now();
   recentCollectionSnapshots.set(collectionId, {
     mediaIds: [...(collection.mediaIds || [])],
-    banks: (collection.banks || []).map(b => [...(b || [])]),
+    banks: (collection.banks || []).map((b) => [...(b || [])]),
     updatedAt: collection.updatedAt || new Date().toISOString(),
     ts,
   });
@@ -144,13 +173,13 @@ const trackCollectionRemoval = (collectionId, removedMediaIds) => {
 export const MEDIA_TYPES = {
   VIDEO: 'video',
   IMAGE: 'image',
-  AUDIO: 'audio'
+  AUDIO: 'audio',
 };
 
 export const COLLECTION_TYPES = {
   USER: 'user',
   SMART: 'smart',
-  TEMPLATE: 'template'
+  TEMPLATE: 'template',
 };
 
 export const SMART_COLLECTION_IDS = {
@@ -159,7 +188,7 @@ export const SMART_COLLECTION_IDS = {
   HAS_AUDIO: 'smart_has_audio',
   MOST_USED: 'smart_most_used',
   UNUSED: 'smart_unused',
-  AUDIO_ALL: 'smart_audio_all'
+  AUDIO_ALL: 'smart_audio_all',
 };
 
 // Starter templates for onboarding
@@ -174,8 +203,8 @@ export const STARTER_TEMPLATES = {
       { name: 'Behind the Scenes', description: 'Studio footage, rehearsals, creative process' },
       { name: 'Lyrics & Visuals', description: 'Lyric videos, visualizers, album art' },
       { name: 'Press & Promo', description: 'Interviews, press photos, promotional content' },
-      { name: 'Music Videos', description: 'Official music video clips and teasers' }
-    ]
+      { name: 'Music Videos', description: 'Official music video clips and teasers' },
+    ],
   },
   FASHION_CREATOR: {
     id: 'template_fashion_creator',
@@ -187,8 +216,8 @@ export const STARTER_TEMPLATES = {
       { name: 'Hauls', description: 'Shopping hauls and unboxings' },
       { name: 'Brand Collabs', description: 'Sponsored content and partnerships' },
       { name: 'Aesthetics', description: 'Mood boards, color palettes, vibes' },
-      { name: 'Runway & Events', description: 'Fashion shows, events, parties' }
-    ]
+      { name: 'Runway & Events', description: 'Fashion shows, events, parties' },
+    ],
   },
   LIFESTYLE: {
     id: 'template_lifestyle',
@@ -200,8 +229,8 @@ export const STARTER_TEMPLATES = {
       { name: 'Routines', description: 'Morning, night, workout routines' },
       { name: 'Reviews', description: 'Product reviews and recommendations' },
       { name: 'Travel', description: 'Travel content and adventures' },
-      { name: 'Food & Cooking', description: 'Recipes, restaurants, food content' }
-    ]
+      { name: 'Food & Cooking', description: 'Recipes, restaurants, food content' },
+    ],
   },
   BUSINESS_BRAND: {
     id: 'template_business_brand',
@@ -213,16 +242,16 @@ export const STARTER_TEMPLATES = {
       { name: 'Testimonials', description: 'Customer reviews and success stories' },
       { name: 'Team', description: 'Behind the scenes, team content' },
       { name: 'Events', description: 'Launches, conferences, meetups' },
-      { name: 'Educational', description: 'Tips, tutorials, how-tos' }
-    ]
+      { name: 'Educational', description: 'Tips, tutorials, how-tos' },
+    ],
   },
   CUSTOM: {
     id: 'template_custom',
     name: 'Start Fresh',
     description: 'Create your own organization system',
     icon: '🎨',
-    collections: []
-  }
+    collections: [],
+  },
 };
 
 // ============================================================================
@@ -233,6 +262,15 @@ const getLibraryKey = (artistId) => `stm_library_${artistId}`;
 const getCollectionsKey = (artistId) => `stm_collections_${artistId}`;
 const getOnboardingKey = (artistId) => `stm_onboarding_${artistId}`;
 const getUsageStatsKey = (artistId) => `stm_usage_stats_${artistId}`;
+
+// ============================================================================
+// FIRESTORE IN-MEMORY CACHE
+// When localStorage quota is exceeded, these provide fallback data from the
+// last Firestore subscription snapshot. Populated by subscribeToLibrary and
+// subscribeToCollections automatically.
+// ============================================================================
+const _firestoreLibraryCache = new Map(); // artistId → media items[]
+const _firestoreCollectionsCache = new Map(); // artistId → collections[]
 
 // ============================================================================
 // MEDIA ITEM SCHEMA
@@ -254,7 +292,7 @@ export const createMediaItem = ({
   height = null,
   hasEmbeddedAudio = false,
   thumbnail = null,
-  metadata = {}
+  metadata = {},
 }) => {
   const now = new Date().toISOString();
   return {
@@ -287,18 +325,19 @@ export const createMediaItem = ({
     // Usage tracking
     useCount: 0,
     lastUsedAt: null,
+    lastPostedAt: null,
 
     // Metadata
     metadata: {
       ...metadata,
       originalName: name,
       fileSize: metadata.fileSize || null,
-      mimeType: metadata.mimeType || null
+      mimeType: metadata.mimeType || null,
     },
 
     // Timestamps
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 };
 
@@ -317,7 +356,7 @@ export const createCollection = ({
   type = COLLECTION_TYPES.USER,
   parentId = null,
   icon = null,
-  color = null
+  color = null,
 }) => {
   const now = new Date().toISOString();
   return {
@@ -341,7 +380,7 @@ export const createCollection = ({
 
     // Timestamps
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 };
 
@@ -360,7 +399,7 @@ export const createSmartCollections = () => {
       type: COLLECTION_TYPES.SMART,
       icon: '🕐',
       smartCriteria: { type: 'recent', days: 30 },
-      createdAt: now
+      createdAt: now,
     },
     {
       id: SMART_COLLECTION_IDS.FAVORITES,
@@ -369,7 +408,7 @@ export const createSmartCollections = () => {
       type: COLLECTION_TYPES.SMART,
       icon: '⭐',
       smartCriteria: { type: 'favorites' },
-      createdAt: now
+      createdAt: now,
     },
     {
       id: SMART_COLLECTION_IDS.HAS_AUDIO,
@@ -378,7 +417,7 @@ export const createSmartCollections = () => {
       type: COLLECTION_TYPES.SMART,
       icon: '🔊',
       smartCriteria: { type: 'hasAudio' },
-      createdAt: now
+      createdAt: now,
     },
     {
       id: SMART_COLLECTION_IDS.MOST_USED,
@@ -387,16 +426,16 @@ export const createSmartCollections = () => {
       type: COLLECTION_TYPES.SMART,
       icon: '🔥',
       smartCriteria: { type: 'mostUsed', minUses: 2 },
-      createdAt: now
+      createdAt: now,
     },
     {
       id: SMART_COLLECTION_IDS.UNUSED,
       name: 'Unused',
-      description: 'Content you haven\'t used yet',
+      description: "Content you haven't used yet",
       type: COLLECTION_TYPES.SMART,
       icon: '💤',
       smartCriteria: { type: 'unused' },
-      createdAt: now
+      createdAt: now,
     },
     {
       id: SMART_COLLECTION_IDS.AUDIO_ALL,
@@ -405,11 +444,10 @@ export const createSmartCollections = () => {
       type: COLLECTION_TYPES.SMART,
       icon: '🎵',
       smartCriteria: { type: 'audio' },
-      createdAt: now
-    }
+      createdAt: now,
+    },
   ];
 };
-
 
 // ============================================================================
 // LIBRARY OPERATIONS
@@ -423,11 +461,12 @@ export const createSmartCollections = () => {
 export const getLibrary = (artistId) => {
   try {
     const data = localStorage.getItem(getLibraryKey(artistId));
-    return data ? JSON.parse(data) : [];
+    if (data) return JSON.parse(data);
   } catch (error) {
     log.error('Error loading library:', error);
-    return [];
   }
+  // Fallback: Firestore in-memory cache (survives localStorage quota exceeded)
+  return _firestoreLibraryCache.get(artistId) || [];
 };
 
 /**
@@ -438,19 +477,20 @@ export const getLibrary = (artistId) => {
 export const saveLibrary = (artistId, library) => {
   try {
     // Clean before saving - remove blob URLs and base64 thumbnails
-    const cleanedLibrary = library.map(item => ({
-      ...item,
-      thumbnail: null, // Never persist thumbnails
-      url: item.url?.startsWith('blob:') ? null : item.url // Remove blob URLs
-    })).filter(item => item.url); // Only keep items with valid URLs
+    const cleanedLibrary = library
+      .map((item) => ({
+        ...item,
+        thumbnail: null, // Never persist thumbnails
+        url: item.url?.startsWith('blob:') ? null : item.url, // Remove blob URLs
+      }))
+      .filter((item) => item.url); // Only keep items with valid URLs
 
     localStorage.setItem(getLibraryKey(artistId), JSON.stringify(cleanedLibrary));
   } catch (error) {
     if (error?.name === 'QuotaExceededError' || error?.code === 22) {
-      // Library is too large for localStorage. Remove it entirely —
-      // Firestore subscription provides real-time data anyway.
-      log.warn('[Library] localStorage quota exceeded — removing library cache. Firestore is source of truth.');
-      try { localStorage.removeItem(getLibraryKey(artistId)); } catch (_) {}
+      // Library is too large for localStorage — don't delete it.
+      // Firestore subscription + in-memory cache provide the data.
+      log.warn('[Library] localStorage quota exceeded — using Firestore cache as fallback');
     } else {
       log.error('Error saving library:', error);
     }
@@ -484,7 +524,7 @@ export const addToLibrary = (artistId, mediaItem) => {
  */
 export const addManyToLibrary = (artistId, mediaItems) => {
   const library = getLibrary(artistId);
-  const newItems = mediaItems.map(item => item.id ? item : createMediaItem(item));
+  const newItems = mediaItems.map((item) => (item.id ? item : createMediaItem(item)));
   library.push(...newItems);
   saveLibrary(artistId, library);
   return newItems;
@@ -499,13 +539,13 @@ export const addManyToLibrary = (artistId, mediaItems) => {
  */
 export const updateLibraryItem = (artistId, mediaId, updates) => {
   const library = getLibrary(artistId);
-  const index = library.findIndex(item => item.id === mediaId);
+  const index = library.findIndex((item) => item.id === mediaId);
   if (index === -1) return null;
 
   library[index] = {
     ...library[index],
     ...updates,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 
   saveLibrary(artistId, library);
@@ -520,7 +560,7 @@ export const updateLibraryItem = (artistId, mediaId, updates) => {
  */
 export const removeFromLibrary = (artistId, mediaId, db = null) => {
   const library = getLibrary(artistId);
-  const filtered = library.filter(item => item.id !== mediaId);
+  const filtered = library.filter((item) => item.id !== mediaId);
   if (filtered.length === library.length) return false;
 
   saveLibrary(artistId, filtered);
@@ -528,20 +568,24 @@ export const removeFromLibrary = (artistId, mediaId, db = null) => {
   // Also remove from all collections
   const collections = getCollections(artistId);
   const changedCollections = [];
-  collections.forEach(collection => {
+  collections.forEach((collection) => {
     if (collection.mediaIds?.includes(mediaId)) {
-      collection.mediaIds = collection.mediaIds.filter(id => id !== mediaId);
+      collection.mediaIds = collection.mediaIds.filter((id) => id !== mediaId);
       changedCollections.push(collection);
     }
   });
   // Also remove from project pools
-  collections.filter(c => c.isProjectRoot && c.mediaIds?.includes(mediaId)).forEach(project => {
-    project.mediaIds = project.mediaIds.filter(id => id !== mediaId);
-    changedCollections.push(project);
-  });
+  collections
+    .filter((c) => c.isProjectRoot && c.mediaIds?.includes(mediaId))
+    .forEach((project) => {
+      project.mediaIds = project.mediaIds.filter((id) => id !== mediaId);
+      changedCollections.push(project);
+    });
   saveCollections(artistId, collections);
   if (db) {
-    changedCollections.forEach(col => saveCollectionToFirestore(db, artistId, col).catch(log.error));
+    changedCollections.forEach((col) =>
+      saveCollectionToFirestore(db, artistId, col).catch(log.error),
+    );
   }
 
   return true;
@@ -554,7 +598,7 @@ export const removeFromLibrary = (artistId, mediaId, db = null) => {
  * @returns {Object[]} Filtered items
  */
 export const getLibraryByType = (artistId, type) => {
-  return getLibrary(artistId).filter(item => item.type === type);
+  return getLibrary(artistId).filter((item) => item.type === type);
 };
 
 /**
@@ -565,7 +609,7 @@ export const getLibraryByType = (artistId, type) => {
  */
 export const toggleFavorite = (artistId, mediaId) => {
   const library = getLibrary(artistId);
-  const item = library.find(i => i.id === mediaId);
+  const item = library.find((i) => i.id === mediaId);
   if (!item) return false;
 
   item.isFavorite = !item.isFavorite;
@@ -581,12 +625,93 @@ export const toggleFavorite = (artistId, mediaId) => {
  */
 export const incrementUseCount = (artistId, mediaId) => {
   const library = getLibrary(artistId);
-  const item = library.find(i => i.id === mediaId);
+  const item = library.find((i) => i.id === mediaId);
   if (item) {
     item.useCount = (item.useCount || 0) + 1;
     item.lastUsedAt = new Date().toISOString();
     saveLibrary(artistId, library);
   }
+};
+
+/**
+ * Mark a media item as posted (updates lastPostedAt timestamp).
+ * Called when a scheduled post goes live via Late.co.
+ * @param {string} artistId
+ * @param {string} mediaId
+ */
+export const markMediaPosted = (artistId, mediaId) => {
+  const library = getLibrary(artistId);
+  const item = library.find((i) => i.id === mediaId);
+  if (item) {
+    item.lastPostedAt = new Date().toISOString();
+    saveLibrary(artistId, library);
+  }
+};
+
+/**
+ * Get media items from a niche that have never been used in generation.
+ * Useful for clip recycling — prioritize fresh footage.
+ * @param {string} artistId
+ * @param {string} nicheId — collection ID of the niche
+ * @returns {Object[]} unused media items, newest first
+ */
+export const getUnusedMedia = (artistId, nicheId) => {
+  const library = getLibrary(artistId);
+  const collections = getCollections(artistId);
+  const niche = collections.find((c) => c.id === nicheId);
+  if (!niche) return [];
+
+  // Gather all media IDs in this niche (from banks or mediaBanks)
+  let nicheMediaIds = new Set();
+  if (niche.mediaBanks) {
+    niche.mediaBanks.forEach((bank) =>
+      (bank.mediaIds || []).forEach((id) => nicheMediaIds.add(id)),
+    );
+  }
+  if (niche.banks) {
+    niche.banks.forEach((bank) => (bank || []).forEach((id) => nicheMediaIds.add(id)));
+  }
+
+  return library
+    .filter((item) => nicheMediaIds.has(item.id) && (!item.useCount || item.useCount === 0))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+};
+
+/**
+ * Get media items from a niche sorted by freshness (least recently used first).
+ * Items never used come first, then sorted by lastUsedAt ascending.
+ * @param {string} artistId
+ * @param {string} nicheId — collection ID of the niche
+ * @returns {Object[]} media items, freshest first
+ */
+export const getFreshestMedia = (artistId, nicheId) => {
+  const library = getLibrary(artistId);
+  const collections = getCollections(artistId);
+  const niche = collections.find((c) => c.id === nicheId);
+  if (!niche) return [];
+
+  // Gather all media IDs in this niche
+  let nicheMediaIds = new Set();
+  if (niche.mediaBanks) {
+    niche.mediaBanks.forEach((bank) =>
+      (bank.mediaIds || []).forEach((id) => nicheMediaIds.add(id)),
+    );
+  }
+  if (niche.banks) {
+    niche.banks.forEach((bank) => (bank || []).forEach((id) => nicheMediaIds.add(id)));
+  }
+
+  return library
+    .filter((item) => nicheMediaIds.has(item.id))
+    .sort((a, b) => {
+      // Never-used items first
+      if (!a.useCount && b.useCount) return -1;
+      if (a.useCount && !b.useCount) return 1;
+      // Then by lastUsedAt ascending (oldest use = freshest for reuse)
+      const aTime = a.lastUsedAt ? new Date(a.lastUsedAt).getTime() : 0;
+      const bTime = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0;
+      return aTime - bTime;
+    });
 };
 
 // ============================================================================
@@ -599,27 +724,33 @@ export const incrementUseCount = (artistId, mediaId) => {
  * @returns {Object[]} Array of collections
  */
 export const getCollections = (artistId) => {
+  let userCollections = [];
   try {
     const data = localStorage.getItem(getCollectionsKey(artistId));
-    const userCollections = data ? JSON.parse(data) : [];
-
-    // Deduplicate and filter out pending deletions
-    const seen = new Set();
-    const dedupedCollections = userCollections.filter(col => {
-      if (seen.has(col.id)) return false;
-      if (pendingDeletionIds.has(col.id)) return false;
-      seen.add(col.id);
-      return true;
-    });
-
-    // Always include smart collections
-    const smartCollections = createSmartCollections();
-
-    return [...smartCollections, ...dedupedCollections];
+    if (data) userCollections = JSON.parse(data);
   } catch (error) {
     log.error('Error loading collections:', error);
-    return createSmartCollections();
   }
+
+  // Fallback: Firestore in-memory cache (survives localStorage quota exceeded)
+  if (userCollections.length === 0) {
+    const cached = _firestoreCollectionsCache.get(artistId);
+    if (cached?.length > 0) userCollections = cached;
+  }
+
+  // Deduplicate and filter out pending deletions
+  const seen = new Set();
+  const dedupedCollections = userCollections.filter((col) => {
+    if (seen.has(col.id)) return false;
+    if (pendingDeletionIds.has(col.id)) return false;
+    seen.add(col.id);
+    return true;
+  });
+
+  // Always include smart collections
+  const smartCollections = createSmartCollections();
+
+  return [...smartCollections, ...dedupedCollections];
 };
 
 /**
@@ -630,11 +761,12 @@ export const getCollections = (artistId) => {
 export const getUserCollections = (artistId) => {
   try {
     const data = localStorage.getItem(getCollectionsKey(artistId));
-    return data ? JSON.parse(data) : [];
+    if (data) return JSON.parse(data);
   } catch (error) {
     log.error('Error loading user collections:', error);
-    return [];
   }
+  // Fallback: Firestore in-memory cache (survives localStorage quota exceeded)
+  return _firestoreCollectionsCache.get(artistId) || [];
 };
 
 /**
@@ -645,7 +777,7 @@ export const getUserCollections = (artistId) => {
 export const saveCollections = (artistId, collections) => {
   try {
     // Filter out smart collections before saving
-    const userCollections = collections.filter(c => c.type !== COLLECTION_TYPES.SMART);
+    const userCollections = collections.filter((c) => c.type !== COLLECTION_TYPES.SMART);
     localStorage.setItem(getCollectionsKey(artistId), JSON.stringify(userCollections));
   } catch (error) {
     if (error?.name === 'QuotaExceededError' || error?.code === 22) {
@@ -680,13 +812,13 @@ export const createNewCollection = (artistId, collectionData, db = null) => {
  */
 export const updateCollection = (artistId, collectionId, updates, db = null) => {
   const collections = getUserCollections(artistId);
-  const index = collections.findIndex(c => c.id === collectionId);
+  const index = collections.findIndex((c) => c.id === collectionId);
   if (index === -1) return null;
 
   collections[index] = {
     ...collections[index],
     ...updates,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 
   saveCollections(artistId, collections);
@@ -702,14 +834,14 @@ export const updateCollection = (artistId, collectionId, updates, db = null) => 
  */
 export const deleteCollection = (artistId, collectionId, db = null) => {
   const collections = getUserCollections(artistId);
-  const filtered = collections.filter(c => c.id !== collectionId);
+  const filtered = collections.filter((c) => c.id !== collectionId);
   if (filtered.length === collections.length) return false;
 
   // Also remove collection reference from library items
   const library = getLibrary(artistId);
-  library.forEach(item => {
+  library.forEach((item) => {
     if (item.collectionIds?.includes(collectionId)) {
-      item.collectionIds = item.collectionIds.filter(id => id !== collectionId);
+      item.collectionIds = item.collectionIds.filter((id) => id !== collectionId);
     }
   });
   saveLibrary(artistId, library);
@@ -730,12 +862,21 @@ export const addToCollection = (artistId, collectionId, mediaIds, db = null) => 
 
   // Update collection's mediaIds
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (collection) {
     const beforeCount = collection.mediaIds?.length || 0;
     collection.mediaIds = [...new Set([...(collection.mediaIds || []), ...idsToAdd])];
     collection.updatedAt = new Date().toISOString();
-    log('[addToCollection]', collection.name, '| before:', beforeCount, '→ after:', collection.mediaIds.length, '| added:', idsToAdd);
+    log(
+      '[addToCollection]',
+      collection.name,
+      '| before:',
+      beforeCount,
+      '→ after:',
+      collection.mediaIds.length,
+      '| added:',
+      idsToAdd,
+    );
     saveCollections(artistId, collections);
     trackCollectionWrite(collectionId, collection);
     if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
@@ -745,7 +886,7 @@ export const addToCollection = (artistId, collectionId, mediaIds, db = null) => 
 
   // Update library items' collectionIds
   const library = getLibrary(artistId);
-  library.forEach(item => {
+  library.forEach((item) => {
     if (idsToAdd.includes(item.id)) {
       item.collectionIds = [...new Set([...(item.collectionIds || []), collectionId])];
       item.updatedAt = new Date().toISOString();
@@ -760,12 +901,42 @@ export const addToCollection = (artistId, collectionId, mediaIds, db = null) => 
 // Minimum 2 banks always. Users can add more via "+ Add Slide Bank".
 
 export const BANK_COLORS = [
-  { primary: '#6366f1', light: '#a5b4fc', bg: 'rgba(99,102,241,0.06)', border: 'rgba(99,102,241,0.6)' },
-  { primary: '#22c55e', light: '#86efac', bg: 'rgba(34,197,94,0.06)', border: 'rgba(34,197,94,0.6)' },
-  { primary: '#a855f7', light: '#d8b4fe', bg: 'rgba(168,85,247,0.06)', border: 'rgba(168,85,247,0.6)' },
-  { primary: '#f43f5e', light: '#fda4af', bg: 'rgba(244,63,94,0.06)', border: 'rgba(244,63,94,0.6)' },
-  { primary: '#f59e0b', light: '#fcd34d', bg: 'rgba(245,158,11,0.06)', border: 'rgba(245,158,11,0.6)' },
-  { primary: '#06b6d4', light: '#67e8f9', bg: 'rgba(6,182,212,0.06)', border: 'rgba(6,182,212,0.6)' },
+  {
+    primary: '#6366f1',
+    light: '#a5b4fc',
+    bg: 'rgba(99,102,241,0.06)',
+    border: 'rgba(99,102,241,0.6)',
+  },
+  {
+    primary: '#22c55e',
+    light: '#86efac',
+    bg: 'rgba(34,197,94,0.06)',
+    border: 'rgba(34,197,94,0.6)',
+  },
+  {
+    primary: '#a855f7',
+    light: '#d8b4fe',
+    bg: 'rgba(168,85,247,0.06)',
+    border: 'rgba(168,85,247,0.6)',
+  },
+  {
+    primary: '#f43f5e',
+    light: '#fda4af',
+    bg: 'rgba(244,63,94,0.06)',
+    border: 'rgba(244,63,94,0.6)',
+  },
+  {
+    primary: '#f59e0b',
+    light: '#fcd34d',
+    bg: 'rgba(245,158,11,0.06)',
+    border: 'rgba(245,158,11,0.6)',
+  },
+  {
+    primary: '#06b6d4',
+    light: '#67e8f9',
+    bg: 'rgba(6,182,212,0.06)',
+    border: 'rgba(6,182,212,0.6)',
+  },
 ];
 export const MIN_BANKS = 2;
 export const MAX_BANKS = 10;
@@ -815,7 +986,7 @@ export const migrateCollectionBanks = (collection) => {
  */
 export const addBankToCollection = (artistId, collectionId, db = null) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
   const migrated = migrateCollectionBanks(collection);
   Object.assign(collection, migrated);
@@ -833,7 +1004,7 @@ export const addBankToCollection = (artistId, collectionId, db = null) => {
  */
 export const removeBankFromCollection = (artistId, collectionId, bankIndex, db = null) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
   const migrated = migrateCollectionBanks(collection);
   Object.assign(collection, migrated);
@@ -864,7 +1035,7 @@ export const assignToBank = (artistId, collectionId, mediaIds, bank, db = null) 
   }
 
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
 
   // Auto-migrate if needed
@@ -886,7 +1057,7 @@ export const assignToBank = (artistId, collectionId, mediaIds, bank, db = null) 
 
   // Also update library items' collectionIds
   const library = getLibrary(artistId);
-  library.forEach(item => {
+  library.forEach((item) => {
     if (idsToAssign.includes(item.id)) {
       item.collectionIds = [...new Set([...(item.collectionIds || []), collectionId])];
       item.updatedAt = new Date().toISOString();
@@ -905,7 +1076,7 @@ export const removeFromBank = (artistId, collectionId, mediaIds, db = null) => {
   const idsToRemove = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
 
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
 
   // Auto-migrate if needed
@@ -913,9 +1084,7 @@ export const removeFromBank = (artistId, collectionId, mediaIds, db = null) => {
   Object.assign(collection, migrated);
 
   // Remove from all banks dynamically
-  collection.banks = collection.banks.map(bank =>
-    bank.filter(id => !idsToRemove.includes(id))
-  );
+  collection.banks = collection.banks.map((bank) => bank.filter((id) => !idsToRemove.includes(id)));
   collection.updatedAt = new Date().toISOString();
   saveCollections(artistId, collections);
   if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
@@ -924,8 +1093,7 @@ export const removeFromBank = (artistId, collectionId, mediaIds, db = null) => {
 /**
  * Extract plain text from a text bank entry (string or { text, style } object)
  */
-export const getTextBankText = (entry) =>
-  typeof entry === 'string' ? entry : entry?.text || '';
+export const getTextBankText = (entry) => (typeof entry === 'string' ? entry : entry?.text || '');
 
 /**
  * Extract style from a text bank entry, or null if plain string
@@ -945,7 +1113,11 @@ export const migrateToMediaBanks = (collection) => {
   if (!collection) return collection;
   // Deserialize mediaBanks if it's a JSON string (from Firestore serialization)
   if (typeof collection.mediaBanks === 'string') {
-    try { collection.mediaBanks = JSON.parse(collection.mediaBanks); } catch { collection.mediaBanks = null; }
+    try {
+      collection.mediaBanks = JSON.parse(collection.mediaBanks);
+    } catch {
+      collection.mediaBanks = null;
+    }
   }
   if (Array.isArray(collection.mediaBanks) && collection.mediaBanks.length > 0) return collection;
   // Use deterministic ID derived from collection ID so React keys stay stable across re-renders
@@ -963,11 +1135,11 @@ export const migrateToMediaBanks = (collection) => {
 const syncMediaBankIds = (collection) => {
   if (!collection.mediaBanks) return;
   const allIds = new Set();
-  collection.mediaBanks.forEach(bank => (bank.mediaIds || []).forEach(id => allIds.add(id)));
+  collection.mediaBanks.forEach((bank) => (bank.mediaIds || []).forEach((id) => allIds.add(id)));
   // Preserve any audio IDs that are in mediaIds but not in any media bank
-  (collection.mediaIds || []).forEach(id => {
+  (collection.mediaIds || []).forEach((id) => {
     // Keep IDs not in any bank (they could be audio or other non-bank items)
-    const inBank = collection.mediaBanks.some(b => (b.mediaIds || []).includes(id));
+    const inBank = collection.mediaBanks.some((b) => (b.mediaIds || []).includes(id));
     if (!inBank) allIds.add(id);
   });
   collection.mediaIds = [...allIds];
@@ -978,7 +1150,7 @@ const syncMediaBankIds = (collection) => {
  */
 export const addMediaBank = (artistId, collectionId, name, db = null) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
   const migrated = migrateToMediaBanks(collection);
   Object.assign(collection, migrated);
@@ -998,13 +1170,13 @@ export const addMediaBank = (artistId, collectionId, name, db = null) => {
  */
 export const removeMediaBank = (artistId, collectionId, bankId, db = null) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
   const migrated = migrateToMediaBanks(collection);
   Object.assign(collection, migrated);
   if (!collection.mediaBanks) return;
   if (collection.mediaBanks.length <= 1) return; // Must keep at least 1
-  const idx = collection.mediaBanks.findIndex(b => b.id === bankId);
+  const idx = collection.mediaBanks.findIndex((b) => b.id === bankId);
   if (idx === -1) return;
   const removed = collection.mediaBanks.splice(idx, 1)[0];
   // Move orphaned media to first remaining bank
@@ -1023,11 +1195,11 @@ export const removeMediaBank = (artistId, collectionId, bankId, db = null) => {
  */
 export const renameMediaBank = (artistId, collectionId, bankId, newName, db = null) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
   const migrated = migrateToMediaBanks(collection);
   Object.assign(collection, migrated);
-  const bank = collection.mediaBanks.find(b => b.id === bankId);
+  const bank = collection.mediaBanks.find((b) => b.id === bankId);
   if (!bank) return;
   bank.name = newName;
   collection.updatedAt = new Date().toISOString();
@@ -1041,11 +1213,11 @@ export const renameMediaBank = (artistId, collectionId, bankId, newName, db = nu
 export const assignToMediaBank = (artistId, collectionId, mediaIds, bankId, db = null) => {
   const ids = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
   const migrated = migrateToMediaBanks(collection);
   Object.assign(collection, migrated);
-  const bank = collection.mediaBanks.find(b => b.id === bankId);
+  const bank = collection.mediaBanks.find((b) => b.id === bankId);
   if (!bank) return;
   bank.mediaIds = [...new Set([...(bank.mediaIds || []), ...ids])];
   // Ensure all items are in the flat mediaIds too
@@ -1058,19 +1230,26 @@ export const assignToMediaBank = (artistId, collectionId, mediaIds, bankId, db =
 /**
  * Move media IDs from one named bank to another (remove from source, add to target)
  */
-export const moveMediaBetweenBanks = (artistId, collectionId, mediaIds, fromBankId, toBankId, db = null) => {
+export const moveMediaBetweenBanks = (
+  artistId,
+  collectionId,
+  mediaIds,
+  fromBankId,
+  toBankId,
+  db = null,
+) => {
   const ids = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
   const migrated = migrateToMediaBanks(collection);
   Object.assign(collection, migrated);
   if (!Array.isArray(collection.mediaBanks)) return;
-  const fromBank = collection.mediaBanks.find(b => b.id === fromBankId);
-  const toBank = collection.mediaBanks.find(b => b.id === toBankId);
+  const fromBank = collection.mediaBanks.find((b) => b.id === fromBankId);
+  const toBank = collection.mediaBanks.find((b) => b.id === toBankId);
   if (!fromBank || !toBank) return;
   // Remove from source
-  fromBank.mediaIds = (fromBank.mediaIds || []).filter(id => !ids.includes(id));
+  fromBank.mediaIds = (fromBank.mediaIds || []).filter((id) => !ids.includes(id));
   // Add to target (dedupe)
   toBank.mediaIds = [...new Set([...(toBank.mediaIds || []), ...ids])];
   syncMediaBankIds(collection);
@@ -1082,24 +1261,31 @@ export const moveMediaBetweenBanks = (artistId, collectionId, mediaIds, fromBank
 /**
  * Remove media IDs from a specific named media bank + sync niche.mediaIds
  */
-export const removeFromMediaBank = (artistId, collectionId, mediaIds, bankId, db = null, alsoRemoveFromNiche = false) => {
+export const removeFromMediaBank = (
+  artistId,
+  collectionId,
+  mediaIds,
+  bankId,
+  db = null,
+  alsoRemoveFromNiche = false,
+) => {
   const ids = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
   const migrated = migrateToMediaBanks(collection);
   Object.assign(collection, migrated);
   if (!collection.mediaBanks) return;
-  const bank = collection.mediaBanks.find(b => b.id === bankId);
+  const bank = collection.mediaBanks.find((b) => b.id === bankId);
   if (!bank) return;
-  bank.mediaIds = (bank.mediaIds || []).filter(id => !ids.includes(id));
+  bank.mediaIds = (bank.mediaIds || []).filter((id) => !ids.includes(id));
   // Also remove from niche entirely (mediaIds + all banks) in one atomic write
   if (alsoRemoveFromNiche) {
     trackCollectionRemoval(collectionId, ids);
-    collection.mediaBanks.forEach(b => {
-      b.mediaIds = (b.mediaIds || []).filter(id => !ids.includes(id));
+    collection.mediaBanks.forEach((b) => {
+      b.mediaIds = (b.mediaIds || []).filter((id) => !ids.includes(id));
     });
-    collection.mediaIds = (collection.mediaIds || []).filter(id => !ids.includes(id));
+    collection.mediaIds = (collection.mediaIds || []).filter((id) => !ids.includes(id));
   } else {
     syncMediaBankIds(collection);
   }
@@ -1117,8 +1303,16 @@ export const removeFromMediaBank = (artistId, collectionId, mediaIds, bankId, db
  */
 export const addToTextBank = (artistId, collectionId, bankNum, text, db = null) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
-  if (!collection) return;
+  let collection = collections.find((c) => c.id === collectionId);
+  let foundInLocal = !!collection;
+  if (!collection) {
+    // localStorage may be stale/full — build a minimal collection object for Firestore write
+    log.warn(
+      '[addToTextBank] Collection not in localStorage, writing directly to Firestore:',
+      collectionId,
+    );
+    collection = { id: collectionId, textBanks: [], banks: [] };
+  }
   const migrated = migrateCollectionBanks(collection);
   Object.assign(collection, migrated);
   // bankNum can be 0-based or 1-based depending on caller — normalize
@@ -1129,8 +1323,39 @@ export const addToTextBank = (artistId, collectionId, bankNum, text, db = null) 
   if (!Array.isArray(collection.textBanks[idx])) collection.textBanks[idx] = [];
   collection.textBanks[idx] = [...collection.textBanks[idx], text];
   collection.updatedAt = new Date().toISOString();
-  saveCollections(artistId, collections);
-  if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
+  if (foundInLocal) {
+    saveCollections(artistId, collections);
+  }
+  if (db) {
+    // When collection wasn't in localStorage, read current Firestore doc and merge textBanks
+    if (!foundInLocal) {
+      const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', collectionId);
+      getDoc(docRef)
+        .then((snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            let existingTB = data.textBanks || [];
+            if (typeof existingTB === 'string')
+              try {
+                existingTB = JSON.parse(existingTB);
+              } catch {
+                existingTB = [];
+              }
+            // Merge: ensure our new text is added to the correct bank
+            while (existingTB.length <= idx) existingTB.push([]);
+            if (!Array.isArray(existingTB[idx])) existingTB[idx] = [];
+            existingTB[idx] = [...existingTB[idx], text];
+            const updated = { ...data, textBanks: existingTB, updatedAt: new Date().toISOString() };
+            return saveCollectionToFirestore(db, artistId, updated);
+          } else {
+            return saveCollectionToFirestore(db, artistId, collection);
+          }
+        })
+        .catch((err) => log.error('[addToTextBank] Firestore merge ERROR:', err));
+    } else {
+      saveCollectionToFirestore(db, artistId, collection).catch(log.error);
+    }
+  }
 };
 
 /**
@@ -1142,7 +1367,7 @@ export const addToTextBank = (artistId, collectionId, bankNum, text, db = null) 
  */
 export const removeFromTextBank = (artistId, collectionId, bankNum, index, db = null) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
   const migrated = migrateCollectionBanks(collection);
   Object.assign(collection, migrated);
@@ -1157,6 +1382,68 @@ export const removeFromTextBank = (artistId, collectionId, bankNum, index, db = 
 };
 
 /**
+ * Update a single text entry in a text bank (edit in place)
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @param {number} bankNum - 0-based slide position
+ * @param {number} index - entry index within the bank
+ * @param {string} newText - updated text value
+ */
+export const updateTextBankEntry = (artistId, collectionId, bankNum, index, newText, db = null) => {
+  const collections = getUserCollections(artistId);
+  let collection = collections.find((c) => c.id === collectionId);
+  const foundInLocal = !!collection;
+  if (!collection) {
+    log.warn(
+      '[updateTextBankEntry] Collection not in localStorage, writing directly to Firestore:',
+      collectionId,
+    );
+    collection = { id: collectionId, textBanks: [], banks: [] };
+  }
+  const migrated = migrateCollectionBanks(collection);
+  Object.assign(collection, migrated);
+  const idx = bankNum >= 0 ? bankNum : 0;
+  if (!collection.textBanks) collection.textBanks = [];
+
+  const applyUpdate = (tb) => {
+    if (Array.isArray(tb[idx]) && index >= 0 && index < tb[idx].length) {
+      const existing = tb[idx][index];
+      if (typeof existing === 'object' && existing !== null && existing.text !== undefined) {
+        tb[idx][index] = { ...existing, text: newText };
+      } else {
+        tb[idx][index] = newText;
+      }
+    }
+  };
+
+  applyUpdate(collection.textBanks);
+  collection.updatedAt = new Date().toISOString();
+  if (foundInLocal) {
+    saveCollections(artistId, collections);
+    if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
+  } else if (db) {
+    const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', collectionId);
+    getDoc(docRef)
+      .then((snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          let existingTB = data.textBanks || [];
+          if (typeof existingTB === 'string')
+            try {
+              existingTB = JSON.parse(existingTB);
+            } catch {
+              existingTB = [];
+            }
+          applyUpdate(existingTB);
+          const updated = { ...data, textBanks: existingTB, updatedAt: new Date().toISOString() };
+          return saveCollectionToFirestore(db, artistId, updated);
+        }
+      })
+      .catch((err) => log.error('[updateTextBankEntry] Firestore merge ERROR:', err));
+  }
+};
+
+/**
  * Update entire text bank
  * @param {string} artistId
  * @param {string} collectionId
@@ -1165,7 +1452,7 @@ export const removeFromTextBank = (artistId, collectionId, bankNum, index, db = 
  */
 export const updateTextBank = (artistId, collectionId, bankNum, texts, db = null) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
   const migrated = migrateCollectionBanks(collection);
   Object.assign(collection, migrated);
@@ -1187,7 +1474,7 @@ export const updateTextBank = (artistId, collectionId, bankNum, texts, db = null
  */
 export const addToVideoTextBank = (artistId, collectionId, bankNum, text, db = null) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
   const key = `videoTextBank${bankNum}`;
   collection[key] = [...(collection[key] || []), text];
@@ -1205,7 +1492,7 @@ export const addToVideoTextBank = (artistId, collectionId, bankNum, text, db = n
  */
 export const removeFromVideoTextBank = (artistId, collectionId, bankNum, index, db = null) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
   const key = `videoTextBank${bankNum}`;
   collection[key] = (collection[key] || []).filter((_, i) => i !== index);
@@ -1223,7 +1510,7 @@ export const removeFromVideoTextBank = (artistId, collectionId, bankNum, index, 
  */
 export const updateVideoTextBank = (artistId, collectionId, bankNum, texts, db = null) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
   collection[`videoTextBank${bankNum}`] = texts;
   collection.updatedAt = new Date().toISOString();
@@ -1239,7 +1526,7 @@ export const updateVideoTextBank = (artistId, collectionId, bankNum, texts, db =
  */
 export const saveTextTemplates = (artistId, collectionId, templates, db = null) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
   collection.textTemplates = templates;
   collection.updatedAt = new Date().toISOString();
@@ -1277,7 +1564,7 @@ export const getCollectionHashtagBank = (collection) => {
  */
 export const updateCollectionCaptionBank = (artistId, collectionId, captionBank, db = null) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
   collection.captionBank = captionBank;
   collection.updatedAt = new Date().toISOString();
@@ -1293,7 +1580,7 @@ export const updateCollectionCaptionBank = (artistId, collectionId, captionBank,
  */
 export const updateCollectionHashtagBank = (artistId, collectionId, hashtagBank, db = null) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
   collection.hashtagBank = hashtagBank;
   collection.updatedAt = new Date().toISOString();
@@ -1334,8 +1621,8 @@ export const getEffectiveHashtags = (hashtagBank, platform = null) => {
     // Remove excluded tags
     const excluded = new Set(hashtagBank.platformExclude?.[platform] || []);
     if (excluded.size > 0) {
-      always = always.filter(t => !excluded.has(t));
-      pool = pool.filter(t => !excluded.has(t));
+      always = always.filter((t) => !excluded.has(t));
+      pool = pool.filter((t) => !excluded.has(t));
     }
   }
 
@@ -1352,7 +1639,7 @@ export const getEffectiveHashtags = (hashtagBank, platform = null) => {
  */
 export const resolveCollectionBanks = (artistId, collectionId) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
 
   const emptyCB = { always: [], pool: [] };
   const emptyHB = { always: [], pool: [] };
@@ -1361,10 +1648,10 @@ export const resolveCollectionBanks = (artistId, collectionId) => {
   const hb = collection ? getCollectionHashtagBank(collection) : emptyHB;
 
   // Handle flat array legacy formats
-  const alwaysCaptions = Array.isArray(cb) ? cb : (cb.always || []);
-  const poolCaptions = Array.isArray(cb) ? [] : (cb.pool || []);
-  const alwaysHashtags = Array.isArray(hb) ? hb : (hb.always || []);
-  const poolHashtags = Array.isArray(hb) ? [] : (hb.pool || []);
+  const alwaysCaptions = Array.isArray(cb) ? cb : cb.always || [];
+  const poolCaptions = Array.isArray(cb) ? [] : cb.pool || [];
+  const alwaysHashtags = Array.isArray(hb) ? hb : hb.always || [];
+  const poolHashtags = Array.isArray(hb) ? [] : hb.pool || [];
 
   const rawBank = collection?.hashtagBank || {};
   const platformOnly = (!Array.isArray(rawBank) && rawBank.platformOnly) || {};
@@ -1388,9 +1675,14 @@ export const resolveCollectionBanks = (artistId, collectionId) => {
  * @param {Object} platformOnly — e.g. { tiktok: ['#fyp'], instagram: ['#reels'] }
  * @param {Object|null} db
  */
-export const updateCollectionPlatformHashtags = (artistId, collectionId, platformOnly, db = null) => {
+export const updateCollectionPlatformHashtags = (
+  artistId,
+  collectionId,
+  platformOnly,
+  db = null,
+) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
 
   // Ensure hashtagBank is object format
@@ -1414,9 +1706,14 @@ export const updateCollectionPlatformHashtags = (artistId, collectionId, platfor
  * @param {Object} platformExclude — e.g. { instagram: ['#fyp'], facebook: ['#fyp'] }
  * @param {Object|null} db
  */
-export const updateCollectionPlatformExcludes = (artistId, collectionId, platformExclude, db = null) => {
+export const updateCollectionPlatformExcludes = (
+  artistId,
+  collectionId,
+  platformExclude,
+  db = null,
+) => {
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return;
 
   // Ensure hashtagBank is object format
@@ -1442,18 +1739,96 @@ export const updateCollectionPlatformExcludes = (artistId, collectionId, platfor
  */
 export const FORMAT_TEMPLATES = [
   { id: 'single', name: '1 Slide', slideCount: 1, slideLabels: ['Image'], type: 'slideshow' },
-  { id: 'hook_lyrics', name: '2 Slide', slideCount: 2, slideLabels: ['Hook', 'Lyrics'], type: 'slideshow' },
-  { id: 'carousel', name: '3 Slide', slideCount: 3, slideLabels: ['Slide 1', 'Slide 2', 'Slide 3'], type: 'slideshow' },
-  { id: 'four_slide', name: '4 Slide', slideCount: 4, slideLabels: ['Slide 1', 'Slide 2', 'Slide 3', 'Slide 4'], type: 'slideshow' },
-  { id: 'hook_vibes_lyrics', name: '5 Slide', slideCount: 5, slideLabels: ['Hook', 'Text', 'Text', 'Text', 'Lyrics'], type: 'slideshow' },
-  { id: 'six_slide', name: '6 Slide', slideCount: 6, slideLabels: ['Slide 1', 'Slide 2', 'Slide 3', 'Slide 4', 'Slide 5', 'Slide 6'], type: 'slideshow' },
-  { id: 'seven_slide', name: '7 Slide', slideCount: 7, slideLabels: ['Slide 1', 'Slide 2', 'Slide 3', 'Slide 4', 'Slide 5', 'Slide 6', 'Slide 7'], type: 'slideshow' },
-  { id: 'montage', name: 'Montage', slideCount: 0, slideLabels: [], type: 'video', description: 'Combine clips on a timeline, cut to beat' },
-  { id: 'solo_clip', name: 'Solo Clip', slideCount: 0, slideLabels: [], type: 'video', description: 'One clip per video, batch generate' },
-  { id: 'multi_clip', name: 'Multi Clip', slideCount: 0, slideLabels: [], type: 'video', description: 'Multiple clips on timeline' },
-  { id: 'photo_montage', name: 'Photo Montage', slideCount: 0, slideLabels: [], type: 'video', description: 'Turn photos into video with transitions' },
-  { id: 'finished_media', name: 'Finished Media', slideCount: 0, slideLabels: [], type: 'video', description: 'Upload ready-to-post videos & images' },
-  { id: 'clipper', name: 'Clipper', slideCount: 0, slideLabels: [], type: 'video', description: 'Split a video into multiple clips' },
+  {
+    id: 'hook_lyrics',
+    name: '2 Slide',
+    slideCount: 2,
+    slideLabels: ['Hook', 'Lyrics'],
+    type: 'slideshow',
+  },
+  {
+    id: 'carousel',
+    name: '3 Slide',
+    slideCount: 3,
+    slideLabels: ['Slide 1', 'Slide 2', 'Slide 3'],
+    type: 'slideshow',
+  },
+  {
+    id: 'four_slide',
+    name: '4 Slide',
+    slideCount: 4,
+    slideLabels: ['Slide 1', 'Slide 2', 'Slide 3', 'Slide 4'],
+    type: 'slideshow',
+  },
+  {
+    id: 'hook_vibes_lyrics',
+    name: '5 Slide',
+    slideCount: 5,
+    slideLabels: ['Hook', 'Text', 'Text', 'Text', 'Lyrics'],
+    type: 'slideshow',
+  },
+  {
+    id: 'six_slide',
+    name: '6 Slide',
+    slideCount: 6,
+    slideLabels: ['Slide 1', 'Slide 2', 'Slide 3', 'Slide 4', 'Slide 5', 'Slide 6'],
+    type: 'slideshow',
+  },
+  {
+    id: 'seven_slide',
+    name: '7 Slide',
+    slideCount: 7,
+    slideLabels: ['Slide 1', 'Slide 2', 'Slide 3', 'Slide 4', 'Slide 5', 'Slide 6', 'Slide 7'],
+    type: 'slideshow',
+  },
+  {
+    id: 'montage',
+    name: 'Montage',
+    slideCount: 0,
+    slideLabels: [],
+    type: 'video',
+    description: 'Combine clips on a timeline, cut to beat',
+  },
+  {
+    id: 'solo_clip',
+    name: 'Solo Clip',
+    slideCount: 0,
+    slideLabels: [],
+    type: 'video',
+    description: 'One clip per video, batch generate',
+  },
+  {
+    id: 'multi_clip',
+    name: 'Multi Clip',
+    slideCount: 0,
+    slideLabels: [],
+    type: 'video',
+    description: 'Multiple clips on timeline',
+  },
+  {
+    id: 'photo_montage',
+    name: 'Photo Montage',
+    slideCount: 0,
+    slideLabels: [],
+    type: 'video',
+    description: 'Turn photos into video with transitions',
+  },
+  {
+    id: 'finished_media',
+    name: 'Finished Media',
+    slideCount: 0,
+    slideLabels: [],
+    type: 'video',
+    description: 'Upload ready-to-post videos & images',
+  },
+  {
+    id: 'clipper',
+    name: 'Clipper',
+    slideCount: 0,
+    slideLabels: [],
+    type: 'video',
+    description: 'Split a video into multiple clips',
+  },
 ];
 
 /**
@@ -1485,12 +1860,13 @@ export const createPipeline = ({
   formats = [FORMAT_TEMPLATES[1]], // Default: 2 Slide
   activeFormatId = null,
   description = '',
-  color = null
+  color = null,
+  projectId = null,
 }) => {
   const base = createCollection({ name, description, color });
-  const activeFormat = formats.find(f => f.id === activeFormatId) || formats[0];
+  const activeFormat = formats.find((f) => f.id === activeFormatId) || formats[0];
   const isVideoFormat = activeFormat?.type === 'video';
-  const slideCount = isVideoFormat ? 0 : (activeFormat?.slideCount || 2);
+  const slideCount = isVideoFormat ? 0 : activeFormat?.slideCount || 2;
 
   // Pre-allocate banks to match active format's slide count (skip for video formats)
   const banks = [];
@@ -1506,14 +1882,14 @@ export const createPipeline = ({
     ...base,
     isPipeline: true,
     linkedPage,
-    formats: formats.map(f => ({ ...f })),
+    formats: formats.map((f) => ({ ...f })),
     activeFormatId: activeFormat?.id || null,
     pipelineColor: color || PIPELINE_COLORS[Math.floor(Math.random() * PIPELINE_COLORS.length)],
     banks,
     textBanks,
+    ...(projectId ? { projectId } : {}),
   };
 };
-
 
 /**
  * Get a bank label using the pipeline's active format labels instead of "Slide N"
@@ -1521,7 +1897,8 @@ export const createPipeline = ({
  */
 export const getPipelineBankLabel = (pipeline, index) => {
   if (!pipeline?.isPipeline || !pipeline.formats) return getBankLabel(index);
-  const activeFormat = pipeline.formats.find(f => f.id === pipeline.activeFormatId) || pipeline.formats[0];
+  const activeFormat =
+    pipeline.formats.find((f) => f.id === pipeline.activeFormatId) || pipeline.formats[0];
   if (activeFormat?.slideLabels && index < activeFormat.slideLabels.length) {
     return activeFormat.slideLabels[index];
   }
@@ -1529,7 +1906,6 @@ export const getPipelineBankLabel = (pipeline, index) => {
   if (activeFormat?.type === 'video') return `Bucket ${index + 1}`;
   return getBankLabel(index);
 };
-
 
 /**
  * Remove media from a collection
@@ -1545,9 +1921,9 @@ export const removeFromCollection = (artistId, collectionId, mediaIds, db = null
 
   // Update collection's mediaIds
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (collection) {
-    collection.mediaIds = collection.mediaIds.filter(id => !idsToRemove.includes(id));
+    collection.mediaIds = collection.mediaIds.filter((id) => !idsToRemove.includes(id));
     collection.updatedAt = new Date().toISOString();
     saveCollections(artistId, collections);
     if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
@@ -1555,9 +1931,9 @@ export const removeFromCollection = (artistId, collectionId, mediaIds, db = null
 
   // Update library items' collectionIds
   const library = getLibrary(artistId);
-  library.forEach(item => {
+  library.forEach((item) => {
     if (idsToRemove.includes(item.id)) {
-      item.collectionIds = (item.collectionIds || []).filter(id => id !== collectionId);
+      item.collectionIds = (item.collectionIds || []).filter((id) => id !== collectionId);
       item.updatedAt = new Date().toISOString();
     }
   });
@@ -1600,7 +1976,7 @@ export const createProject = (artistId, { name, linkedPage = null, color = null 
  */
 export const getProjects = (artistId) => {
   const collections = getUserCollections(artistId);
-  return collections.filter(c => c.isProjectRoot === true);
+  return collections.filter((c) => c.isProjectRoot === true);
 };
 
 /**
@@ -1608,7 +1984,7 @@ export const getProjects = (artistId) => {
  */
 export const getProjectById = (artistId, projectId) => {
   const collections = getUserCollections(artistId);
-  return collections.find(c => c.id === projectId && c.isProjectRoot === true) || null;
+  return collections.find((c) => c.id === projectId && c.isProjectRoot === true) || null;
 };
 
 /**
@@ -1616,7 +1992,7 @@ export const getProjectById = (artistId, projectId) => {
  */
 export const getProjectNiches = (artistId, projectId) => {
   const collections = getUserCollections(artistId);
-  return collections.filter(c => c.projectId === projectId && c.isPipeline === true);
+  return collections.filter((c) => c.projectId === projectId && c.isPipeline === true);
 };
 
 /**
@@ -1648,10 +2024,10 @@ export const createNiche = (artistId, { projectId, format, name = null }, db = n
 export const addToProjectPool = (artistId, projectId, mediaIds, db = null) => {
   const ids = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
   const collections = getUserCollections(artistId);
-  const project = collections.find(c => c.id === projectId && c.isProjectRoot);
+  const project = collections.find((c) => c.id === projectId && c.isProjectRoot);
   if (!project) return;
   const existing = new Set(project.mediaIds || []);
-  const newIds = ids.filter(id => !existing.has(id));
+  const newIds = ids.filter((id) => !existing.has(id));
   if (newIds.length === 0) return;
   project.mediaIds = [...(project.mediaIds || []), ...newIds];
   project.updatedAt = new Date().toISOString();
@@ -1665,10 +2041,10 @@ export const addToProjectPool = (artistId, projectId, mediaIds, db = null) => {
 export const removeFromProjectPool = (artistId, projectId, mediaIds, db = null) => {
   const ids = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
   const collections = getUserCollections(artistId);
-  const project = collections.find(c => c.id === projectId && c.isProjectRoot);
+  const project = collections.find((c) => c.id === projectId && c.isProjectRoot);
   if (!project || !project.mediaIds) return;
   const removeSet = new Set(ids);
-  project.mediaIds = project.mediaIds.filter(id => !removeSet.has(id));
+  project.mediaIds = project.mediaIds.filter((id) => !removeSet.has(id));
   project.updatedAt = new Date().toISOString();
   trackCollectionRemoval(projectId, ids);
   saveCollections(artistId, collections);
@@ -1680,16 +2056,16 @@ export const removeFromProjectPool = (artistId, projectId, mediaIds, db = null) 
  */
 export const getProjectStats = (artistId, projectId) => {
   const collections = getUserCollections(artistId);
-  const niches = collections.filter(c => c.projectId === projectId && c.isPipeline);
-  const project = collections.find(c => c.id === projectId && c.isProjectRoot);
+  const niches = collections.filter((c) => c.projectId === projectId && c.isPipeline);
+  const project = collections.find((c) => c.id === projectId && c.isProjectRoot);
   const content = getCreatedContent(artistId);
-  const nicheIds = new Set(niches.map(n => n.id));
+  const nicheIds = new Set(niches.map((n) => n.id));
   const draftCount = [
-    ...(content.slideshows || []).filter(s => !s.isTemplate && nicheIds.has(s.collectionId)),
-    ...(content.videos || []).filter(v => nicheIds.has(v.collectionId)),
+    ...(content.slideshows || []).filter((s) => !s.isTemplate && nicheIds.has(s.collectionId)),
+    ...(content.videos || []).filter((v) => nicheIds.has(v.collectionId)),
   ].length;
   // Build niche format descriptions (e.g. "Hook + Lyrics", "Photo Montage")
-  const nicheFormats = niches.map(n => {
+  const nicheFormats = niches.map((n) => {
     const fmt = n.formats?.[0];
     if (fmt?.name) return fmt.name;
     return n.name || 'Niche';
@@ -1707,7 +2083,7 @@ export const getProjectStats = (artistId, projectId) => {
  */
 export const updateNicheCaptionBank = (artistId, nicheId, captions, db = null) => {
   const cols = getUserCollections(artistId);
-  const idx = cols.findIndex(c => c.id === nicheId);
+  const idx = cols.findIndex((c) => c.id === nicheId);
   if (idx === -1) return;
   cols[idx].captionBank = captions;
   cols[idx].updatedAt = new Date().toISOString();
@@ -1720,7 +2096,7 @@ export const updateNicheCaptionBank = (artistId, nicheId, captions, db = null) =
  */
 export const updateNicheHashtagBank = (artistId, nicheId, hashtags, db = null) => {
   const cols = getUserCollections(artistId);
-  const idx = cols.findIndex(c => c.id === nicheId);
+  const idx = cols.findIndex((c) => c.id === nicheId);
   if (idx === -1) return;
   cols[idx].hashtagBank = hashtags;
   cols[idx].updatedAt = new Date().toISOString();
@@ -1734,7 +2110,7 @@ export const updateNicheHashtagBank = (artistId, nicheId, hashtags, db = null) =
  */
 export const updateProjectCaptionBank = (artistId, projectId, captions, db = null) => {
   const cols = getUserCollections(artistId);
-  const idx = cols.findIndex(c => c.id === projectId && c.isProjectRoot);
+  const idx = cols.findIndex((c) => c.id === projectId && c.isProjectRoot);
   if (idx === -1) return;
   cols[idx].captionBank = captions;
   cols[idx].updatedAt = new Date().toISOString();
@@ -1748,7 +2124,7 @@ export const updateProjectCaptionBank = (artistId, projectId, captions, db = nul
  */
 export const updateProjectHashtagBank = (artistId, projectId, hashtags, db = null) => {
   const cols = getUserCollections(artistId);
-  const idx = cols.findIndex(c => c.id === projectId && c.isProjectRoot);
+  const idx = cols.findIndex((c) => c.id === projectId && c.isProjectRoot);
   if (idx === -1) return;
   cols[idx].hashtagBank = hashtags;
   cols[idx].updatedAt = new Date().toISOString();
@@ -1761,7 +2137,7 @@ export const updateProjectHashtagBank = (artistId, projectId, hashtags, db = nul
  */
 export const updateNicheAudioId = (artistId, nicheId, audioId, db = null) => {
   const cols = getUserCollections(artistId);
-  const idx = cols.findIndex(c => c.id === nicheId);
+  const idx = cols.findIndex((c) => c.id === nicheId);
   if (idx === -1) return;
   cols[idx].audioId = audioId;
   cols[idx].updatedAt = new Date().toISOString();
@@ -1774,7 +2150,7 @@ export const updateNicheAudioId = (artistId, nicheId, audioId, db = null) => {
  */
 export const updateNicheMediaOrder = (artistId, nicheId, orderedIds, db = null) => {
   const cols = getUserCollections(artistId);
-  const idx = cols.findIndex(c => c.id === nicheId);
+  const idx = cols.findIndex((c) => c.id === nicheId);
   if (idx === -1) return;
   cols[idx].mediaIds = orderedIds;
   cols[idx].updatedAt = new Date().toISOString();
@@ -1785,9 +2161,16 @@ export const updateNicheMediaOrder = (artistId, nicheId, orderedIds, db = null) 
 /**
  * Update trim points on a media item stored in a niche
  */
-export const updateMediaTrimPoints = (artistId, nicheId, mediaId, trimStart, trimEnd, db = null) => {
+export const updateMediaTrimPoints = (
+  artistId,
+  nicheId,
+  mediaId,
+  trimStart,
+  trimEnd,
+  db = null,
+) => {
   const cols = getUserCollections(artistId);
-  const colIdx = cols.findIndex(c => c.id === nicheId);
+  const colIdx = cols.findIndex((c) => c.id === nicheId);
   if (colIdx === -1) return;
   if (!cols[colIdx].trimData) cols[colIdx].trimData = {};
   cols[colIdx].trimData[mediaId] = { trimStart, trimEnd };
@@ -1801,10 +2184,10 @@ export const updateMediaTrimPoints = (artistId, nicheId, mediaId, trimStart, tri
  */
 export const saveClipperSession = (artistId, nicheId, session, db = null) => {
   const cols = getUserCollections(artistId);
-  const idx = cols.findIndex(c => c.id === nicheId);
+  const idx = cols.findIndex((c) => c.id === nicheId);
   if (idx === -1) return null;
   const sessions = [...(cols[idx].clipperSessions || [])];
-  const existingIdx = sessions.findIndex(s => s.id === session.id);
+  const existingIdx = sessions.findIndex((s) => s.id === session.id);
   const now = new Date().toISOString();
   if (existingIdx !== -1) {
     sessions[existingIdx] = { ...session, updatedAt: now };
@@ -1823,9 +2206,9 @@ export const saveClipperSession = (artistId, nicheId, session, db = null) => {
  */
 export const deleteClipperSession = (artistId, nicheId, sessionId, db = null) => {
   const cols = getUserCollections(artistId);
-  const idx = cols.findIndex(c => c.id === nicheId);
+  const idx = cols.findIndex((c) => c.id === nicheId);
   if (idx === -1) return;
-  cols[idx].clipperSessions = (cols[idx].clipperSessions || []).filter(s => s.id !== sessionId);
+  cols[idx].clipperSessions = (cols[idx].clipperSessions || []).filter((s) => s.id !== sessionId);
   cols[idx].updatedAt = new Date().toISOString();
   saveCollections(artistId, cols);
   if (db) saveCollectionToFirestore(db, artistId, cols[idx]).catch(log.error);
@@ -1839,34 +2222,40 @@ export const deleteClipperSession = (artistId, nicheId, sessionId, db = null) =>
 export const getProjectBankTree = (artistId, excludeProjectId = null) => {
   const collections = getUserCollections(artistId);
   const lib = getLibrary(artistId);
-  const projects = collections.filter(c => c.isProjectRoot === true && c.id !== excludeProjectId);
+  const projects = collections.filter((c) => c.isProjectRoot === true && c.id !== excludeProjectId);
 
-  return projects.map(project => {
-    const niches = collections.filter(c => c.projectId === project.id && c.isPipeline === true);
-    return {
-      project: { id: project.id, name: project.name, color: project.projectColor },
-      niches: niches.map(niche => {
-        const format = niche.formats?.[0] || null;
-        const slideCount = format?.slideCount || 0;
-        const banks = Array.from({ length: slideCount }).map((_, bankIdx) => {
-          const label = getPipelineBankLabel(niche, bankIdx);
-          const images = (niche.banks?.[bankIdx] || [])
-            .map(id => lib.find(m => m.id === id))
-            .filter(Boolean)
-            .map(m => ({ id: m.id, url: m.url, thumbnailUrl: m.thumbnailUrl, name: m.name }));
-          const textEntries = (niche.textBanks?.[bankIdx] || []).map(e => getTextBankText(e));
-          return { label, images, textEntries };
-        });
-        return {
-          niche: { id: niche.id, name: niche.name },
-          format,
-          banks,
-          captions: Array.isArray(niche.captionBank) ? niche.captionBank : [...(niche.captionBank?.always || []), ...(niche.captionBank?.pool || [])],
-          hashtags: Array.isArray(niche.hashtagBank) ? niche.hashtagBank : [...(niche.hashtagBank?.always || []), ...(niche.hashtagBank?.pool || [])],
-        };
-      }),
-    };
-  }).filter(p => p.niches.length > 0);
+  return projects
+    .map((project) => {
+      const niches = collections.filter((c) => c.projectId === project.id && c.isPipeline === true);
+      return {
+        project: { id: project.id, name: project.name, color: project.projectColor },
+        niches: niches.map((niche) => {
+          const format = niche.formats?.[0] || null;
+          const slideCount = format?.slideCount || 0;
+          const banks = Array.from({ length: slideCount }).map((_, bankIdx) => {
+            const label = getPipelineBankLabel(niche, bankIdx);
+            const images = (niche.banks?.[bankIdx] || [])
+              .map((id) => lib.find((m) => m.id === id))
+              .filter(Boolean)
+              .map((m) => ({ id: m.id, url: m.url, thumbnailUrl: m.thumbnailUrl, name: m.name }));
+            const textEntries = (niche.textBanks?.[bankIdx] || []).map((e) => getTextBankText(e));
+            return { label, images, textEntries };
+          });
+          return {
+            niche: { id: niche.id, name: niche.name },
+            format,
+            banks,
+            captions: Array.isArray(niche.captionBank)
+              ? niche.captionBank
+              : [...(niche.captionBank?.always || []), ...(niche.captionBank?.pool || [])],
+            hashtags: Array.isArray(niche.hashtagBank)
+              ? niche.hashtagBank
+              : [...(niche.hashtagBank?.always || []), ...(niche.hashtagBank?.pool || [])],
+          };
+        }),
+      };
+    })
+    .filter((p) => p.niches.length > 0);
 };
 
 /**
@@ -1884,19 +2273,21 @@ export const migrateToProjects = async (artistId, db = null) => {
   // ── Phase 1: ALWAYS run cleanup (dedup, @@fix, orphan re-assign) ──
 
   // Fix double-@ in project names
-  collections.filter(c => c.isProjectRoot).forEach(p => {
-    if (p.name && p.name.startsWith('@@')) {
-      p.name = p.name.slice(1);
-      needsSave = true;
-    }
-  });
+  collections
+    .filter((c) => c.isProjectRoot)
+    .forEach((p) => {
+      if (p.name && p.name.startsWith('@@')) {
+        p.name = p.name.slice(1);
+        needsSave = true;
+      }
+    });
 
   // Dedup project roots by linkedPage.handle (or name for unlinked)
-  const projectRoots = collections.filter(c => c.isProjectRoot);
+  const projectRoots = collections.filter((c) => c.isProjectRoot);
   if (projectRoots.length > 0) {
     const seenKeys = new Set();
     const dupeIds = new Set();
-    projectRoots.forEach(p => {
+    projectRoots.forEach((p) => {
       // Normalize key: strip leading @ for comparison
       const rawKey = p.linkedPage?.handle || p.name || p.id;
       const key = rawKey.replace(/^@+/, '');
@@ -1907,18 +2298,22 @@ export const migrateToProjects = async (artistId, db = null) => {
       }
     });
     if (dupeIds.size > 0) {
-      const survivors = projectRoots.filter(p => !dupeIds.has(p.id));
-      dupeIds.forEach(dupeId => {
-        const dupe = collections.find(c => c.id === dupeId);
+      const survivors = projectRoots.filter((p) => !dupeIds.has(p.id));
+      dupeIds.forEach((dupeId) => {
+        const dupe = collections.find((c) => c.id === dupeId);
         if (!dupe) return;
         const rawKey = dupe.linkedPage?.handle || dupe.name || dupe.id;
         const key = rawKey.replace(/^@+/, '');
-        const survivor = survivors.find(s => {
+        const survivor = survivors.find((s) => {
           const sk = (s.linkedPage?.handle || s.name || s.id).replace(/^@+/, '');
           return sk === key;
         });
         if (survivor) {
-          collections.filter(c => c.projectId === dupeId).forEach(n => { n.projectId = survivor.id; });
+          collections
+            .filter((c) => c.projectId === dupeId)
+            .forEach((n) => {
+              n.projectId = survivor.id;
+            });
           const merged = new Set([...(survivor.mediaIds || []), ...(dupe.mediaIds || [])]);
           survivor.mediaIds = Array.from(merged);
         }
@@ -1933,18 +2328,18 @@ export const migrateToProjects = async (artistId, db = null) => {
   }
 
   // Re-assign orphaned niches (lost projectId from subscription clobber)
-  const existingRoots = collections.filter(c => c.isProjectRoot);
-  const orphanNiches = collections.filter(c => c.isPipeline && !c.projectId && !c.isProjectRoot);
+  const existingRoots = collections.filter((c) => c.isProjectRoot);
+  const orphanNiches = collections.filter((c) => c.isPipeline && !c.projectId && !c.isProjectRoot);
   if (existingRoots.length > 0 && orphanNiches.length > 0) {
-    orphanNiches.forEach(niche => {
+    orphanNiches.forEach((niche) => {
       const nicheHandle = niche.linkedPage?.handle;
       const matchingRoot = nicheHandle
-        ? existingRoots.find(r => r.linkedPage?.handle === nicheHandle)
+        ? existingRoots.find((r) => r.linkedPage?.handle === nicheHandle)
         : null;
       if (matchingRoot) {
         niche.projectId = matchingRoot.id;
         const poolIds = new Set(matchingRoot.mediaIds || []);
-        (niche.mediaIds || []).forEach(id => poolIds.add(id));
+        (niche.mediaIds || []).forEach((id) => poolIds.add(id));
         matchingRoot.mediaIds = Array.from(poolIds);
         needsSave = true;
       }
@@ -1957,29 +2352,35 @@ export const migrateToProjects = async (artistId, db = null) => {
     if (db) {
       // Delete duplicate docs from Firestore
       if (firestoreDeleteIds.length > 0) {
-        firestoreDeleteIds.forEach(id => {
+        firestoreDeleteIds.forEach((id) => {
           const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', id);
           deleteDoc(docRef).catch(() => {});
         });
-        log('[libraryService] Deleting', firestoreDeleteIds.length, 'duplicate docs from Firestore');
+        log(
+          '[libraryService] Deleting',
+          firestoreDeleteIds.length,
+          'duplicate docs from Firestore',
+        );
       }
       // Save surviving roots + reassigned niches to Firestore
-      const modified = collections.filter(c => c.isProjectRoot || c.projectId);
-      Promise.all(modified.map(col => saveCollectionToFirestore(db, artistId, col))).catch(log.error);
+      const modified = collections.filter((c) => c.isProjectRoot || c.projectId);
+      Promise.all(modified.map((col) => saveCollectionToFirestore(db, artistId, col))).catch(
+        log.error,
+      );
     }
   }
 
   // ── Phase 2: Create new projects (guarded — once per artist) ──
   if (localStorage.getItem(flagKey)) return;
 
-  const unmigrated = collections.filter(c => c.isPipeline && !c.projectId && !c.isProjectRoot);
+  const unmigrated = collections.filter((c) => c.isPipeline && !c.projectId && !c.isProjectRoot);
   if (unmigrated.length === 0) {
     localStorage.setItem(flagKey, Date.now().toString());
     return;
   }
 
   const groups = {};
-  unmigrated.forEach(pipeline => {
+  unmigrated.forEach((pipeline) => {
     const key = pipeline.linkedPage?.handle || `standalone_${pipeline.id}`;
     if (!groups[key]) groups[key] = { linkedPage: pipeline.linkedPage || null, niches: [] };
     groups[key].niches.push(pipeline);
@@ -1989,30 +2390,44 @@ export const migrateToProjects = async (artistId, db = null) => {
   Object.entries(groups).forEach(([key, group]) => {
     const handle = group.linkedPage?.handle || '';
     const projectName = group.linkedPage
-      ? (handle.startsWith('@') ? handle : `@${handle}`)
-      : (group.niches.length === 1 ? group.niches[0].name : key);
+      ? handle.startsWith('@')
+        ? handle
+        : `@${handle}`
+      : group.niches.length === 1
+        ? group.niches[0].name
+        : key;
     const base = createCollection({ name: projectName, description: '' });
     const project = {
       ...base,
       isProjectRoot: true,
       linkedPage: group.linkedPage,
-      projectColor: group.niches[0]?.pipelineColor || PIPELINE_COLORS[Math.floor(Math.random() * PIPELINE_COLORS.length)],
+      projectColor:
+        group.niches[0]?.pipelineColor ||
+        PIPELINE_COLORS[Math.floor(Math.random() * PIPELINE_COLORS.length)],
     };
 
     const allMediaIds = new Set();
-    group.niches.forEach(niche => {
-      (niche.mediaIds || []).forEach(id => allMediaIds.add(id));
+    group.niches.forEach((niche) => {
+      (niche.mediaIds || []).forEach((id) => allMediaIds.add(id));
     });
     project.mediaIds = Array.from(allMediaIds);
 
     // Migrate caption/hashtag banks from old collection format to flat arrays
-    group.niches.forEach(niche => {
+    group.niches.forEach((niche) => {
       niche.projectId = project.id;
-      if (niche.captionBank && typeof niche.captionBank === 'object' && !Array.isArray(niche.captionBank)) {
+      if (
+        niche.captionBank &&
+        typeof niche.captionBank === 'object' &&
+        !Array.isArray(niche.captionBank)
+      ) {
         const { always = [], pool = [] } = niche.captionBank;
         niche.captionBank = [...always, ...pool];
       }
-      if (niche.hashtagBank && typeof niche.hashtagBank === 'object' && !Array.isArray(niche.hashtagBank)) {
+      if (
+        niche.hashtagBank &&
+        typeof niche.hashtagBank === 'object' &&
+        !Array.isArray(niche.hashtagBank)
+      ) {
         const { always = [], pool = [] } = niche.hashtagBank;
         niche.hashtagBank = [...always, ...pool];
       }
@@ -2023,12 +2438,18 @@ export const migrateToProjects = async (artistId, db = null) => {
 
   saveCollections(artistId, collections);
   localStorage.setItem(flagKey, Date.now().toString());
-  log('[libraryService] Migrated', unmigrated.length, 'pipelines into', newProjects.length, 'projects');
+  log(
+    '[libraryService] Migrated',
+    unmigrated.length,
+    'pipelines into',
+    newProjects.length,
+    'projects',
+  );
 
   if (db) {
     try {
       const toSave = [...newProjects, ...unmigrated];
-      await Promise.all(toSave.map(col => saveCollectionToFirestore(db, artistId, col)));
+      await Promise.all(toSave.map((col) => saveCollectionToFirestore(db, artistId, col)));
       log('[libraryService] Saved', toSave.length, 'migrated collections to Firestore');
     } catch (err) {
       log.error('[libraryService] Firestore migration save failed:', err);
@@ -2046,10 +2467,13 @@ export const migrateDraftsToNiches = async (artistId, db = null) => {
   const existingProject = getProjects(artistId)[0];
   if (existingProject) {
     const library = getLibrary(artistId);
-    if (library.length > 0 && (!existingProject.mediaIds || existingProject.mediaIds.length === 0)) {
-      existingProject.mediaIds = library.map(item => item.id);
+    if (
+      library.length > 0 &&
+      (!existingProject.mediaIds || existingProject.mediaIds.length === 0)
+    ) {
+      existingProject.mediaIds = library.map((item) => item.id);
       const cols = getUserCollections(artistId);
-      const idx = cols.findIndex(c => c.id === existingProject.id);
+      const idx = cols.findIndex((c) => c.id === existingProject.id);
       if (idx !== -1) cols[idx] = existingProject;
       saveCollections(artistId, cols);
       if (db) await saveCollectionToFirestore(db, artistId, existingProject);
@@ -2061,25 +2485,30 @@ export const migrateDraftsToNiches = async (artistId, db = null) => {
     const content = getCreatedContent(artistId);
     const lib = getLibrary(artistId);
     let nichesDirty = false;
-    niches.forEach(niche => {
-      const nicheDrafts = (content.slideshows || []).filter(s => s.collectionId === niche.id && !s.isTemplate);
+    niches.forEach((niche) => {
+      const nicheDrafts = (content.slideshows || []).filter(
+        (s) => s.collectionId === niche.id && !s.isTemplate,
+      );
       if (nicheDrafts.length === 0) return;
       const imageIds = new Set(niche.mediaIds || []);
       const beforeSize = imageIds.size;
       // Ensure banks array exists
       if (!niche.banks) niche.banks = [];
-      const bankSets = niche.banks.map(b => new Set(b || []));
+      const bankSets = niche.banks.map((b) => new Set(b || []));
       let banksDirty = false;
       // Also build text bank sets from draft text overlays
       if (!niche.textBanks) niche.textBanks = [];
-      const textBankSets = niche.textBanks.map(tb => new Set((tb || []).map(e => typeof e === 'string' ? e : e?.text).filter(Boolean)));
+      const textBankSets = niche.textBanks.map(
+        (tb) =>
+          new Set((tb || []).map((e) => (typeof e === 'string' ? e : e?.text)).filter(Boolean)),
+      );
       let textDirty = false;
-      nicheDrafts.forEach(draft => {
+      nicheDrafts.forEach((draft) => {
         (draft.slides || []).forEach((slide, slideIdx) => {
           // Resolve image ID from sourceImageId, or match by backgroundImage URL
           let imgId = slide.sourceImageId || slide.imageId;
           if (!imgId && slide.backgroundImage) {
-            const match = lib.find(m => m.url === slide.backgroundImage);
+            const match = lib.find((m) => m.url === slide.backgroundImage);
             if (match) imgId = match.id;
           }
           if (imgId) {
@@ -2091,7 +2520,7 @@ export const migrateDraftsToNiches = async (artistId, db = null) => {
             }
           }
           // Extract text overlays into text banks for this slide position
-          (slide.textOverlays || []).forEach(overlay => {
+          (slide.textOverlays || []).forEach((overlay) => {
             if (!overlay.text?.trim()) return;
             while (textBankSets.length <= slideIdx) textBankSets.push(new Set());
             if (!textBankSets[slideIdx].has(overlay.text.trim())) {
@@ -2103,30 +2532,38 @@ export const migrateDraftsToNiches = async (artistId, db = null) => {
       });
       if (imageIds.size > beforeSize || banksDirty || textDirty) {
         niche.mediaIds = Array.from(imageIds);
-        niche.banks = bankSets.map(s => Array.from(s));
+        niche.banks = bankSets.map((s) => Array.from(s));
         if (textDirty) {
-          niche.textBanks = textBankSets.map(s => Array.from(s));
+          niche.textBanks = textBankSets.map((s) => Array.from(s));
         }
         const cols2 = getUserCollections(artistId);
-        const nIdx = cols2.findIndex(c => c.id === niche.id);
-        if (nIdx !== -1) { cols2[nIdx] = niche; nichesDirty = true; }
+        const nIdx = cols2.findIndex((c) => c.id === niche.id);
+        if (nIdx !== -1) {
+          cols2[nIdx] = niche;
+          nichesDirty = true;
+        }
         saveCollections(artistId, cols2);
       }
     });
     if (nichesDirty && db) {
-      Promise.all(niches.filter(n => n.mediaIds?.length > 0).map(n => saveCollectionToFirestore(db, artistId, n))).catch(log.error);
+      Promise.all(
+        niches
+          .filter((n) => n.mediaIds?.length > 0)
+          .map((n) => saveCollectionToFirestore(db, artistId, n)),
+      ).catch(log.error);
       log('[libraryService] Populated niche media pools + banks from draft images');
     }
 
     // Always patch stale niche format labels & names to match current FORMAT_TEMPLATES
     const allNiches = getProjectNiches(artistId, existingProject.id);
     let labelsDirty = false;
-    allNiches.forEach(niche => {
+    allNiches.forEach((niche) => {
       if (!niche.formats?.length) return;
-      niche.formats.forEach(fmt => {
-        const template = FORMAT_TEMPLATES.find(t => t.id === fmt.id);
+      niche.formats.forEach((fmt) => {
+        const template = FORMAT_TEMPLATES.find((t) => t.id === fmt.id);
         if (!template) return;
-        const needsLabelFix = JSON.stringify(fmt.slideLabels) !== JSON.stringify(template.slideLabels);
+        const needsLabelFix =
+          JSON.stringify(fmt.slideLabels) !== JSON.stringify(template.slideLabels);
         const needsNameFix = fmt.name !== template.name;
         if (needsLabelFix || needsNameFix) {
           fmt.slideLabels = [...template.slideLabels];
@@ -2140,7 +2577,7 @@ export const migrateDraftsToNiches = async (artistId, db = null) => {
         'Hook + Text + Lyrics': '5 Slide',
         'Single Image': '1 Slide',
         'Hook + Lyrics': '2 Slide',
-        'Carousel': '3 Slide',
+        Carousel: '3 Slide',
       };
       if (OLD_NAME_MAP[niche.name]) {
         niche.name = OLD_NAME_MAP[niche.name];
@@ -2149,12 +2586,15 @@ export const migrateDraftsToNiches = async (artistId, db = null) => {
     });
     if (labelsDirty) {
       const cols3 = getUserCollections(artistId);
-      allNiches.forEach(n => {
-        const nIdx = cols3.findIndex(c => c.id === n.id);
+      allNiches.forEach((n) => {
+        const nIdx = cols3.findIndex((c) => c.id === n.id);
         if (nIdx !== -1) cols3[nIdx] = n;
       });
       saveCollections(artistId, cols3);
-      if (db) Promise.all(allNiches.map(n => saveCollectionToFirestore(db, artistId, n))).catch(log.error);
+      if (db)
+        Promise.all(allNiches.map((n) => saveCollectionToFirestore(db, artistId, n))).catch(
+          log.error,
+        );
       log('[libraryService] Patched niche format labels to match current templates');
     }
   }
@@ -2163,7 +2603,7 @@ export const migrateDraftsToNiches = async (artistId, db = null) => {
   if (localStorage.getItem(flagKey)) return;
 
   const content = getCreatedContent(artistId);
-  const unassigned = (content.slideshows || []).filter(s => !s.isTemplate && !s.collectionId);
+  const unassigned = (content.slideshows || []).filter((s) => !s.isTemplate && !s.collectionId);
   if (unassigned.length === 0) {
     localStorage.setItem(flagKey, Date.now().toString());
     return;
@@ -2172,7 +2612,7 @@ export const migrateDraftsToNiches = async (artistId, db = null) => {
   // Map slide counts to format template IDs
   const SLIDE_FORMAT_MAP = { 1: 'single', 2: 'hook_lyrics', 3: 'carousel', 5: 'hook_vibes_lyrics' };
   const groups = {};
-  unassigned.forEach(s => {
+  unassigned.forEach((s) => {
     const count = (s.slides || []).length;
     const formatId = SLIDE_FORMAT_MAP[count];
     if (formatId) {
@@ -2194,9 +2634,9 @@ export const migrateDraftsToNiches = async (artistId, db = null) => {
   if (!project && !localStorage.getItem(deletedKey)) {
     project = createProject(artistId, { name: 'Content', color: PIPELINE_COLORS[0] });
     if (library.length > 0) {
-      project.mediaIds = library.map(item => item.id);
+      project.mediaIds = library.map((item) => item.id);
       const cols = getUserCollections(artistId);
-      const idx = cols.findIndex(c => c.id === project.id);
+      const idx = cols.findIndex((c) => c.id === project.id);
       if (idx !== -1) cols[idx] = project;
       saveCollections(artistId, cols);
     }
@@ -2205,13 +2645,13 @@ export const migrateDraftsToNiches = async (artistId, db = null) => {
 
   // For each format group, ensure a niche exists and assign drafts
   for (const [formatId, drafts] of Object.entries(groups)) {
-    const format = FORMAT_TEMPLATES.find(f => f.id === formatId);
+    const format = FORMAT_TEMPLATES.find((f) => f.id === formatId);
     if (!format) continue;
 
     // Check if niche already exists for this format under this project
     const collections = getUserCollections(artistId);
-    let niche = collections.find(c =>
-      c.projectId === project.id && c.isPipeline && c.formats?.[0]?.id === formatId
+    let niche = collections.find(
+      (c) => c.projectId === project.id && c.isPipeline && c.formats?.[0]?.id === formatId,
     );
 
     if (!niche) {
@@ -2222,8 +2662,8 @@ export const migrateDraftsToNiches = async (artistId, db = null) => {
     // Assign drafts + extract image IDs into niche mediaIds + banks
     const nicheImageIds = new Set(niche.mediaIds || []);
     if (!niche.banks) niche.banks = [];
-    const bankSets = niche.banks.map(b => new Set(b || []));
-    drafts.forEach(draft => {
+    const bankSets = niche.banks.map((b) => new Set(b || []));
+    drafts.forEach((draft) => {
       draft.collectionId = niche.id;
       draft.updatedAt = new Date().toISOString();
       (draft.slides || []).forEach((slide, slideIdx) => {
@@ -2234,11 +2674,11 @@ export const migrateDraftsToNiches = async (artistId, db = null) => {
         bankSets[slideIdx].add(imgId);
       });
     });
-    niche.banks = bankSets.map(s => Array.from(s));
+    niche.banks = bankSets.map((s) => Array.from(s));
     if (nicheImageIds.size > (niche.mediaIds || []).length) {
       niche.mediaIds = Array.from(nicheImageIds);
       const cols2 = getUserCollections(artistId);
-      const nIdx = cols2.findIndex(c => c.id === niche.id);
+      const nIdx = cols2.findIndex((c) => c.id === niche.id);
       if (nIdx !== -1) cols2[nIdx] = niche;
       saveCollections(artistId, cols2);
       if (db) await saveCollectionToFirestore(db, artistId, niche);
@@ -2277,10 +2717,10 @@ export const getCollectionMedia = (artistId, collectionId) => {
 
   // Handle user collections
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
+  const collection = collections.find((c) => c.id === collectionId);
   if (!collection) return [];
 
-  return library.filter(item => collection.mediaIds.includes(item.id));
+  return library.filter((item) => collection.mediaIds.includes(item.id));
 };
 
 /**
@@ -2296,39 +2736,36 @@ const resolveSmartCollection = (library, smartCollectionId) => {
   switch (smartCollectionId) {
     case SMART_COLLECTION_IDS.RECENT:
       return library
-        .filter(item => new Date(item.createdAt) >= thirtyDaysAgo)
+        .filter((item) => new Date(item.createdAt) >= thirtyDaysAgo)
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     case SMART_COLLECTION_IDS.FAVORITES:
-      return library.filter(item => item.isFavorite);
+      return library.filter((item) => item.isFavorite);
 
     case SMART_COLLECTION_IDS.VERTICAL:
-      return library.filter(item =>
-        (item.type === MEDIA_TYPES.VIDEO || item.type === MEDIA_TYPES.IMAGE) &&
-        item.aspectRatio && item.aspectRatio < 1
+      return library.filter(
+        (item) =>
+          (item.type === MEDIA_TYPES.VIDEO || item.type === MEDIA_TYPES.IMAGE) &&
+          item.aspectRatio &&
+          item.aspectRatio < 1,
       );
 
     case SMART_COLLECTION_IDS.HAS_AUDIO:
-      return library.filter(item =>
-        item.type === MEDIA_TYPES.VIDEO && item.hasEmbeddedAudio
-      );
+      return library.filter((item) => item.type === MEDIA_TYPES.VIDEO && item.hasEmbeddedAudio);
 
     case SMART_COLLECTION_IDS.MOST_USED:
-      return library
-        .filter(item => item.useCount >= 2)
-        .sort((a, b) => b.useCount - a.useCount);
+      return library.filter((item) => item.useCount >= 2).sort((a, b) => b.useCount - a.useCount);
 
     case SMART_COLLECTION_IDS.UNUSED:
-      return library.filter(item => !item.useCount || item.useCount === 0);
+      return library.filter((item) => !item.useCount || item.useCount === 0);
 
     case SMART_COLLECTION_IDS.AUDIO_ALL:
-      return library.filter(item => item.type === MEDIA_TYPES.AUDIO);
+      return library.filter((item) => item.type === MEDIA_TYPES.AUDIO);
 
     default:
       return [];
   }
 };
-
 
 // ============================================================================
 // ONBOARDING OPERATIONS
@@ -2355,33 +2792,37 @@ export const getOnboardingStatus = (artistId) => {
  * @param {string} templateId
  */
 export const completeOnboarding = (artistId, templateId, db = null) => {
-  const template = STARTER_TEMPLATES[Object.keys(STARTER_TEMPLATES).find(
-    key => STARTER_TEMPLATES[key].id === templateId
-  )];
+  const template =
+    STARTER_TEMPLATES[
+      Object.keys(STARTER_TEMPLATES).find((key) => STARTER_TEMPLATES[key].id === templateId)
+    ];
 
   if (template && template.collections.length > 0) {
     // Create collections from template
     const collections = getUserCollections(artistId);
     const newCols = [];
-    template.collections.forEach(col => {
+    template.collections.forEach((col) => {
       const newCol = createCollection({
         name: col.name,
         description: col.description,
-        type: COLLECTION_TYPES.TEMPLATE
+        type: COLLECTION_TYPES.TEMPLATE,
       });
       collections.push(newCol);
       newCols.push(newCol);
     });
     saveCollections(artistId, collections);
-    if (db) newCols.forEach(col => saveCollectionToFirestore(db, artistId, col).catch(log.error));
+    if (db) newCols.forEach((col) => saveCollectionToFirestore(db, artistId, col).catch(log.error));
   }
 
   // Mark onboarding complete
-  localStorage.setItem(getOnboardingKey(artistId), JSON.stringify({
-    completed: true,
-    templateId,
-    completedAt: new Date().toISOString()
-  }));
+  localStorage.setItem(
+    getOnboardingKey(artistId),
+    JSON.stringify({
+      completed: true,
+      templateId,
+      completedAt: new Date().toISOString(),
+    }),
+  );
 };
 
 // ============================================================================
@@ -2401,15 +2842,16 @@ export const searchLibrary = (artistId, query, filters = {}) => {
   // Text search
   if (query) {
     const lowerQuery = query.toLowerCase();
-    results = results.filter(item =>
-      item.name.toLowerCase().includes(lowerQuery) ||
-      item.tags?.some(tag => tag.toLowerCase().includes(lowerQuery))
+    results = results.filter(
+      (item) =>
+        item.name.toLowerCase().includes(lowerQuery) ||
+        item.tags?.some((tag) => tag.toLowerCase().includes(lowerQuery)),
     );
   }
 
   // Type filter
   if (filters.type) {
-    results = results.filter(item => item.type === filters.type);
+    results = results.filter((item) => item.type === filters.type);
   }
 
   // Collection filter
@@ -2417,15 +2859,13 @@ export const searchLibrary = (artistId, query, filters = {}) => {
     if (filters.collectionId.startsWith('smart_')) {
       results = resolveSmartCollection(results, filters.collectionId);
     } else {
-      results = results.filter(item =>
-        item.collectionIds?.includes(filters.collectionId)
-      );
+      results = results.filter((item) => item.collectionIds?.includes(filters.collectionId));
     }
   }
 
   // Favorites filter
   if (filters.favoritesOnly) {
-    results = results.filter(item => item.isFavorite);
+    results = results.filter((item) => item.isFavorite);
   }
 
   // Sort
@@ -2467,7 +2907,7 @@ export const getLibraryAsync = async (db, artistId) => {
       const mediaRef = collection(db, 'artists', artistId, 'library', 'data', 'mediaItems');
       const snapshot = await getDocs(mediaRef);
       if (!snapshot.empty) {
-        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
         log('[Library] Loaded from Firestore:', items.length, 'items');
         return items;
       }
@@ -2499,31 +2939,41 @@ export const subscribeToLibrary = (db, artistId, callback) => {
   return onSnapshot(
     mediaRef,
     (snapshot) => {
-      const firestoreItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const localItems = getLibrary(artistId);
+      const firestoreItems = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 
-      // Merge: start with localStorage items, overlay Firestore items (Firestore wins per-item).
-      // This prevents data loss when Firestore has fewer items than localStorage
-      // (e.g., writes that haven't synced yet, or items added before Firestore sync existed).
-      const merged = new Map();
-      for (const item of localItems) merged.set(item.id, item);
-      for (const item of firestoreItems) merged.set(item.id, item);
-      const result = [...merged.values()];
+      if (firestoreItems.length > 0) {
+        // Firestore is the single source of truth
+        log('[Library] Firestore:', firestoreItems.length, 'items');
 
-      log('[Library] Real-time merge:', firestoreItems.length, 'Firestore +', localItems.length, 'local →', result.length, 'merged');
+        // Always update in-memory cache (survives localStorage quota exceeded)
+        _firestoreLibraryCache.set(artistId, firestoreItems);
 
-      // Save merged result to localStorage so future reads are consistent
-      if (result.length > localItems.length) {
-        try { saveLibrary(artistId, result); } catch (_) { /* best-effort */ }
+        // Cache to localStorage for offline/instant loads
+        try {
+          saveLibrary(artistId, firestoreItems);
+        } catch (_) {
+          /* best-effort */
+        }
+
+        callback(firestoreItems);
+      } else {
+        // Firestore empty — check localStorage and upload if data exists
+        const localItems = getLibrary(artistId);
+        if (localItems.length > 0) {
+          log('[Library] Uploading', localItems.length, 'local items to Firestore');
+          localItems.forEach((item) => {
+            const docRef = doc(db, 'artists', artistId, 'library', 'data', 'mediaItems', item.id);
+            setDoc(docRef, { ...item, updatedAt: serverTimestamp() }).catch(log.error);
+          });
+        }
+        callback(localItems);
       }
-
-      callback(result);
     },
     (error) => {
       log.error('[Library] Subscription error:', error);
       // Fallback to localStorage on error
       callback(getLibrary(artistId));
-    }
+    },
   );
 };
 
@@ -2552,7 +3002,7 @@ export const addToLibraryAsync = async (db, artistId, mediaItem) => {
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'mediaItems', newItem.id);
       await setDoc(docRef, {
         ...newItem,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       });
       log('[Library] Saved to Firestore:', newItem.id);
       localResult.syncedToCloud = true;
@@ -2573,7 +3023,7 @@ export const addToLibraryAsync = async (db, artistId, mediaItem) => {
  * @returns {Promise<Object[]>} Added items
  */
 export const addManyToLibraryAsync = async (db, artistId, mediaItems) => {
-  const newItems = mediaItems.map(item => item.id ? item : createMediaItem(item));
+  const newItems = mediaItems.map((item) => (item.id ? item : createMediaItem(item)));
 
   // Always save to localStorage first
   const localResult = addManyToLibrary(artistId, newItems);
@@ -2585,11 +3035,11 @@ export const addManyToLibraryAsync = async (db, artistId, mediaItems) => {
         const chunk = newItems.slice(i, i + 500);
         const batch = writeBatch(db);
 
-        chunk.forEach(item => {
+        chunk.forEach((item) => {
           const docRef = doc(db, 'artists', artistId, 'library', 'data', 'mediaItems', item.id);
           batch.set(docRef, {
             ...item,
-            updatedAt: serverTimestamp()
+            updatedAt: serverTimestamp(),
           });
         });
 
@@ -2625,7 +3075,7 @@ export const updateLibraryItemAsync = async (db, artistId, mediaId, updates) => 
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'mediaItems', mediaId);
       await updateDoc(docRef, {
         ...updates,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       });
       log('[Library] Updated in Firestore:', mediaId);
     } catch (error) {
@@ -2673,34 +3123,12 @@ export const getCollectionsAsync = async (db, artistId) => {
       const collectionsRef = collection(db, 'artists', artistId, 'library', 'data', 'collections');
       const snapshot = await getDocs(collectionsRef);
       if (!snapshot.empty) {
-        const userCollections = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        // Merge localStorage bankA/bankB onto Firestore results
-        // (banks are saved to localStorage by assignToBank and may not yet be in Firestore)
-        const localCollections = getUserCollections(artistId);
-        const mergedCollections = userCollections.map(col => {
-          const localCol = localCollections.find(lc => lc.id === col.id);
-          if (localCol) {
-            return {
-              ...col,
-              bankA: localCol.bankA || col.bankA || [],
-              bankB: localCol.bankB || col.bankB || [],
-              bankC: localCol.bankC || col.bankC || [],
-              bankD: localCol.bankD || col.bankD || [],
-              textBank1: localCol.textBank1 || col.textBank1 || [],
-              textBank2: localCol.textBank2 || col.textBank2 || [],
-              textBank3: localCol.textBank3 || col.textBank3 || [],
-              textBank4: localCol.textBank4 || col.textBank4 || [],
-              videoTextBank1: localCol.videoTextBank1 || col.videoTextBank1 || [],
-              videoTextBank2: localCol.videoTextBank2 || col.videoTextBank2 || [],
-              textTemplates: localCol.textTemplates || col.textTemplates || [],
-            };
-          }
-          return col;
-        });
-        // Always include smart collections (computed client-side)
+        const collections = snapshot.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() }))
+          .map((col) => migrateCollectionBanks(col));
         const smartCollections = createSmartCollections();
-        log('[Library] Collections from Firestore:', mergedCollections.length, '(with localStorage bank merge)');
-        return [...smartCollections, ...mergedCollections];
+        log('[Library] Collections from Firestore:', collections.length);
+        return [...smartCollections, ...collections];
       }
     } catch (error) {
       log.warn('[Library] Firestore collections read failed:', error.message);
@@ -2727,13 +3155,33 @@ export const subscribeToCollections = (db, artistId, callback) => {
   return onSnapshot(
     collectionsRef,
     (snapshot) => {
-      const rawFirestoreCollections = snapshot.docs.map(doc => {
+      const rawFirestoreCollections = snapshot.docs.map((doc) => {
         const data = doc.data();
         // Deserialize banks/textBanks (stored as JSON strings to avoid Firestore nested array restriction)
-        if (typeof data.banks === 'string') try { data.banks = JSON.parse(data.banks); } catch { data.banks = []; }
-        if (typeof data.textBanks === 'string') try { data.textBanks = JSON.parse(data.textBanks); } catch { data.textBanks = []; }
-        if (typeof data.clipperSessions === 'string') try { data.clipperSessions = JSON.parse(data.clipperSessions); } catch { data.clipperSessions = []; }
-        if (typeof data.mediaBanks === 'string') try { data.mediaBanks = JSON.parse(data.mediaBanks); } catch { data.mediaBanks = null; }
+        if (typeof data.banks === 'string')
+          try {
+            data.banks = JSON.parse(data.banks);
+          } catch {
+            data.banks = [];
+          }
+        if (typeof data.textBanks === 'string')
+          try {
+            data.textBanks = JSON.parse(data.textBanks);
+          } catch {
+            data.textBanks = [];
+          }
+        if (typeof data.clipperSessions === 'string')
+          try {
+            data.clipperSessions = JSON.parse(data.clipperSessions);
+          } catch {
+            data.clipperSessions = [];
+          }
+        if (typeof data.mediaBanks === 'string')
+          try {
+            data.mediaBanks = JSON.parse(data.mediaBanks);
+          } catch {
+            data.mediaBanks = null;
+          }
         return { id: doc.id, ...data };
       });
 
@@ -2742,7 +3190,7 @@ export const subscribeToCollections = (db, artistId, callback) => {
       // multiple niches can legitimately share the same name (e.g., two "Montage" niches
       // in different projects). Deduping niches by name causes data loss.
       const seenProjectNames = new Set();
-      const firestoreCollections = rawFirestoreCollections.filter(col => {
+      const firestoreCollections = rawFirestoreCollections.filter((col) => {
         if (col.isProjectRoot) {
           const key = (col.name || col.id).replace(/^@+/, '');
           if (seenProjectNames.has(key)) return false;
@@ -2752,143 +3200,71 @@ export const subscribeToCollections = (db, artistId, callback) => {
       });
 
       if (firestoreCollections.length > 0) {
-        // Merge localStorage bank data onto Firestore results
-        // Banks (bankA, bankB, textBank1, textBank2, textTemplates) may only exist in
-        // localStorage if they haven't been synced to Firestore yet
-        const localCollections = getUserCollections(artistId);
-        const mergedCollections = firestoreCollections.map(col => {
-          const localCol = localCollections.find(lc => lc.id === col.id);
-          if (localCol) {
-            // Migrate both sources to new format, then merge
-            const migratedCol = migrateCollectionBanks(col);
-            const migratedLocal = migrateCollectionBanks(localCol);
+        // Firestore is the single source of truth. Migrate banks and use directly.
+        const collections = firestoreCollections
+          .filter((c) => !pendingDeletionIds.has(c.id))
+          .map((col) => migrateCollectionBanks(col));
 
-            // ── Timestamp comparison for smarter merge ──
-            // If a recent local write is tracked, trust local over potentially stale Firestore.
-            // Otherwise compare updatedAt: if Firestore is >5s newer (from another device),
-            // prefer Firestore for scalar fields (captions, hashtags, text banks).
-            const recentWrite = recentCollectionSnapshots.get(col.id);
-            const localTime = new Date(localCol.updatedAt || 0).getTime();
-            const fsUpdatedAt = col.updatedAt?.toMillis ? col.updatedAt.toMillis() : new Date(col.updatedAt || 0).getTime();
-            const localIsRecent = recentWrite && (Date.now() - recentWrite.ts < 60000);
-            const firestoreIsNewer = !localIsRecent && fsUpdatedAt > localTime + 5000;
-
-            // Merge banks: union Firestore + local to prevent race condition data loss
-            const mergedBanks = (migratedCol.banks || []).map((fsBank, i) => {
-              const localBank = (migratedLocal.banks || [])[i] || [];
-              return [...new Set([...(fsBank || []), ...localBank])];
-            });
-            // If local has more banks than Firestore, append them
-            if ((migratedLocal.banks || []).length > mergedBanks.length) {
-              for (let i = mergedBanks.length; i < migratedLocal.banks.length; i++) {
-                mergedBanks.push(migratedLocal.banks[i] || []);
-              }
-            }
-            const mergedTextBanks = (migratedCol.textBanks || []).map((fsBank, i) => {
-              const localBank = (migratedLocal.textBanks || [])[i] || [];
-              return (fsBank?.length > 0 ? fsBank : localBank);
-            });
-            if ((migratedLocal.textBanks || []).length > mergedTextBanks.length) {
-              for (let i = mergedTextBanks.length; i < migratedLocal.textBanks.length; i++) {
-                mergedTextBanks.push(migratedLocal.textBanks[i] || []);
-              }
-            }
-
-            // For scalar fields (captions, hashtags), use timestamp to pick the fresher source
-            const pickScalar = (fsVal, localVal) => {
-              if (firestoreIsNewer) return fsVal?.length > 0 ? fsVal : localVal || [];
-              return localVal?.length > 0 ? localVal : fsVal || [];
-            };
-
-            return {
-              ...col,
-              // Preserve project fields from localStorage if Firestore hasn't caught up yet
-              ...(localCol.projectId && !col.projectId ? { projectId: localCol.projectId } : {}),
-              ...(localCol.isProjectRoot && !col.isProjectRoot ? { isProjectRoot: localCol.isProjectRoot, projectColor: localCol.projectColor, linkedPage: localCol.linkedPage } : {}),
-              banks: mergedBanks,
-              textBanks: mergedTextBanks,
-              captionBank: pickScalar(col.captionBank, localCol.captionBank),
-              hashtagBank: pickScalar(col.hashtagBank, localCol.hashtagBank),
-              videoTextBank1: pickScalar(col.videoTextBank1, localCol.videoTextBank1),
-              videoTextBank2: pickScalar(col.videoTextBank2, localCol.videoTextBank2),
-              textTemplates: pickScalar(col.textTemplates, localCol.textTemplates),
-              mediaIds: (() => {
-                let ids = [...new Set([...(col.mediaIds || []), ...(localCol.mediaIds || [])])];
-                const removed = recentCollectionRemovals.get(col.id)?.removedIds;
-                if (removed?.size > 0) ids = ids.filter(id => !removed.has(id));
-                return ids;
-              })(),
-            };
-          }
-          return migrateCollectionBanks(col);
-        });
-
-        // Firestore is the source of truth. If a collection is NOT in Firestore,
-        // it was either deleted or never synced. Only preserve localStorage-only items
-        // that were created in the last 30 seconds (truly in-flight writes).
-        const firestoreIds = new Set(firestoreCollections.map(c => c.id));
-        const mergedNames = new Set(mergedCollections.filter(c => c.isProjectRoot).map(c => (c.name || '').replace(/^@+/, '')));
-        const IN_FLIGHT_TTL = 30 * 1000; // 30 seconds — just enough for a write to reach Firestore
-        const now = Date.now();
-        const localOnlyCollections = localCollections.filter(lc => {
-          if (firestoreIds.has(lc.id)) return false;
-          if (pendingDeletionIds.has(lc.id)) return false;
-          // Only keep very recent localStorage-only items (actively in-flight writes)
-          const createdAt = new Date(lc.createdAt || lc.updatedAt || 0).getTime();
-          if (now - createdAt > IN_FLIGHT_TTL) return false;
-          // Dedup project roots by normalized name
-          if (lc.isProjectRoot) {
-            const normName = (lc.name || '').replace(/^@+/, '');
-            if (mergedNames.has(normName)) return false;
-            mergedNames.add(normName);
-          }
-          return true;
-        });
-        let allMerged = [...mergedCollections, ...localOnlyCollections]
-          .filter(c => !pendingDeletionIds.has(c.id));
-
-        // SAFETY GUARD: Never reduce a collection's mediaIds count during merge
-        // UNLESS the reduction is from an intentional removal (tracked in recentCollectionRemovals).
-        for (const merged of allMerged) {
-          const local = localCollections.find(lc => lc.id === merged.id);
-          if (local && local.mediaIds?.length > 0 && (!merged.mediaIds || merged.mediaIds.length < local.mediaIds.length)) {
-            const removed = recentCollectionRemovals.get(merged.id)?.removedIds;
-            if (removed?.size > 0) {
-              // Intentional removal — don't re-add removed items
-              continue;
-            }
-            const union = [...new Set([...(merged.mediaIds || []), ...local.mediaIds])];
-            if (union.length > merged.mediaIds?.length) {
-              log.warn('[Collections] Subscription merge would reduce mediaIds for',
-                merged.name, 'from', local.mediaIds.length, 'to', merged.mediaIds?.length,
-                '- preserving union of', union.length);
-              merged.mediaIds = union;
+        // Cleanup: undo bad auto-migration that assigned legacy niches to wrong projects.
+        // If a niche's createdAt predates its assigned project by >1 day, clear the projectId.
+        const projectRoots = collections.filter((c) => c.isProjectRoot);
+        if (projectRoots.length > 0) {
+          const projectMap = new Map(projectRoots.map((p) => [p.id, p]));
+          for (const niche of collections.filter((c) => c.isPipeline && c.projectId)) {
+            const project = projectMap.get(niche.projectId);
+            if (!project) continue;
+            const nicheDate = new Date(niche.createdAt || 0).getTime();
+            const projDate = new Date(project.createdAt || 0).getTime();
+            // Niche created >1 day before its project → was mis-assigned by auto-migration
+            if (nicheDate > 0 && projDate > 0 && nicheDate < projDate - 86400000) {
+              log('[Migration] Clearing mis-assigned projectId on legacy niche', niche.name);
+              delete niche.projectId;
+              saveCollectionToFirestore(db, artistId, niche).catch(() => {});
             }
           }
         }
 
-        // Log merge results for debugging
-        const pipelines = allMerged.filter(c => c.isPipeline);
-        log('[subscribeToCollections] Merge result:', pipelines.length, 'niches →',
-          pipelines.map(c => `${c.name}(${c.mediaIds?.length || 0}media)`).join(', '));
-
-        // Save merged data to localStorage for offline access
-        try {
-          localStorage.setItem(getCollectionsKey(artistId), JSON.stringify(allMerged));
-        } catch (e) {}
+        // Log for debugging
+        const pipelines = collections.filter((c) => c.isPipeline);
+        log(
+          '[subscribeToCollections] Firestore:',
+          collections.length,
+          'collections,',
+          pipelines.length,
+          'niches →',
+          pipelines
+            .map(
+              (c) =>
+                `${c.name}(${c.mediaIds?.length || 0}media, tb:${c.textBanks?.map((tb) => tb?.length || 0).join('/') || 'none'})`,
+            )
+            .join(', '),
+        );
 
         const smartCollections = createSmartCollections();
-        callback([...smartCollections, ...allMerged]);
+
+        // Always update in-memory cache (survives localStorage quota exceeded)
+        _firestoreCollectionsCache.set(artistId, collections);
+
+        // Call the callback BEFORE caching to localStorage so that safeSetCollections
+        // can compare Firestore data against the real local data (not an overwritten copy).
+        callback([...smartCollections, ...collections]);
+
+        // Cache to localStorage for offline/instant loads (AFTER callback)
+        try {
+          localStorage.setItem(getCollectionsKey(artistId), JSON.stringify(collections));
+        } catch (e) {}
       } else {
         // Firestore empty — check localStorage and upload if data exists
         const localCollections = getCollections(artistId);
-        const userCollections = localCollections.filter(c => c.type !== 'smart' && !c.id?.startsWith('smart_'));
+        const userCollections = localCollections.filter(
+          (c) => c.type !== 'smart' && !c.id?.startsWith('smart_'),
+        );
 
         if (userCollections.length > 0) {
           // Upload local collections to Firestore (including banks)
-          userCollections.forEach(col => {
-            const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', col.id);
-            setDoc(docRef, { ...col, updatedAt: serverTimestamp() }).catch(log.error);
+          // Must use saveCollectionToFirestore to serialize nested arrays as JSON strings
+          userCollections.forEach((col) => {
+            saveCollectionToFirestore(db, artistId, col).catch(log.error);
           });
         }
 
@@ -2898,7 +3274,7 @@ export const subscribeToCollections = (db, artistId, callback) => {
     (error) => {
       log.error('[Collections] Firestore subscription error:', error);
       callback(getCollections(artistId));
-    }
+    },
   );
 };
 
@@ -2912,12 +3288,21 @@ export const subscribeToCollections = (db, artistId, callback) => {
 export const saveCollectionToFirestore = async (db, artistId, collectionData) => {
   if (!db || !artistId || !collectionData?.id) return false;
   try {
-    const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', collectionData.id);
+    const docRef = doc(
+      db,
+      'artists',
+      artistId,
+      'library',
+      'data',
+      'collections',
+      collectionData.id,
+    );
     // Firestore doesn't support nested arrays. Serialize banks/textBanks as JSON strings.
     const data = { ...collectionData, updatedAt: serverTimestamp() };
     if (Array.isArray(data.banks)) data.banks = JSON.stringify(data.banks);
     if (Array.isArray(data.textBanks)) data.textBanks = JSON.stringify(data.textBanks);
-    if (Array.isArray(data.clipperSessions)) data.clipperSessions = JSON.stringify(data.clipperSessions);
+    if (Array.isArray(data.clipperSessions))
+      data.clipperSessions = JSON.stringify(data.clipperSessions);
     if (Array.isArray(data.mediaBanks)) data.mediaBanks = JSON.stringify(data.mediaBanks);
     await setDoc(docRef, data);
     return true;
@@ -2943,7 +3328,7 @@ export const addToCollectionAsync = async (db, artistId, collectionId, mediaIds)
   let syncedToCloud = false;
   if (db && artistId) {
     const collections = getUserCollections(artistId);
-    const col = collections.find(c => c.id === collectionId);
+    const col = collections.find((c) => c.id === collectionId);
     if (col) {
       syncedToCloud = await saveCollectionToFirestore(db, artistId, col);
     }
@@ -2967,7 +3352,7 @@ export const removeFromCollectionAsync = async (db, artistId, collectionId, medi
   let syncedToCloud = false;
   if (db && artistId) {
     const collections = getUserCollections(artistId);
-    const col = collections.find(c => c.id === collectionId);
+    const col = collections.find((c) => c.id === collectionId);
     if (col) {
       syncedToCloud = await saveCollectionToFirestore(db, artistId, col);
     }
@@ -2992,7 +3377,7 @@ export const assignToBankAsync = async (db, artistId, collectionId, mediaIds, ba
   let syncedToCloud = false;
   if (db && artistId) {
     const collections = getUserCollections(artistId);
-    const col = collections.find(c => c.id === collectionId);
+    const col = collections.find((c) => c.id === collectionId);
     if (col) {
       syncedToCloud = await saveCollectionToFirestore(db, artistId, col);
     }
@@ -3077,7 +3462,7 @@ export const createNewCollectionAsync = async (db, artistId, collectionData) => 
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', localResult.id);
       await setDoc(docRef, {
         ...localResult,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       });
       log('[Library] Collection saved to Firestore:', localResult.id);
     } catch (error) {
@@ -3106,9 +3491,9 @@ export const migrateToFirestore = async (db, artistId) => {
       collections: 0,
       createdContent: 0,
       lyrics: 0,
-      onboarding: false
+      onboarding: false,
     },
-    errors: []
+    errors: [],
   };
 
   try {
@@ -3116,7 +3501,7 @@ export const migrateToFirestore = async (db, artistId) => {
     const library = getLibrary(artistId);
     if (library.length > 0) {
       const batch = writeBatch(db);
-      library.forEach(item => {
+      library.forEach((item) => {
         const docRef = doc(db, 'artists', artistId, 'library', 'data', 'mediaItems', item.id);
         batch.set(docRef, item);
       });
@@ -3129,7 +3514,7 @@ export const migrateToFirestore = async (db, artistId) => {
     const collections = getUserCollections(artistId);
     if (collections.length > 0) {
       const batch = writeBatch(db);
-      collections.forEach(col => {
+      collections.forEach((col) => {
         const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', col.id);
         batch.set(docRef, col);
       });
@@ -3151,16 +3536,25 @@ export const migrateToFirestore = async (db, artistId) => {
     const createdContent = getCreatedContent(artistId);
     if (createdContent.videos.length > 0 || createdContent.slideshows.length > 0) {
       const batch = writeBatch(db);
-      createdContent.videos.forEach(video => {
+      createdContent.videos.forEach((video) => {
         const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', video.id);
         batch.set(docRef, video);
       });
-      createdContent.slideshows.forEach(slideshow => {
-        const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', slideshow.id);
+      createdContent.slideshows.forEach((slideshow) => {
+        const docRef = doc(
+          db,
+          'artists',
+          artistId,
+          'library',
+          'data',
+          'createdContent',
+          slideshow.id,
+        );
         batch.set(docRef, slideshow);
       });
       await batch.commit();
-      result.migrated.createdContent = createdContent.videos.length + createdContent.slideshows.length;
+      result.migrated.createdContent =
+        createdContent.videos.length + createdContent.slideshows.length;
       log('[Migration] Migrated created content:', result.migrated.createdContent);
     }
 
@@ -3168,7 +3562,7 @@ export const migrateToFirestore = async (db, artistId) => {
     const lyrics = getLyrics(artistId);
     if (lyrics.length > 0) {
       const batch = writeBatch(db);
-      lyrics.forEach(lyric => {
+      lyrics.forEach((lyric) => {
         const docRef = doc(db, 'artists', artistId, 'library', 'data', 'lyrics', lyric.id);
         batch.set(docRef, lyric);
       });
@@ -3178,7 +3572,6 @@ export const migrateToFirestore = async (db, artistId) => {
     }
 
     log('[Migration] Complete for artist:', artistId, result.migrated);
-
   } catch (error) {
     log.error('[Migration] Failed:', error);
     result.success = false;
@@ -3202,9 +3595,6 @@ export default {
   createMediaItem,
   createCollection,
   createSmartCollections,
-  createCreatedVideo,
-  createCreatedSlideshow,
-  createLyricsEntry,
 
   // Library (localStorage)
   getLibrary,
@@ -3237,6 +3627,7 @@ export default {
   getCollectionMedia,
   addToTextBank,
   removeFromTextBank,
+  updateTextBankEntry,
   updateTextBank,
   saveTextTemplates,
   getCollectionCaptionBank,

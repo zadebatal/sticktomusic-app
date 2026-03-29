@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { IconButton } from '../../ui/components/IconButton';
 import { FeatherX } from '@subframe/core';
@@ -15,40 +15,57 @@ const TEMPLATES = [
     name: 'Montage',
     description: 'Combine clips on a timeline, cut to beat',
     features: ['Multiple clips on timeline', 'Beat-synced cuts', 'Word-timed text overlays'],
-    icon: 'montage'
+    icon: 'montage',
   },
   {
     id: 'solo-clip',
     name: 'Solo Clip',
     description: 'One clip per video — design once, generate many',
     features: ['Full-duration clip', 'Draggable text overlays', 'Batch generate from text banks'],
-    icon: 'solo-clip'
+    icon: 'solo-clip',
   },
   {
     id: 'multi-clip',
     name: 'Multi-Clip',
     description: 'Multiple clips on a timeline — full duration, batch generate',
-    features: ['Multi-clip timeline', 'Per-clip or full-video text scoping', 'Randomized generation'],
-    icon: 'multi-clip'
+    features: [
+      'Multi-clip timeline',
+      'Per-clip or full-video text scoping',
+      'Randomized generation',
+    ],
+    icon: 'multi-clip',
   },
   {
     id: 'photo-montage',
     name: 'Photo Montage',
     description: 'Turn photos into a fast-paced video with transitions',
-    features: ['Upload or pull from banks', 'Ken Burns pan/zoom effects', 'Beat-synced photo timing'],
-    icon: 'photo-montage'
+    features: [
+      'Upload or pull from banks',
+      'Ken Burns pan/zoom effects',
+      'Beat-synced photo timing',
+    ],
+    icon: 'photo-montage',
   },
   {
     id: 'clipper',
     name: 'Clipper',
     description: 'Split a video into multiple clips — instant, no quality loss',
     features: ['Mark in/out points', 'Stream-copy extraction (instant)', 'Export clips separately'],
-    icon: 'clipper'
-  }
+    icon: 'clipper',
+  },
 ];
 
 const MontageIcon = () => (
-  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="48"
+    height="48"
+    viewBox="0 0 48 48"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     {/* Film strip / multi-clip */}
     <rect x="4" y="8" width="40" height="32" rx="3" />
     <line x1="16" y1="8" x2="16" y2="40" strokeDasharray="3 2" />
@@ -68,13 +85,31 @@ const MontageIcon = () => (
 );
 
 const SoloClipIcon = () => (
-  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="48"
+    height="48"
+    viewBox="0 0 48 48"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     {/* Single clip frame */}
     <rect x="8" y="6" width="32" height="36" rx="3" />
     {/* Play triangle */}
     <polygon points="18,18 30,24 18,30" fill="currentColor" stroke="none" opacity="0.3" />
     {/* Text overlay indicator */}
-    <rect x="12" y="32" width="24" height="6" rx="2" fill="currentColor" opacity="0.15" stroke="none" />
+    <rect
+      x="12"
+      y="32"
+      width="24"
+      height="6"
+      rx="2"
+      fill="currentColor"
+      opacity="0.15"
+      stroke="none"
+    />
     <line x1="15" y1="35" x2="33" y2="35" strokeWidth="1.5" opacity="0.6" />
     {/* Copy/generate arrows */}
     <path d="M42 16 l4 0 l0 28 l-28 0 l0 -4" strokeDasharray="3 2" opacity="0.3" />
@@ -82,20 +117,47 @@ const SoloClipIcon = () => (
 );
 
 const MultiClipIcon = () => (
-  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="48"
+    height="48"
+    viewBox="0 0 48 48"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     {/* Stacked clip frames */}
     <rect x="6" y="6" width="26" height="32" rx="3" />
     <rect x="16" y="10" width="26" height="32" rx="3" />
     {/* Play triangle */}
     <polygon points="24,22 34,28 24,34" fill="currentColor" stroke="none" opacity="0.3" />
     {/* Text overlay bar */}
-    <rect x="20" y="36" width="18" height="4" rx="1.5" fill="currentColor" opacity="0.15" stroke="none" />
+    <rect
+      x="20"
+      y="36"
+      width="18"
+      height="4"
+      rx="1.5"
+      fill="currentColor"
+      opacity="0.15"
+      stroke="none"
+    />
     <line x1="22" y1="38" x2="36" y2="38" strokeWidth="1.5" opacity="0.6" />
   </svg>
 );
 
 const PhotoMontageIcon = () => (
-  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="48"
+    height="48"
+    viewBox="0 0 48 48"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     {/* Stacked photo frames */}
     <rect x="6" y="10" width="24" height="18" rx="2" />
     <rect x="14" y="16" width="24" height="18" rx="2" />
@@ -112,31 +174,67 @@ const PhotoMontageIcon = () => (
 );
 
 const ClipperIcon = () => (
-  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="48"
+    height="48"
+    viewBox="0 0 48 48"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     {/* Scissors */}
     <circle cx="14" cy="14" r="4" />
     <circle cx="14" cy="34" r="4" />
     <line x1="34" y1="8" x2="17" y2="31" />
     <line x1="34" y1="40" x2="17" y2="17" />
     {/* Cut segments */}
-    <rect x="32" y="10" width="10" height="8" rx="2" fill="currentColor" opacity="0.2" stroke="none" />
-    <rect x="32" y="22" width="10" height="8" rx="2" fill="currentColor" opacity="0.15" stroke="none" />
-    <rect x="32" y="34" width="10" height="8" rx="2" fill="currentColor" opacity="0.1" stroke="none" />
+    <rect
+      x="32"
+      y="10"
+      width="10"
+      height="8"
+      rx="2"
+      fill="currentColor"
+      opacity="0.2"
+      stroke="none"
+    />
+    <rect
+      x="32"
+      y="22"
+      width="10"
+      height="8"
+      rx="2"
+      fill="currentColor"
+      opacity="0.15"
+      stroke="none"
+    />
+    <rect
+      x="32"
+      y="34"
+      width="10"
+      height="8"
+      rx="2"
+      fill="currentColor"
+      opacity="0.1"
+      stroke="none"
+    />
   </svg>
 );
 
 const ICON_MAP = {
-  'montage': MontageIcon,
+  montage: MontageIcon,
   'solo-clip': SoloClipIcon,
   'multi-clip': MultiClipIcon,
   'photo-montage': PhotoMontageIcon,
-  'clipper': ClipperIcon
+  clipper: ClipperIcon,
 };
 
 const TemplatePicker = ({ onSelect, onClose, clipCount = 0 }) => {
   const [hoveredId, setHoveredId] = useState(null);
   const { theme } = useTheme();
-  const styles = getStyles(theme);
+  const styles = useMemo(() => getStyles(theme), [theme]);
 
   return (
     <div style={styles.overlay}>
@@ -146,7 +244,9 @@ const TemplatePicker = ({ onSelect, onClose, clipCount = 0 }) => {
           <div>
             <h2 style={styles.title}>Choose a video style</h2>
             <p style={styles.subtitle}>
-              {clipCount > 0 ? `${clipCount} clip${clipCount !== 1 ? 's' : ''} selected` : 'Select how to edit your clips'}
+              {clipCount > 0
+                ? `${clipCount} clip${clipCount !== 1 ? 's' : ''} selected`
+                : 'Select how to edit your clips'}
             </p>
           </div>
           <IconButton icon={<FeatherX />} onClick={onClose} aria-label="Close" />
@@ -154,7 +254,7 @@ const TemplatePicker = ({ onSelect, onClose, clipCount = 0 }) => {
 
         {/* Template Cards */}
         <div style={styles.cardGrid}>
-          {TEMPLATES.map(template => {
+          {TEMPLATES.map((template) => {
             const IconComponent = ICON_MAP[template.icon] || MontageIcon;
             const isHovered = hoveredId === template.id;
 
@@ -163,16 +263,18 @@ const TemplatePicker = ({ onSelect, onClose, clipCount = 0 }) => {
                 key={template.id}
                 style={{
                   ...styles.card,
-                  ...(isHovered ? styles.cardHover : {})
+                  ...(isHovered ? styles.cardHover : {}),
                 }}
                 onClick={() => onSelect(template.id)}
                 onMouseEnter={() => setHoveredId(template.id)}
                 onMouseLeave={() => setHoveredId(null)}
               >
-                <div style={{
-                  ...styles.iconContainer,
-                  ...(isHovered ? styles.iconContainerHover : {})
-                }}>
+                <div
+                  style={{
+                    ...styles.iconContainer,
+                    ...(isHovered ? styles.iconContainerHover : {}),
+                  }}
+                >
                   <IconComponent />
                 </div>
 
@@ -182,7 +284,14 @@ const TemplatePicker = ({ onSelect, onClose, clipCount = 0 }) => {
                 <div style={styles.featureList}>
                   {template.features.map((feature, i) => (
                     <div key={i} style={styles.featureItem}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5">
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#6366f1"
+                        strokeWidth="2.5"
+                      >
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                       <span>{feature}</span>
@@ -190,10 +299,12 @@ const TemplatePicker = ({ onSelect, onClose, clipCount = 0 }) => {
                   ))}
                 </div>
 
-                <div style={{
-                  ...styles.selectButton,
-                  ...(isHovered ? styles.selectButtonHover : {})
-                }}>
+                <div
+                  style={{
+                    ...styles.selectButton,
+                    ...(isHovered ? styles.selectButtonHover : {}),
+                  }}
+                >
                   Select {template.name}
                 </div>
               </div>
@@ -214,7 +325,7 @@ const getStyles = (theme) => ({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10000,
-    padding: '20px'
+    padding: '20px',
   },
   container: {
     backgroundColor: theme.bg.input,
@@ -224,30 +335,30 @@ const getStyles = (theme) => ({
     maxWidth: '960px',
     width: '100%',
     maxHeight: '90vh',
-    overflow: 'auto'
+    overflow: 'auto',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: '32px'
+    marginBottom: '32px',
   },
   title: {
     margin: 0,
     fontSize: '22px',
     fontWeight: '600',
     color: theme.text.primary,
-    letterSpacing: '-0.01em'
+    letterSpacing: '-0.01em',
   },
   subtitle: {
     margin: '6px 0 0 0',
     fontSize: '13px',
-    color: theme.text.secondary
+    color: theme.text.secondary,
   },
   cardGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-    gap: '16px'
+    gap: '16px',
   },
   card: {
     backgroundColor: theme.hover.bg,
@@ -259,12 +370,12 @@ const getStyles = (theme) => ({
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    textAlign: 'center'
+    textAlign: 'center',
   },
   cardHover: {
     backgroundColor: 'rgba(99, 102, 241, 0.08)',
     borderColor: 'rgba(99, 102, 241, 0.3)',
-    transform: 'translateY(-2px)'
+    transform: 'translateY(-2px)',
   },
   iconContainer: {
     width: '80px',
@@ -276,30 +387,30 @@ const getStyles = (theme) => ({
     justifyContent: 'center',
     marginBottom: '16px',
     color: theme.text.secondary,
-    transition: 'all 0.2s ease'
+    transition: 'all 0.2s ease',
   },
   iconContainerHover: {
     backgroundColor: 'rgba(99, 102, 241, 0.15)',
-    color: theme.accent.hover
+    color: theme.accent.hover,
   },
   cardTitle: {
     margin: '0 0 6px 0',
     fontSize: '17px',
     fontWeight: '600',
-    color: theme.text.primary
+    color: theme.text.primary,
   },
   cardDescription: {
     margin: '0 0 16px 0',
     fontSize: '13px',
     color: theme.text.secondary,
-    lineHeight: '1.4'
+    lineHeight: '1.4',
   },
   featureList: {
     display: 'flex',
     flexDirection: 'column',
     gap: '6px',
     marginBottom: '20px',
-    width: '100%'
+    width: '100%',
   },
   featureItem: {
     display: 'flex',
@@ -308,7 +419,7 @@ const getStyles = (theme) => ({
     fontSize: '12px',
     color: theme.text.primary,
     justifyContent: 'flex-start',
-    paddingLeft: '20px'
+    paddingLeft: '20px',
   },
   selectButton: {
     marginTop: 'auto',
@@ -319,13 +430,13 @@ const getStyles = (theme) => ({
     fontSize: '13px',
     fontWeight: '500',
     transition: 'all 0.2s ease',
-    border: '1px solid rgba(99, 102, 241, 0.2)'
+    border: '1px solid rgba(99, 102, 241, 0.2)',
   },
   selectButtonHover: {
     backgroundColor: theme.accent.primary,
     color: theme.text.primary,
-    borderColor: theme.accent.primary
-  }
+    borderColor: theme.accent.primary,
+  },
 });
 
 export default TemplatePicker;

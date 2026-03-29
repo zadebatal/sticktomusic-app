@@ -1,5 +1,10 @@
 import { useState, useCallback } from 'react';
-import { transcribeAudio, getStoredApiKey, storeApiKey, validateApiKey } from '../services/whisperService';
+import {
+  transcribeAudio,
+  getStoredApiKey,
+  storeApiKey,
+  validateApiKey,
+} from '../services/whisperService';
 
 export function useLyricAnalyzer() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -12,8 +17,13 @@ export function useLyricAnalyzer() {
     setProgress('Starting analysis...');
 
     try {
-      const key = apiKey || getStoredApiKey();
-      if (!key) throw new Error('API_KEY_REQUIRED');
+      // Use personal key if stored, otherwise fall back to team proxy
+      // (team proxy only works on Vercel, not local CRA dev server)
+      const storedKey = apiKey || getStoredApiKey();
+      const key = storedKey || 'team';
+      if (!storedKey && window.location.hostname === 'localhost') {
+        throw new Error('API_KEY_REQUIRED');
+      }
 
       // Skip validation for 'team' sentinel — proxy handles auth server-side
       if (key !== 'team') {
@@ -35,5 +45,5 @@ export function useLyricAnalyzer() {
     }
   }, []);
 
-  return { analyze, isAnalyzing, progress, error, hasApiKey: !!getStoredApiKey() };
+  return { analyze, isAnalyzing, progress, error, hasApiKey: true };
 }

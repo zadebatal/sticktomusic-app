@@ -19,19 +19,31 @@ const THEMES = {
     shadow: '0 4px 20px rgba(0,0,0,0.3)',
     // Tailwind class strings (for LandingPage, AppShell, tabs)
     tw: {
-      bgPage: 'bg-zinc-950', bgSurface: 'bg-zinc-900', bgElevated: 'bg-zinc-800', bgInput: 'bg-zinc-900',
-      textPrimary: 'text-zinc-100', textSecondary: 'text-zinc-400', textMuted: 'text-zinc-600',
-      accentText: 'text-indigo-400', accentBg: 'bg-indigo-600', accentBgHover: 'hover:bg-indigo-700',
-      border: 'border-zinc-800', borderSubtle: 'border-zinc-900',
-      hoverBg: 'hover:bg-zinc-800', hoverText: 'hover:text-white',
-      tabActive: 'bg-white text-black', tabInactive: 'text-zinc-400 hover:text-white hover:bg-zinc-900',
-      cardBg: 'bg-zinc-900/50', cardBorder: 'border-zinc-800',
-      inputBorder: 'border-zinc-700', inputFocus: 'focus:border-indigo-500',
+      bgPage: 'bg-zinc-950',
+      bgSurface: 'bg-zinc-900',
+      bgElevated: 'bg-zinc-800',
+      bgInput: 'bg-zinc-900',
+      textPrimary: 'text-zinc-100',
+      textSecondary: 'text-zinc-400',
+      textMuted: 'text-zinc-600',
+      accentText: 'text-indigo-400',
+      accentBg: 'bg-indigo-600',
+      accentBgHover: 'hover:bg-indigo-700',
+      border: 'border-zinc-800',
+      borderSubtle: 'border-zinc-900',
+      hoverBg: 'hover:bg-zinc-800',
+      hoverText: 'hover:text-white',
+      tabActive: 'bg-white text-black',
+      tabInactive: 'text-zinc-400 hover:text-white hover:bg-zinc-900',
+      cardBg: 'bg-zinc-900/50',
+      cardBorder: 'border-zinc-800',
+      inputBorder: 'border-zinc-700',
+      inputFocus: 'focus:border-indigo-500',
       btnPrimary: 'bg-white text-black hover:bg-zinc-200',
       btnSecondary: 'border border-zinc-600 text-zinc-100 hover:bg-zinc-900',
       btnDanger: 'bg-red-600 text-white hover:bg-red-700',
-    }
-  }
+    },
+  },
 };
 
 // ═══════════════════════════════════════════════════

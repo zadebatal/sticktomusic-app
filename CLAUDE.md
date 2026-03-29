@@ -73,18 +73,32 @@ npm start                # Dev server (port 3000)
 PORT=3001 npm start      # Test build on alternate port
 npx react-scripts build  # Production build
 git push                 # Auto-deploys to Vercel
+npx react-grab@latest    # Visual element selector → describe changes to Claude Code (dev tool, not a dependency)
 ```
 
-## Recent Work (9 sessions)
-1. Theme system + ThemeContext (dark/bright/saintLaurent)
-2. Landing page + AppShell with 5-tab navigation
-3. Artist data isolation fixes
-4. 25+ bug fixes across 5 waves
-5. 31-ticket feature batch: scheduler integrity, audio/lyric workflow, slideshow UX (ALL CAPS, text stroke, resize handles), drafts flow, multi-generation
-6. Dynamic bank refactor: A/B/C/D → unlimited numbered slide banks
+## Recent Work (82 sessions)
+See `~/.claude/projects/.../memory/MEMORY.md` for full session timeline. Key milestones:
+- Projects/Niches system (replaced Pipeline), 6 editors, template configurator
+- Full Subframe→Tailwind conversion, mobile responsive, dark theme locked
+- Automation engine (14 features), approval queue, auto-schedule
+- Comprehensive E2E suite (205 passing tests)
+- Codebase refactoring: App.jsx 7,684→6,307 lines, libraryService split into 4 files
+- Full routing audit (27 fixes), architecture docs created
 
 ## Prime Directive
 Don't break anything that works. Read before editing. Build-verify after each batch of changes.
+
+## Bug Fix Protocol
+When a bug is reported, **do not jump straight to fixing it**. Follow this order:
+1. **Reproduce** — understand the exact steps and conditions
+2. **Write a failing test** that reproduces the bug (unit test or E2E assertion)
+3. **Fix the bug** — use subagents if the fix is non-trivial
+4. **Verify** — the previously failing test now passes
+
+This prevents regressions and proves the fix actually works.
+
+## Plan Mode Discipline
+**Enter plan mode for ANY non-trivial task** (3+ steps, multi-file changes, or architectural decisions). If something goes sideways mid-implementation, **STOP and re-plan immediately** — don't keep pushing through a broken approach.
 
 ## Pre-Deploy Checklist for Data Changes
 

@@ -20,7 +20,7 @@ import {
   where,
   orderBy,
   onSnapshot,
-  serverTimestamp
+  serverTimestamp,
 } from 'firebase/firestore';
 import log from '../utils/logger';
 
@@ -32,83 +32,258 @@ export const DEFAULT_TEMPLATES = {
   Fashion: {
     hashtags: {
       always: ['#fashion', '#style', '#aesthetic'],
-      pool: ['#ootd', '#archive', '#vibes', '#mood', '#runway', '#designer', '#vintage', '#y2k', '#grunge', '#minimalist', '#streetwear', '#haute']
+      pool: [
+        '#ootd',
+        '#archive',
+        '#vibes',
+        '#mood',
+        '#runway',
+        '#designer',
+        '#vintage',
+        '#y2k',
+        '#grunge',
+        '#minimalist',
+        '#streetwear',
+        '#haute',
+      ],
     },
     captions: {
       always: [],
-      pool: ['mood', 'vibe', 'forever', 'dreaming', '✨', 'archive', 'aesthetic', 'core', 'obsessed', 'iconic', 'serving', 'the blueprint']
-    }
+      pool: [
+        'mood',
+        'vibe',
+        'forever',
+        'dreaming',
+        '✨',
+        'archive',
+        'aesthetic',
+        'core',
+        'obsessed',
+        'iconic',
+        'serving',
+        'the blueprint',
+      ],
+    },
   },
   EDM: {
     hashtags: {
       always: ['#edm', '#music', '#electronic'],
-      pool: ['#rave', '#bass', '#dubstep', '#house', '#techno', '#festival', '#dj', '#beats', '#wub', '#plur', '#underground']
+      pool: [
+        '#rave',
+        '#bass',
+        '#dubstep',
+        '#house',
+        '#techno',
+        '#festival',
+        '#dj',
+        '#beats',
+        '#wub',
+        '#plur',
+        '#underground',
+      ],
     },
     captions: {
       always: [],
-      pool: ['wub', 'wub wub', '<3', 'dancedancedance', 'bass drop', 'feel it', '🖤', 'lost in sound', 'the drop', 'vibrations']
-    }
+      pool: [
+        'wub',
+        'wub wub',
+        '<3',
+        'dancedancedance',
+        'bass drop',
+        'feel it',
+        '🖤',
+        'lost in sound',
+        'the drop',
+        'vibrations',
+      ],
+    },
   },
   Runway: {
     hashtags: {
       always: ['#runway', '#fashion', '#couture'],
-      pool: ['#highfashion', '#model', '#designer', '#fashionweek', '#avantgarde', '#editorial', '#vogue', '#luxury', '#catwalk', '#style']
+      pool: [
+        '#highfashion',
+        '#model',
+        '#designer',
+        '#fashionweek',
+        '#avantgarde',
+        '#editorial',
+        '#vogue',
+        '#luxury',
+        '#catwalk',
+        '#style',
+      ],
     },
     captions: {
       always: [],
-      pool: ['walk', 'serve', 'iconic', 'the moment', 'couture', 'editorial', 'pretty', 'elegance', 'grace', 'timeless']
-    }
+      pool: [
+        'walk',
+        'serve',
+        'iconic',
+        'the moment',
+        'couture',
+        'editorial',
+        'pretty',
+        'elegance',
+        'grace',
+        'timeless',
+      ],
+    },
   },
   'Romantic/Soft': {
     hashtags: {
       always: ['#aesthetic', '#dreamy', '#soft'],
-      pool: ['#romantic', '#ethereal', '#gentle', '#pastel', '#love', '#tender', '#serene', '#delicate', '#whimsical']
+      pool: [
+        '#romantic',
+        '#ethereal',
+        '#gentle',
+        '#pastel',
+        '#love',
+        '#tender',
+        '#serene',
+        '#delicate',
+        '#whimsical',
+      ],
     },
     captions: {
       always: [],
-      pool: ['dreaming', 'soft', 'gentle', '🤍', 'floating', 'whisper', 'tender', 'in bloom', 'softly', 'daydream']
-    }
+      pool: [
+        'dreaming',
+        'soft',
+        'gentle',
+        '🤍',
+        'floating',
+        'whisper',
+        'tender',
+        'in bloom',
+        'softly',
+        'daydream',
+      ],
+    },
   },
   'Ethereal/Dreamy': {
     hashtags: {
       always: ['#ethereal', '#dreamy', '#aesthetic'],
-      pool: ['#celestial', '#mystical', '#fairycore', '#angelic', '#heavenly', '#magical', '#otherworldly', '#fantasy']
+      pool: [
+        '#celestial',
+        '#mystical',
+        '#fairycore',
+        '#angelic',
+        '#heavenly',
+        '#magical',
+        '#otherworldly',
+        '#fantasy',
+      ],
     },
     captions: {
       always: [],
-      pool: ['floating', 'celestial', 'otherworldly', '✧', 'dreamscape', 'beyond', 'transcend', 'ethereal', 'magic']
-    }
+      pool: [
+        'floating',
+        'celestial',
+        'otherworldly',
+        '✧',
+        'dreamscape',
+        'beyond',
+        'transcend',
+        'ethereal',
+        'magic',
+      ],
+    },
   },
   'Hip-Hop/Urban': {
     hashtags: {
       always: ['#hiphop', '#rap', '#music'],
-      pool: ['#urban', '#street', '#bars', '#flow', '#beats', '#culture', '#real', '#vibes', '#grind', '#lifestyle']
+      pool: [
+        '#urban',
+        '#street',
+        '#bars',
+        '#flow',
+        '#beats',
+        '#culture',
+        '#real',
+        '#vibes',
+        '#grind',
+        '#lifestyle',
+      ],
     },
     captions: {
       always: [],
-      pool: ['real ones know', 'on repeat', '🔥', 'different', 'no cap', 'facts', 'energy', 'mood', 'lifestyle', 'certified']
-    }
+      pool: [
+        'real ones know',
+        'on repeat',
+        '🔥',
+        'different',
+        'no cap',
+        'facts',
+        'energy',
+        'mood',
+        'lifestyle',
+        'certified',
+      ],
+    },
   },
   'Indie/Alternative': {
     hashtags: {
       always: ['#indie', '#alternative', '#music'],
-      pool: ['#indiemusic', '#newmusic', '#underground', '#dreampop', '#lofi', '#bedroom', '#diy', '#authentic', '#raw']
+      pool: [
+        '#indiemusic',
+        '#newmusic',
+        '#underground',
+        '#dreampop',
+        '#lofi',
+        '#bedroom',
+        '#diy',
+        '#authentic',
+        '#raw',
+      ],
     },
     captions: {
       always: [],
-      pool: ['feeling this', 'late nights', '~', 'somewhere else', 'in my head', 'lost in it', 'idk', 'whatever', 'anyway']
-    }
+      pool: [
+        'feeling this',
+        'late nights',
+        '~',
+        'somewhere else',
+        'in my head',
+        'lost in it',
+        'idk',
+        'whatever',
+        'anyway',
+      ],
+    },
   },
   'Pop/Mainstream': {
     hashtags: {
       always: ['#pop', '#music', '#newmusic'],
-      pool: ['#viral', '#trending', '#fyp', '#foryou', '#catchy', '#banger', '#summer', '#dance', '#party', '#hit']
+      pool: [
+        '#viral',
+        '#trending',
+        '#fyp',
+        '#foryou',
+        '#catchy',
+        '#banger',
+        '#summer',
+        '#dance',
+        '#party',
+        '#hit',
+      ],
     },
     captions: {
       always: [],
-      pool: ['obsessed', 'on repeat', '💕', 'this song', 'literally me', 'slay', 'iconic', 'main character', 'ate', 'period']
-    }
-  }
+      pool: [
+        'obsessed',
+        'on repeat',
+        '💕',
+        'this song',
+        'literally me',
+        'slay',
+        'iconic',
+        'main character',
+        'ate',
+        'period',
+      ],
+    },
+  },
 };
 
 /**
@@ -125,17 +300,21 @@ export const subscribeToTemplates = (db, artistId, callback) => {
 
   const docRef = doc(db, TEMPLATES_COLLECTION, artistId);
 
-  return onSnapshot(docRef, (snapshot) => {
-    if (snapshot.exists()) {
-      callback(snapshot.data().templates || {});
-    } else {
-      // Return defaults if no custom templates exist
+  return onSnapshot(
+    docRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        callback(snapshot.data().templates || {});
+      } else {
+        // Return defaults if no custom templates exist
+        callback(DEFAULT_TEMPLATES);
+      }
+    },
+    (error) => {
+      log.error('Error subscribing to templates:', error);
       callback(DEFAULT_TEMPLATES);
-    }
-  }, (error) => {
-    log.error('Error subscribing to templates:', error);
-    callback(DEFAULT_TEMPLATES);
-  });
+    },
+  );
 };
 
 /**
@@ -170,10 +349,14 @@ export const saveTemplates = async (db, artistId, templates) => {
   if (!artistId) throw new Error('Artist ID required');
 
   const docRef = doc(db, TEMPLATES_COLLECTION, artistId);
-  await setDoc(docRef, {
-    templates,
-    updatedAt: serverTimestamp()
-  }, { merge: true });
+  await setDoc(
+    docRef,
+    {
+      templates,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
 
   return templates;
 };
@@ -241,7 +424,10 @@ export const generateFromTemplate = (template, platform = 'tiktok', options = {}
   // Randomly select from pool
   const poolHashtags = template.hashtags?.pool || [];
   const shuffledPool = [...poolHashtags].sort(() => Math.random() - 0.5);
-  const selectedPool = shuffledPool.slice(0, Math.max(0, actualHashtagCount - alwaysHashtags.length));
+  const selectedPool = shuffledPool.slice(
+    0,
+    Math.max(0, actualHashtagCount - alwaysHashtags.length),
+  );
 
   // Combine hashtags
   const allHashtags = [...alwaysHashtags, ...selectedPool];
@@ -251,7 +437,10 @@ export const generateFromTemplate = (template, platform = 'tiktok', options = {}
   const alwaysCaptions = template.captions?.always || [];
   const poolCaptions = template.captions?.pool || [];
   const shuffledCaptions = [...poolCaptions].sort(() => Math.random() - 0.5);
-  const selectedCaptions = shuffledCaptions.slice(0, Math.max(0, captionCount - alwaysCaptions.length));
+  const selectedCaptions = shuffledCaptions.slice(
+    0,
+    Math.max(0, captionCount - alwaysCaptions.length),
+  );
 
   // Combine caption parts
   const allCaptions = [...alwaysCaptions, ...selectedCaptions];
@@ -260,7 +449,7 @@ export const generateFromTemplate = (template, platform = 'tiktok', options = {}
   return {
     caption: captionString,
     hashtags: hashtagsString,
-    combined: captionString ? `${captionString}\n\n${hashtagsString}` : hashtagsString
+    combined: captionString ? `${captionString}\n\n${hashtagsString}` : hashtagsString,
   };
 };
 

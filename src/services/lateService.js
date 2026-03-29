@@ -49,9 +49,9 @@ async function proxyRequest(action, method = 'GET', body = null, artistId = null
   const options = {
     method,
     headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
   };
 
   if (body && method !== 'GET') {
@@ -71,13 +71,17 @@ async function proxyRequest(action, method = 'GET', body = null, artistId = null
 
     // Provide user-friendly error messages based on status
     if (response.status === 400 && errorMsg.includes('No Late API key')) {
-      throw new Error('Late API key not configured for this artist. Go to Settings to add your key.');
+      throw new Error(
+        'Late API key not configured for this artist. Go to Settings to add your key.',
+      );
     } else if (response.status === 401) {
       throw new Error('Authentication expired. Please refresh the page and try again.');
     } else if (response.status === 403) {
-      throw new Error('You don\'t have permission to access this artist\'s Late account.');
+      throw new Error("You don't have permission to access this artist's Late account.");
     } else if (response.status === 500) {
-      throw new Error(`Late sync error: ${errorMsg}. The Late.co service may be temporarily unavailable.`);
+      throw new Error(
+        `Late sync error: ${errorMsg}. The Late.co service may be temporarily unavailable.`,
+      );
     } else if (response.status === 502 || response.status === 504) {
       throw new Error('Late.co is not responding. Please try again in a few minutes.');
     }
@@ -139,7 +143,7 @@ export async function removeArtistLateKey(artistId) {
 
   const response = await fetch(url.toString(), {
     method: 'DELETE',
-    headers: { 'Authorization': `Bearer ${token}` }
+    headers: { Authorization: `Bearer ${token}` },
   });
 
   if (!response.ok) {
@@ -182,16 +186,16 @@ export async function fetchLateAccounts(artistId = null) {
 
   try {
     const data = await proxyRequest('accounts', 'GET', null, artistId);
-    const accounts = (data.accounts || data.data || []).map(account => ({
+    const accounts = (data.accounts || data.data || []).map((account) => ({
       id: account.id || account.account_id,
       platform: (account.platform || account.type || '').toLowerCase(),
       username: account.username || account.handle || account.name,
       profileImage: account.profile_image || account.avatar,
       name: account.display_name || account.name,
-      isActive: account.is_active !== false
+      isActive: account.is_active !== false,
     }));
 
-    return accounts.filter(a => a.isActive);
+    return accounts.filter((a) => a.isActive);
   } catch (error) {
     log.error('Failed to fetch Late accounts:', error);
     throw error;
@@ -233,7 +237,8 @@ export async function createLateProfile(artistId, name) {
  * @returns {Promise<{authUrl: string, state: string}>}
  */
 export async function getConnectUrl(artistId, platform, profileId, redirectUrl) {
-  if (!artistId || !platform || !profileId) throw new Error('artistId, platform, and profileId required');
+  if (!artistId || !platform || !profileId)
+    throw new Error('artistId, platform, and profileId required');
 
   const token = await getFirebaseToken();
   const url = new URL(LATE_PROXY, window.location.origin);
@@ -244,7 +249,7 @@ export async function getConnectUrl(artistId, platform, profileId, redirectUrl) 
   if (redirectUrl) url.searchParams.set('redirectUrl', redirectUrl);
 
   const response = await fetch(url.toString(), {
-    headers: { 'Authorization': `Bearer ${token}` }
+    headers: { Authorization: `Bearer ${token}` },
   });
 
   if (!response.ok) {
@@ -255,14 +260,21 @@ export async function getConnectUrl(artistId, platform, profileId, redirectUrl) 
   return response.json();
 }
 
-export async function schedulePost({ videoUrl, caption, accountIds, scheduledTime, user, artistId }) {
+export async function schedulePost({
+  videoUrl,
+  caption,
+  accountIds,
+  scheduledTime,
+  user,
+  artistId,
+}) {
   // Operator check at API boundary (defense-in-depth)
   assertLateAccess(user, 'schedulePost');
 
   const payload = {
     media_url: videoUrl,
     caption,
-    account_ids: accountIds
+    account_ids: accountIds,
   };
   if (scheduledTime) {
     payload.scheduled_at = new Date(scheduledTime).toISOString();
@@ -285,10 +297,10 @@ export async function updatePost(postId, updates, user, artistId = null) {
   const response = await fetch(url.toString(), {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify(updates)
+    body: JSON.stringify(updates),
   });
 
   if (!response.ok) {
@@ -313,8 +325,8 @@ export async function deletePost(postId, user, artistId = null) {
   const response = await fetch(url.toString(), {
     method: 'DELETE',
     headers: {
-      'Authorization': `Bearer ${token}`
-    }
+      Authorization: `Bearer ${token}`,
+    },
   });
 
   if (!response.ok) {
@@ -335,8 +347,8 @@ export async function fetchScheduledPosts(page = 1, artistId = null) {
 
   const response = await fetch(url.toString(), {
     headers: {
-      'Authorization': `Bearer ${token}`
-    }
+      Authorization: `Bearer ${token}`,
+    },
   });
 
   if (!response.ok) {

@@ -59,10 +59,18 @@ const ProfilePictureUpload = ({ db, onSave, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-[#111118] p-6" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-xl border border-neutral-200 bg-[#111118] p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between mb-4">
-          <span className="text-heading-3 font-heading-3 text-[#ffffffff]">Update Profile Picture</span>
+          <span className="text-heading-3 font-heading-3 text-[#ffffffff]">
+            Update Profile Picture
+          </span>
           <button onClick={onClose} className="text-neutral-400 hover:text-white">
             <FeatherX style={{ width: 20, height: 20 }} />
           </button>
@@ -112,10 +120,23 @@ const ProfilePictureUpload = ({ db, onSave, onClose }) => {
               />
             </div>
             <div className="flex items-center gap-3 mt-4">
-              <Button variant="neutral-secondary" className="flex-1" onClick={() => { setImageSrc(null); setCrop({ x: 0, y: 0 }); setZoom(1); }}>
+              <Button
+                variant="neutral-secondary"
+                className="flex-1"
+                onClick={() => {
+                  setImageSrc(null);
+                  setCrop({ x: 0, y: 0 });
+                  setZoom(1);
+                }}
+              >
                 Change Photo
               </Button>
-              <Button variant="brand-primary" className="flex-1" disabled={saving} onClick={handleSave}>
+              <Button
+                variant="brand-primary"
+                className="flex-1"
+                disabled={saving}
+                onClick={handleSave}
+              >
                 {saving ? 'Saving...' : 'Save'}
               </Button>
             </div>

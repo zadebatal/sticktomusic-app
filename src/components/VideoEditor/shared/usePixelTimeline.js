@@ -37,9 +37,16 @@ export default function usePixelTimeline({
   const rulerTicks = useMemo(() => {
     if (timelineDuration <= 0) return [];
     let minor, labelEvery;
-    if (pxPerSec >= 60) { minor = 0.5; labelEvery = 1; }
-    else if (pxPerSec >= 30) { minor = 1; labelEvery = 5; }
-    else { minor = 2; labelEvery = 10; }
+    if (pxPerSec >= 60) {
+      minor = 0.5;
+      labelEvery = 1;
+    } else if (pxPerSec >= 30) {
+      minor = 1;
+      labelEvery = 5;
+    } else {
+      minor = 2;
+      labelEvery = 10;
+    }
     const ticks = [];
     for (let t = 0; t <= timelineDuration; t += minor) {
       const rounded = Math.round(t * 100) / 100;
@@ -49,16 +56,28 @@ export default function usePixelTimeline({
   }, [timelineDuration, pxPerSec]);
 
   // Ruler click/drag to seek playhead
-  const handleRulerMouseDown = useCallback((e) => {
-    if (!timelineRef?.current || timelineDuration <= 0) return;
-    e.preventDefault();
-    const rect = timelineRef.current.getBoundingClientRect();
-    const clickX = e.clientX - rect.left + timelineRef.current.scrollLeft;
-    handleSeek(Math.max(0, Math.min(1, clickX / timelinePx)) * timelineDuration);
-    if (wasPlayingRef) wasPlayingRef.current = isPlaying;
-    if (isPlaying) setIsPlaying(false);
-    setPlayheadDragging(true);
-  }, [timelineDuration, timelinePx, timelineRef, handleSeek, isPlaying, setIsPlaying, setPlayheadDragging, wasPlayingRef]);
+  const handleRulerMouseDown = useCallback(
+    (e) => {
+      if (!timelineRef?.current || timelineDuration <= 0) return;
+      e.preventDefault();
+      const rect = timelineRef.current.getBoundingClientRect();
+      const clickX = e.clientX - rect.left + timelineRef.current.scrollLeft;
+      handleSeek(Math.max(0, Math.min(1, clickX / timelinePx)) * timelineDuration);
+      if (wasPlayingRef) wasPlayingRef.current = isPlaying;
+      if (isPlaying) setIsPlaying(false);
+      setPlayheadDragging(true);
+    },
+    [
+      timelineDuration,
+      timelinePx,
+      timelineRef,
+      handleSeek,
+      isPlaying,
+      setIsPlaying,
+      setPlayheadDragging,
+      wasPlayingRef,
+    ],
+  );
 
   // Format time as mm:ss
   const formatTime = useCallback((seconds) => {

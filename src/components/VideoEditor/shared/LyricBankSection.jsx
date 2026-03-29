@@ -15,6 +15,7 @@ const LyricBankSection = ({
   lyrics = [],
   onAddNew,
   onApplyLyric,
+  onApplyToTimeline,
   onDeleteLyric,
   hasAudio = true,
   isTranscribing = false,
@@ -43,7 +44,9 @@ const LyricBankSection = ({
                 onClick={() => {
                   if (onApplyLyric) onApplyLyric(lyric);
                 }}
-                title={hasTiming ? 'Click to edit in Word Timeline' : 'Click to open in Word Timeline'}
+                title={
+                  hasTiming ? 'Click to edit in Word Timeline' : 'Click to open in Word Timeline'
+                }
               >
                 <FeatherMusic
                   className={hasTiming ? 'text-green-400 flex-none' : 'text-neutral-500 flex-none'}
@@ -56,7 +59,23 @@ const LyricBankSection = ({
                   </div>
                 </div>
                 {hasTiming && (
-                  <Badge variant="success" className="flex-none text-[10px]">Timed</Badge>
+                  <>
+                    <Badge variant="success" className="flex-none text-[10px]">
+                      Timed
+                    </Badge>
+                    {onApplyToTimeline && (
+                      <button
+                        className="flex-none text-[11px] text-green-400 hover:text-green-300 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded px-1.5 py-0.5 cursor-pointer transition-colors"
+                        title="Apply lyrics to timeline — creates clips cut to each word"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onApplyToTimeline(lyric);
+                        }}
+                      >
+                        + Timeline
+                      </button>
+                    )}
+                  </>
                 )}
                 {isConfirming ? (
                   <div className="flex gap-1 flex-none" onClick={(e) => e.stopPropagation()}>

@@ -33,9 +33,21 @@ export const isTiffFile = (file) => {
 };
 
 /**
- * Check if a file needs conversion (HEIC or TIFF).
+ * Check if a file is DNG (Adobe Digital Negative) format.
+ * DNG is TIFF-based and can be decoded with the same TIFF pipeline.
  */
-export const needsConversion = (file) => isHeicFile(file) || isTiffFile(file);
+export const isDngFile = (file) => {
+  if (!file) return false;
+  const type = (file.type || '').toLowerCase();
+  if (type === 'image/x-adobe-dng' || type === 'image/dng') return true;
+  const name = (file.name || '').toLowerCase();
+  return name.endsWith('.dng');
+};
+
+/**
+ * Check if a file needs conversion (HEIC, TIFF, or DNG).
+ */
+export const needsConversion = (file) => isHeicFile(file) || isTiffFile(file) || isDngFile(file);
 
 /**
  * Convert a TIFF file to JPEG using utif2.
@@ -57,7 +69,7 @@ const convertTiff = async (file) => {
   const imageData = new ImageData(new Uint8ClampedArray(rgba), width, height);
   ctx.putImageData(imageData, 0, 0);
 
-  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
   const newName = file.name.replace(/\.tiff?$/i, '.jpg');
   return new File([blob], newName, { type: 'image/jpeg' });
 };
@@ -75,6 +87,32 @@ const convertHeic = async (file) => {
 };
 
 /**
+ * Convert a DNG file to JPEG. DNG is TIFF-based (Adobe Digital Negative).
+ * Uses the same utif2 pipeline as TIFF conversion.
+ * @param {File} file — DNG input file
+ * @returns {Promise<File>} — converted JPEG file
+ */
+const convertDng = async (file) => {
+  const UTIF = await import('utif2');
+  const buffer = await file.arrayBuffer();
+  const ifds = UTIF.decode(buffer);
+  UTIF.decodeImage(buffer, ifds[0]);
+  const rgba = UTIF.toRGBA8(ifds[0]);
+  const { width, height } = ifds[0];
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  const imageData = new ImageData(new Uint8ClampedArray(rgba), width, height);
+  ctx.putImageData(imageData, 0, 0);
+
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+  const newName = file.name.replace(/\.dng$/i, '.jpg');
+  return new File([blob], newName, { type: 'image/jpeg' });
+};
+
+/**
  * Convert a HEIC/HEIF or TIFF file to JPEG. Other files pass through unchanged.
  * @param {File} file — input file
  * @returns {Promise<File>} — converted JPEG file, or original if no conversion needed
@@ -82,6 +120,7 @@ const convertHeic = async (file) => {
 export const convertImageIfNeeded = async (file) => {
   if (isHeicFile(file)) return convertHeic(file);
   if (isTiffFile(file)) return convertTiff(file);
+  if (isDngFile(file)) return convertDng(file);
   return file;
 };
 

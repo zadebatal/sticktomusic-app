@@ -18,7 +18,12 @@ const API_URL = '/api/analyze-structure';
  * @param {string|null} publishedLyrics - Published lyrics with section headers (optional)
  * @returns {Promise<{ sections: Array, confidence: number }>}
  */
-export async function analyzeSongStructure(transcription, totalDuration, onProgress, publishedLyrics = null) {
+export async function analyzeSongStructure(
+  transcription,
+  totalDuration,
+  onProgress,
+  publishedLyrics = null,
+) {
   if (!transcription?.text || !transcription?.words?.length) {
     throw new Error('No transcription data to analyze');
   }
@@ -40,7 +45,7 @@ export async function analyzeSongStructure(transcription, totalDuration, onProgr
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${idToken}`,
+      Authorization: `Bearer ${idToken}`,
     },
     body: JSON.stringify(body),
   });

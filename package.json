@@ -2,6 +2,7 @@
   "name": "sticktomusic-app",
   "version": "1.0.0",
   "private": true,
+  "proxy": "http://localhost:3001",
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
     "@ffmpeg/ffmpeg": "^0.12.15",
@@ -25,9 +26,11 @@
     "@sentry/react": "^10.42.0",
     "@subframe/core": "^1.154.0",
     "classnames": "^2.5.1",
+    "cmdk": "^1.1.1",
     "copy-to-clipboard": "^3.3.3",
     "firebase": "^12.8.0",
     "firebase-admin": "^13.6.1",
+    "framer-motion": "^12.35.0",
     "heic-to": "^1.4.2",
     "lamejs": "^1.2.1",
     "music-tempo": "^1.0.3",
@@ -38,14 +41,25 @@
     "react-scripts": "5.0.1",
     "sonner": "^2.0.7",
     "utif2": "^4.1.0",
-    "web-audio-beat-detector": "^8.2.34"
+    "web-audio-beat-detector": "^8.2.34",
+    "zustand": "^5.0.11"
   },
   "scripts": {
     "start": "TSC_COMPILE_ON_ERROR=true react-scripts start",
     "build": "GENERATE_SOURCEMAP=false TSC_COMPILE_ON_ERROR=true CI=false react-scripts build",
     "test:e2e": "npx playwright test",
     "test:e2e:headed": "npx playwright test --headed",
-    "test:e2e:ui": "npx playwright test --ui"
+    "test:e2e:ui": "npx playwright test --ui",
+    "prepare": "husky",
+    "analyze": "source-map-explorer 'build/static/js/*.js'"
+  },
+  "lint-staged": {
+    "src/**/*.{js,jsx}": [
+      "prettier --write"
+    ],
+    "src/**/*.{css,json,md}": [
+      "prettier --write"
+    ]
   },
   "browserslist": {
     "production": [
@@ -63,6 +77,11 @@
     "@axe-core/playwright": "^4.11.1",
     "@playwright/test": "^1.58.2",
     "firebase-tools": "^15.5.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.2",
+    "prettier": "^3.8.1",
+    "react-grab": "^0.1.28",
+    "source-map-explorer": "^2.5.3",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.9.3",
     "vercel": "^50.10.0"

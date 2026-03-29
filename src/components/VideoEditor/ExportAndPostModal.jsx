@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { renderVideo, exportAsPreview } from '../../services/videoExportService';
 import { uploadVideo } from '../../services/firebaseStorage';
 import { EXPORT_STAGE } from '../../utils/status';
@@ -6,7 +6,15 @@ import { useFocusTrap } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
-import { FeatherX, FeatherUploadCloud, FeatherDownload, FeatherCopy, FeatherSend, FeatherArrowLeft, FeatherRefreshCw } from '@subframe/core';
+import {
+  FeatherX,
+  FeatherUploadCloud,
+  FeatherDownload,
+  FeatherCopy,
+  FeatherSend,
+  FeatherArrowLeft,
+  FeatherRefreshCw,
+} from '@subframe/core';
 import log from '../../utils/logger';
 
 /**
@@ -18,10 +26,10 @@ const ExportAndPostModal = ({
   videos = [],
   category,
   onClose,
-  onSchedulePost // Function to call Late API: (videoUrl, caption) => Promise
+  onSchedulePost, // Function to call Late API: (videoUrl, caption) => Promise
 }) => {
   const { theme } = useTheme();
-  const styles = getStyles(theme);
+  const styles = useMemo(() => getStyles(theme), [theme]);
   // BUG-030: Focus trap for modal accessibility
   const trapRef = useFocusTrap(true);
 
@@ -39,14 +47,18 @@ const ExportAndPostModal = ({
     const clips = video?.clips || [];
     const selectedClips = video?.selectedClips || [];
     const allClips = [...clips, ...selectedClips];
-    return allClips.some(clip => clip?.url && typeof clip.url === 'string' && clip.url.length > 0);
+    return allClips.some(
+      (clip) => clip?.url && typeof clip.url === 'string' && clip.url.length > 0,
+    );
   };
 
   // Export only (download locally)
   const handleExportOnly = useCallback(async () => {
     // Check for valid clips first
     if (!hasValidClips()) {
-      setError('This video was saved as a draft and its clip data has expired. Please re-create the video from the Video Editor and use "Save & Post" to export.');
+      setError(
+        'This video was saved as a draft and its clip data has expired. Please re-create the video from the Video Editor and use "Save & Post" to export.',
+      );
       return;
     }
 
@@ -79,7 +91,9 @@ const ExportAndPostModal = ({
   const handleExportAndUpload = useCallback(async () => {
     // Check for valid clips first
     if (!hasValidClips()) {
-      setError('This video was saved as a draft and its clip data has expired. Please re-create the video from the Video Editor and use "Save & Post" to export.');
+      setError(
+        'This video was saved as a draft and its clip data has expired. Please re-create the video from the Video Editor and use "Save & Post" to export.',
+      );
       return;
     }
 
@@ -122,7 +136,7 @@ const ExportAndPostModal = ({
     setError(null);
 
     try {
-      await onSchedulePost(videoUrl, caption);
+      await onSchedulePost({ videoUrl, caption });
       setStage(EXPORT_STAGE.DONE);
     } catch (err) {
       log.error('Posting error:', err);
@@ -159,37 +173,75 @@ const ExportAndPostModal = ({
           {!alreadyExported && stage !== 'done' && (
             <div style={styles.stepper}>
               <div style={styles.stepperStep}>
-                <div style={{
-                  ...styles.stepperDot,
-                  backgroundColor: stage === EXPORT_STAGE.OPTIONS ? theme.accent.primary : (stage === EXPORT_STAGE.RENDERING || stage === EXPORT_STAGE.UPLOADING || stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '#22c55e' : theme.bg.elevated
-                }}>
-                  {(stage === EXPORT_STAGE.RENDERING || stage === EXPORT_STAGE.UPLOADING || stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '✓' : '1'}
+                <div
+                  style={{
+                    ...styles.stepperDot,
+                    backgroundColor:
+                      stage === EXPORT_STAGE.OPTIONS
+                        ? theme.accent.primary
+                        : stage === EXPORT_STAGE.RENDERING ||
+                            stage === EXPORT_STAGE.UPLOADING ||
+                            stage === EXPORT_STAGE.READY ||
+                            stage === EXPORT_STAGE.POSTING
+                          ? '#22c55e'
+                          : theme.bg.elevated,
+                  }}
+                >
+                  {stage === EXPORT_STAGE.RENDERING ||
+                  stage === EXPORT_STAGE.UPLOADING ||
+                  stage === EXPORT_STAGE.READY ||
+                  stage === EXPORT_STAGE.POSTING
+                    ? '✓'
+                    : '1'}
                 </div>
                 <span style={styles.stepperLabel}>Export</span>
               </div>
-              <div style={{
-                ...styles.stepperLine,
-                backgroundColor: (stage === EXPORT_STAGE.UPLOADING || stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '#22c55e' : theme.bg.elevated
-
-              }} />
+              <div
+                style={{
+                  ...styles.stepperLine,
+                  backgroundColor:
+                    stage === EXPORT_STAGE.UPLOADING ||
+                    stage === EXPORT_STAGE.READY ||
+                    stage === EXPORT_STAGE.POSTING
+                      ? '#22c55e'
+                      : theme.bg.elevated,
+                }}
+              />
               <div style={styles.stepperStep}>
-                <div style={{
-                  ...styles.stepperDot,
-                  backgroundColor: (stage === EXPORT_STAGE.UPLOADING) ? theme.accent.primary : (stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '#22c55e' : theme.bg.elevated
-                }}>
-                  {(stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '✓' : '2'}
+                <div
+                  style={{
+                    ...styles.stepperDot,
+                    backgroundColor:
+                      stage === EXPORT_STAGE.UPLOADING
+                        ? theme.accent.primary
+                        : stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING
+                          ? '#22c55e'
+                          : theme.bg.elevated,
+                  }}
+                >
+                  {stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING ? '✓' : '2'}
                 </div>
                 <span style={styles.stepperLabel}>Upload</span>
               </div>
-              <div style={{
-                ...styles.stepperLine,
-                backgroundColor: stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING ? '#22c55e' : theme.bg.elevated
-              }} />
+              <div
+                style={{
+                  ...styles.stepperLine,
+                  backgroundColor:
+                    stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING
+                      ? '#22c55e'
+                      : theme.bg.elevated,
+                }}
+              />
               <div style={styles.stepperStep}>
-                <div style={{
-                  ...styles.stepperDot,
-                  backgroundColor: stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING ? theme.accent.primary : theme.bg.elevated
-                }}>
+                <div
+                  style={{
+                    ...styles.stepperDot,
+                    backgroundColor:
+                      stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING
+                        ? theme.accent.primary
+                        : theme.bg.elevated,
+                  }}
+                >
                   3
                 </div>
                 <span style={styles.stepperLabel}>Post</span>
@@ -201,24 +253,43 @@ const ExportAndPostModal = ({
           {stage === EXPORT_STAGE.OPTIONS && alreadyExported && (
             <>
               <div style={styles.successIcon}>
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                  <polyline points="22 4 12 14.01 9 11.01"/>
+                <svg
+                  width="48"
+                  height="48"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#22c55e"
+                  strokeWidth="2"
+                >
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
                 </svg>
               </div>
               <p style={styles.successText}>This video was already exported!</p>
               <div style={styles.urlSection}>
                 <input type="text" value={alreadyExported} readOnly style={styles.urlInput} />
-                <Button variant="neutral-secondary" size="small" icon={<FeatherCopy />} onClick={() => navigator.clipboard.writeText(alreadyExported)}>
+                <Button
+                  variant="neutral-secondary"
+                  size="small"
+                  icon={<FeatherCopy />}
+                  onClick={() => navigator.clipboard.writeText(alreadyExported)}
+                >
                   Copy
                 </Button>
               </div>
               {onSchedulePost && (
-                <Button variant="brand-primary" className="w-full" icon={<FeatherSend />} onClick={() => onSchedulePost({ videoUrl: alreadyExported, video, category })}>
+                <Button
+                  variant="brand-primary"
+                  className="w-full"
+                  icon={<FeatherSend />}
+                  onClick={() => onSchedulePost({ videoUrl: alreadyExported, video, category })}
+                >
                   Schedule Post via Late
                 </Button>
               )}
-              <Button variant="neutral-secondary" className="w-full" onClick={onClose}>Done</Button>
+              <Button variant="neutral-secondary" className="w-full" onClick={onClose}>
+                Done
+              </Button>
             </>
           )}
 
@@ -231,9 +302,16 @@ const ExportAndPostModal = ({
                   <img src={video.thumbnail} alt="Preview" style={styles.previewImage} />
                 ) : (
                   <div style={styles.previewPlaceholder}>
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
-                      <rect x="2" y="4" width="20" height="16" rx="2"/>
-                      <path d="M10 9l5 3-5 3V9z"/>
+                    <svg
+                      width="48"
+                      height="48"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#4b5563"
+                      strokeWidth="1.5"
+                    >
+                      <rect x="2" y="4" width="20" height="16" rx="2" />
+                      <path d="M10 9l5 3-5 3V9z" />
                     </svg>
                   </div>
                 )}
@@ -281,15 +359,15 @@ const ExportAndPostModal = ({
                 >
                   Download Only
                 </Button>
-                <p style={styles.optionDesc}>
-                  Download video file to your computer
-                </p>
+                <p style={styles.optionDesc}>Download video file to your computer</p>
               </div>
             </>
           )}
 
           {/* Rendering/Uploading Stage */}
-          {(stage === EXPORT_STAGE.RENDERING || stage === EXPORT_STAGE.UPLOADING || stage === EXPORT_STAGE.POSTING) && (
+          {(stage === EXPORT_STAGE.RENDERING ||
+            stage === EXPORT_STAGE.UPLOADING ||
+            stage === EXPORT_STAGE.POSTING) && (
             <div style={styles.progressSection}>
               <div style={styles.progressCircle}>
                 <svg viewBox="0 0 100 100" style={styles.progressSvg}>
@@ -327,9 +405,16 @@ const ExportAndPostModal = ({
           {stage === EXPORT_STAGE.READY && (
             <>
               <div style={styles.successIcon}>
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                  <polyline points="22 4 12 14.01 9 11.01"/>
+                <svg
+                  width="48"
+                  height="48"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#22c55e"
+                  strokeWidth="2"
+                >
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
                 </svg>
               </div>
 
@@ -337,13 +422,13 @@ const ExportAndPostModal = ({
 
               {/* URL Display */}
               <div style={styles.urlSection}>
-                <input
-                  type="text"
-                  value={videoUrl}
-                  readOnly
-                  style={styles.urlInput}
-                />
-                <Button variant="neutral-secondary" size="small" icon={<FeatherCopy />} onClick={handleCopyUrl}>
+                <input type="text" value={videoUrl} readOnly style={styles.urlInput} />
+                <Button
+                  variant="neutral-secondary"
+                  size="small"
+                  icon={<FeatherCopy />}
+                  onClick={handleCopyUrl}
+                >
                   Copy
                 </Button>
               </div>
@@ -357,11 +442,37 @@ const ExportAndPostModal = ({
                   placeholder="Add a caption for your post..."
                   style={styles.captionInput}
                 />
-                <div style={{ display: 'flex', gap: '12px', marginTop: '4px', fontSize: '11px', color: theme.text.secondary }}>
-                  <span style={{ color: caption.length > 150 ? '#f87171' : caption.length > 120 ? '#fbbf24' : theme.text.secondary }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '12px',
+                    marginTop: '4px',
+                    fontSize: '11px',
+                    color: theme.text.secondary,
+                  }}
+                >
+                  <span
+                    style={{
+                      color:
+                        caption.length > 150
+                          ? '#f87171'
+                          : caption.length > 120
+                            ? '#fbbf24'
+                            : theme.text.secondary,
+                    }}
+                  >
                     TikTok: {caption.length}/150
                   </span>
-                  <span style={{ color: caption.length > 2200 ? '#f87171' : caption.length > 2000 ? '#fbbf24' : theme.text.secondary }}>
+                  <span
+                    style={{
+                      color:
+                        caption.length > 2200
+                          ? '#f87171'
+                          : caption.length > 2000
+                            ? '#fbbf24'
+                            : theme.text.secondary,
+                    }}
+                  >
                     IG: {caption.length}/2200
                   </span>
                   <span style={{ color: caption.length > 5000 ? '#f87171' : theme.text.secondary }}>
@@ -373,7 +484,12 @@ const ExportAndPostModal = ({
               {/* Post Actions */}
               <div className="flex flex-col gap-2">
                 {onSchedulePost ? (
-                  <Button variant="brand-primary" className="w-full" icon={<FeatherSend />} onClick={handleSchedulePost}>
+                  <Button
+                    variant="brand-primary"
+                    className="w-full"
+                    icon={<FeatherSend />}
+                    onClick={handleSchedulePost}
+                  >
                     Schedule Post
                   </Button>
                 ) : (
@@ -392,9 +508,16 @@ const ExportAndPostModal = ({
           {stage === EXPORT_STAGE.DONE && (
             <>
               <div style={styles.successIcon}>
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                  <polyline points="22 4 12 14.01 9 11.01"/>
+                <svg
+                  width="64"
+                  height="64"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#22c55e"
+                  strokeWidth="2"
+                >
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
                 </svg>
               </div>
               <h3 style={styles.doneTitle}>Success!</h3>
@@ -409,10 +532,17 @@ const ExportAndPostModal = ({
           {error && (
             <div style={styles.errorBox}>
               <div style={styles.errorHeader}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="12" y1="8" x2="12" y2="12"/>
-                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#ef4444"
+                  strokeWidth="2"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
                 <span style={styles.errorTitle}>Export Failed</span>
               </div>
@@ -458,30 +588,30 @@ const getStyles = (theme) => ({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1100,
-    padding: '20px'
+    padding: '20px',
   },
   modal: {
     width: '100%',
     maxWidth: '480px',
     backgroundColor: theme.bg.input,
     borderRadius: '12px',
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '16px 20px',
-    borderBottom: `1px solid ${theme.bg.surface}`
+    borderBottom: `1px solid ${theme.bg.surface}`,
   },
   title: {
     fontSize: '16px',
     fontWeight: '600',
     color: theme.text.primary,
-    margin: 0
+    margin: 0,
   },
   body: {
-    padding: '20px'
+    padding: '20px',
   },
   previewSection: {
     aspectRatio: '9/16',
@@ -489,19 +619,19 @@ const getStyles = (theme) => ({
     backgroundColor: theme.bg.page,
     borderRadius: '8px',
     overflow: 'hidden',
-    marginBottom: '16px'
+    marginBottom: '16px',
   },
   previewImage: {
     width: '100%',
     height: '100%',
-    objectFit: 'cover'
+    objectFit: 'cover',
   },
   previewPlaceholder: {
     width: '100%',
     height: '100%',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
   },
   infoSection: {
     display: 'flex',
@@ -509,44 +639,44 @@ const getStyles = (theme) => ({
     marginBottom: '20px',
     padding: '12px',
     backgroundColor: theme.bg.page,
-    borderRadius: '8px'
+    borderRadius: '8px',
   },
   infoRow: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px'
+    gap: '4px',
   },
   infoLabel: {
     fontSize: '11px',
     color: theme.text.muted,
-    textTransform: 'uppercase'
+    textTransform: 'uppercase',
   },
   infoValue: {
     fontSize: '14px',
     color: theme.text.primary,
-    fontWeight: '600'
+    fontWeight: '600',
   },
   optionDesc: {
     fontSize: '12px',
     color: theme.text.muted,
     margin: '4px 0 12px 0',
-    textAlign: 'center'
+    textAlign: 'center',
   },
   progressSection: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '40px 0'
+    padding: '40px 0',
   },
   progressCircle: {
     position: 'relative',
     width: '120px',
-    height: '120px'
+    height: '120px',
   },
   progressSvg: {
     width: '100%',
-    height: '100%'
+    height: '100%',
   },
   progressText: {
     position: 'absolute',
@@ -555,28 +685,28 @@ const getStyles = (theme) => ({
     transform: 'translate(-50%, -50%)',
     fontSize: '24px',
     fontWeight: '700',
-    color: theme.text.primary
+    color: theme.text.primary,
   },
   progressLabel: {
     marginTop: '16px',
     fontSize: '14px',
-    color: theme.text.secondary
+    color: theme.text.secondary,
   },
   successIcon: {
     display: 'flex',
     justifyContent: 'center',
-    marginBottom: '16px'
+    marginBottom: '16px',
   },
   successText: {
     fontSize: '14px',
     color: theme.text.secondary,
     textAlign: 'center',
-    marginBottom: '20px'
+    marginBottom: '20px',
   },
   urlSection: {
     display: 'flex',
     gap: '8px',
-    marginBottom: '16px'
+    marginBottom: '16px',
   },
   urlInput: {
     flex: 1,
@@ -586,16 +716,16 @@ const getStyles = (theme) => ({
     borderRadius: '6px',
     color: theme.text.primary,
     fontSize: '12px',
-    outline: 'none'
+    outline: 'none',
   },
   captionSection: {
-    marginBottom: '20px'
+    marginBottom: '20px',
   },
   captionLabel: {
     display: 'block',
     fontSize: '13px',
     color: theme.text.secondary,
-    marginBottom: '8px'
+    marginBottom: '8px',
   },
   captionInput: {
     width: '100%',
@@ -607,51 +737,51 @@ const getStyles = (theme) => ({
     color: theme.text.primary,
     fontSize: '14px',
     resize: 'vertical',
-    outline: 'none'
+    outline: 'none',
   },
   doneTitle: {
     fontSize: '20px',
     fontWeight: '600',
     color: theme.text.primary,
     textAlign: 'center',
-    margin: '0 0 8px 0'
+    margin: '0 0 8px 0',
   },
   doneText: {
     fontSize: '14px',
     color: theme.text.secondary,
     textAlign: 'center',
-    margin: '0 0 24px 0'
+    margin: '0 0 24px 0',
   },
   helpText: {
     fontSize: '13px',
     color: theme.text.muted,
     textAlign: 'center',
     margin: '0 0 16px 0',
-    lineHeight: '1.5'
+    lineHeight: '1.5',
   },
   errorBox: {
     padding: '16px',
     backgroundColor: 'rgba(220, 38, 38, 0.1)',
     border: '1px solid #dc2626',
     borderRadius: '8px',
-    marginTop: '16px'
+    marginTop: '16px',
   },
   errorHeader: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    marginBottom: '8px'
+    marginBottom: '8px',
   },
   errorTitle: {
     color: '#ef4444',
     fontSize: '14px',
-    fontWeight: '600'
+    fontWeight: '600',
   },
   errorMessage: {
     color: '#fca5a5',
     fontSize: '13px',
     margin: '0 0 12px 0',
-    lineHeight: '1.5'
+    lineHeight: '1.5',
   },
   // UI-50: Stepper styles
   stepper: {
@@ -659,13 +789,13 @@ const getStyles = (theme) => ({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: '20px',
-    padding: '12px 0'
+    padding: '12px 0',
   },
   stepperStep: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '6px'
+    gap: '6px',
   },
   stepperDot: {
     width: '28px',
@@ -676,17 +806,17 @@ const getStyles = (theme) => ({
     justifyContent: 'center',
     fontSize: '12px',
     fontWeight: '600',
-    color: '#fff'
+    color: '#fff',
   },
   stepperLabel: {
     fontSize: '11px',
-    color: theme.text.secondary
+    color: theme.text.secondary,
   },
   stepperLine: {
     width: '40px',
     height: '2px',
-    margin: '0 8px 20px'
-  }
+    margin: '0 8px 20px',
+  },
 });
 
 export default ExportAndPostModal;

@@ -1,5 +1,9 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { generateFromCollectionBanks, generatePostContent, getBankNames } from '../../utils/captionGenerator';
+import {
+  generateFromCollectionBanks,
+  generatePostContent,
+  getBankNames,
+} from '../../utils/captionGenerator';
 import { getCollectionsAsync } from '../../services/libraryService';
 import CollectionBankEditor from './CollectionBankEditor';
 import { useToast, useFocusTrap } from '../ui';
@@ -33,15 +37,14 @@ const ScheduleQueue = ({
   onClose,
   accounts = [],
   lateAccountIds = {},
-  db = null
+  db = null,
 }) => {
-  // BUG-034: Toast notifications instead of alert()
   const { success: toastSuccess } = useToast();
   const { theme } = useTheme();
   // BUG-030: Focus trap for modal accessibility
   const trapRef = useFocusTrap(true);
 
-  const styles = getStyles(theme);
+  const styles = useMemo(() => getStyles(theme), [theme]);
 
   // Posts state
   const [posts, setPosts] = useState([]);
@@ -76,14 +79,14 @@ const ScheduleQueue = ({
   // Get unique handles from accounts
   const availableHandles = useMemo(() => {
     const handles = new Set();
-    accounts.forEach(acc => handles.add(acc.handle));
+    accounts.forEach((acc) => handles.add(acc.handle));
     return Array.from(handles);
   }, [accounts]);
 
   // Collections with posts in queue
   const collectionsInQueue = useMemo(() => {
-    const collectionIds = new Set(posts.map(p => p.collectionId).filter(Boolean));
-    return collections.filter(c => collectionIds.has(c.id));
+    const collectionIds = new Set(posts.map((p) => p.collectionId).filter(Boolean));
+    return collections.filter((c) => collectionIds.has(c.id));
   }, [posts, collections]);
 
   // Initialize date to today on mount
@@ -116,7 +119,7 @@ const ScheduleQueue = ({
     const newPosts = contentItems.map((item, index) => {
       // Find collection info if available
       const collection = item.collectionId
-        ? collections.find(c => c.id === item.collectionId)
+        ? collections.find((c) => c.id === item.collectionId)
         : null;
 
       // Generate caption and hashtags
@@ -125,22 +128,26 @@ const ScheduleQueue = ({
       let hashtagString = '';
 
       if (collection?.captionBank && collection?.hashtagBank) {
-        const content = generateFromCollectionBanks(collection.captionBank, collection.hashtagBank, {
-          platform: platforms.instagram ? 'instagram' : 'tiktok'
-        });
+        const content = generateFromCollectionBanks(
+          collection.captionBank,
+          collection.hashtagBank,
+          {
+            platform: platforms.instagram ? 'instagram' : 'tiktok',
+          },
+        );
         caption = content.caption;
         hashtags = content.hashtags;
         hashtagString = content.hashtagString;
       } else if (category?.name) {
         const content = generatePostContent(category.name, {
-          platform: platforms.instagram ? 'instagram' : 'tiktok'
+          platform: platforms.instagram ? 'instagram' : 'tiktok',
         });
         caption = content.caption;
         hashtags = content.hashtags;
         hashtagString = content.hashtagString;
       } else {
         const content = generatePostContent(getBankNames()[0], {
-          platform: platforms.instagram ? 'instagram' : 'tiktok'
+          platform: platforms.instagram ? 'instagram' : 'tiktok',
         });
         caption = content.caption;
         hashtags = content.hashtags;
@@ -149,9 +156,10 @@ const ScheduleQueue = ({
 
       // Determine if video needs rendering
       const needsRender = !!(
-        item.type === 'video' && (
-          !item.export?.cloudUrl && !item.postedUrl && !item.cloudUrl
-        )
+        item.type === 'video' &&
+        !item.export?.cloudUrl &&
+        !item.postedUrl &&
+        !item.cloudUrl
       );
 
       // Get thumbnail
@@ -181,7 +189,7 @@ const ScheduleQueue = ({
         // Slideshow-specific
         slides: item.slides || [],
         exportedImages: item.exportedImages || null,
-        order: index
+        order: index,
       };
     });
 
@@ -199,27 +207,30 @@ const ScheduleQueue = ({
     e.dataTransfer.dropEffect = 'move';
   }, []);
 
-  const handleDrop = useCallback((targetPostId) => {
-    if (!draggedPostId || draggedPostId === targetPostId) {
+  const handleDrop = useCallback(
+    (targetPostId) => {
+      if (!draggedPostId || draggedPostId === targetPostId) {
+        setDraggedPostId(null);
+        return;
+      }
+
+      setPosts((prev) => {
+        const draggedIndex = prev.findIndex((p) => p.id === draggedPostId);
+        const targetIndex = prev.findIndex((p) => p.id === targetPostId);
+
+        if (draggedIndex === -1 || targetIndex === -1) return prev;
+
+        const newPosts = [...prev];
+        const [draggedPost] = newPosts.splice(draggedIndex, 1);
+        newPosts.splice(targetIndex, 0, draggedPost);
+
+        return newPosts.map((p, idx) => ({ ...p, order: idx }));
+      });
+
       setDraggedPostId(null);
-      return;
-    }
-
-    setPosts(prev => {
-      const draggedIndex = prev.findIndex(p => p.id === draggedPostId);
-      const targetIndex = prev.findIndex(p => p.id === targetPostId);
-
-      if (draggedIndex === -1 || targetIndex === -1) return prev;
-
-      const newPosts = [...prev];
-      const [draggedPost] = newPosts.splice(draggedIndex, 1);
-      newPosts.splice(targetIndex, 0, draggedPost);
-
-      return newPosts.map((p, idx) => ({ ...p, order: idx }));
-    });
-
-    setDraggedPostId(null);
-  }, [draggedPostId]);
+    },
+    [draggedPostId],
+  );
 
   const handleDragEnd = useCallback(() => {
     setDraggedPostId(null);
@@ -227,7 +238,7 @@ const ScheduleQueue = ({
 
   // Fisher-Yates shuffle
   const handleShuffle = useCallback(() => {
-    setPosts(prev => {
+    setPosts((prev) => {
       const shuffled = [...prev];
       for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -239,53 +250,60 @@ const ScheduleQueue = ({
 
   // Edit handlers
   const handleCaptionChange = useCallback((postId, newCaption) => {
-    setPosts(prev => prev.map(p =>
-      p.id === postId ? { ...p, caption: newCaption, isManuallyEdited: true } : p
-    ));
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId ? { ...p, caption: newCaption, isManuallyEdited: true } : p,
+      ),
+    );
   }, []);
 
   const handleHashtagsChange = useCallback((postId, newHashtagString) => {
     const hashtags = newHashtagString
       .split(/[\s,]+/)
-      .filter(h => h.startsWith('#') || h.length > 0)
-      .map(h => h.startsWith('#') ? h : `#${h}`);
+      .filter((h) => h.startsWith('#') || h.length > 0)
+      .map((h) => (h.startsWith('#') ? h : `#${h}`));
 
-    setPosts(prev => prev.map(p =>
-      p.id === postId
-        ? { ...p, hashtags, hashtagString: hashtags.join(' '), isManuallyEdited: true }
-        : p
-    ));
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId
+          ? { ...p, hashtags, hashtagString: hashtags.join(' '), isManuallyEdited: true }
+          : p,
+      ),
+    );
   }, []);
 
   const toggleEditing = useCallback((postId) => {
-    setPosts(prev => prev.map(p =>
-      p.id === postId ? { ...p, isEditing: !p.isEditing } : p
-    ));
+    setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, isEditing: !p.isEditing } : p)));
   }, []);
 
-  const randomizePost = useCallback((postId) => {
-    // Don't randomize manually edited posts
-    const post = posts.find(p => p.id === postId);
-    if (post?.isManuallyEdited) return;
+  const randomizePost = useCallback(
+    (postId) => {
+      // Don't randomize manually edited posts
+      const post = posts.find((p) => p.id === postId);
+      if (post?.isManuallyEdited) return;
 
-    const content = generatePostContent(getBankNames()[0], {
-      platform: platforms.instagram ? 'instagram' : 'tiktok'
-    });
+      const content = generatePostContent(getBankNames()[0], {
+        platform: platforms.instagram ? 'instagram' : 'tiktok',
+      });
 
-    setPosts(prev => prev.map(p =>
-      p.id === postId
-        ? {
-            ...p,
-            caption: content.caption,
-            hashtags: content.hashtags,
-            hashtagString: content.hashtagString
-          }
-        : p
-    ));
-  }, [posts, platforms.instagram]);
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? {
+                ...p,
+                caption: content.caption,
+                hashtags: content.hashtags,
+                hashtagString: content.hashtagString,
+              }
+            : p,
+        ),
+      );
+    },
+    [posts, platforms.instagram],
+  );
 
   const removePost = useCallback((postId) => {
-    setPosts(prev => prev.filter(p => p.id !== postId).map((p, idx) => ({ ...p, order: idx })));
+    setPosts((prev) => prev.filter((p) => p.id !== postId).map((p, idx) => ({ ...p, order: idx })));
   }, []);
 
   // Schedule all posts
@@ -312,7 +330,7 @@ const ScheduleQueue = ({
     }
 
     // Render videos that need it
-    const postsNeedingRender = posts.filter(p => p.needsRender);
+    const postsNeedingRender = posts.filter((p) => p.needsRender);
     let updatedPosts = [...posts];
 
     if (postsNeedingRender.length > 0) {
@@ -329,15 +347,13 @@ const ScheduleQueue = ({
         setRenderProgress({
           current: i + 1,
           total: postsNeedingRender.length,
-          videoName: post.title
+          videoName: post.title,
         });
 
         try {
           const cloudUrl = await onRenderVideo(post.videoRef);
-          updatedPosts = updatedPosts.map(p =>
-            p.id === post.id
-              ? { ...p, videoUrl: cloudUrl, needsRender: false }
-              : p
+          updatedPosts = updatedPosts.map((p) =>
+            p.id === post.id ? { ...p, videoUrl: cloudUrl, needsRender: false } : p,
           );
         } catch (err) {
           log.error('Render error:', err);
@@ -366,7 +382,7 @@ const ScheduleQueue = ({
       let scheduledFor;
       if (intervalType === 'fixed') {
         const baseDate = new Date(`${scheduleDate}T${scheduleTime}`);
-        scheduledFor = new Date(baseDate.getTime() + (i * fixedInterval * 60 * 1000));
+        scheduledFor = new Date(baseDate.getTime() + i * fixedInterval * 60 * 1000);
       } else {
         // Random interval
         const baseDate = new Date(`${scheduleDate}T${scheduleTime}`);
@@ -374,7 +390,7 @@ const ScheduleQueue = ({
         for (let j = 0; j <= i; j++) {
           totalMinutes += Math.floor(Math.random() * (randomMax - randomMin + 1)) + randomMin;
         }
-        scheduledFor = new Date(baseDate.getTime() + (totalMinutes * 60 * 1000));
+        scheduledFor = new Date(baseDate.getTime() + totalMinutes * 60 * 1000);
       }
 
       // Full caption
@@ -385,13 +401,13 @@ const ScheduleQueue = ({
       if (platforms.tiktok && accountMapping.tiktok) {
         platformsArray.push({
           platform: 'tiktok',
-          accountId: accountMapping.tiktok
+          accountId: accountMapping.tiktok,
         });
       }
       if (platforms.instagram && accountMapping.instagram) {
         platformsArray.push({
           platform: 'instagram',
-          accountId: accountMapping.instagram
+          accountId: accountMapping.instagram,
         });
       }
 
@@ -405,15 +421,15 @@ const ScheduleQueue = ({
         // Different payloads for video vs slideshow
         if (post.type === 'slideshow') {
           const images = post.exportedImages
-            ? post.exportedImages.map(img => ({ url: img.url || img }))
-            : post.slides.map(s => ({ url: s.imageUrl || s.imageA?.url }));
+            ? post.exportedImages.map((img) => ({ url: img.url || img }))
+            : post.slides.map((s) => ({ url: s.imageUrl || s.imageA?.url }));
 
           await onSchedulePost({
             type: 'carousel',
             platforms: platformsArray,
             caption: fullCaption,
             images,
-            scheduledFor: scheduledFor.toISOString()
+            scheduledFor: scheduledFor.toISOString(),
           });
         } else {
           // Video
@@ -421,7 +437,7 @@ const ScheduleQueue = ({
             platforms: platformsArray,
             caption: fullCaption,
             videoUrl: post.videoUrl,
-            scheduledFor: scheduledFor.toISOString()
+            scheduledFor: scheduledFor.toISOString(),
           });
         }
 
@@ -434,7 +450,7 @@ const ScheduleQueue = ({
       }
 
       // Rate limiting delay
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 200));
     }
 
     setIsScheduling(false);
@@ -445,7 +461,21 @@ const ScheduleQueue = ({
       toastSuccess(`Successfully scheduled ${scheduled} posts!`);
       onClose?.();
     }
-  }, [posts, selectedHandle, scheduleDate, scheduleTime, intervalType, fixedInterval, randomMin, randomMax, platforms, lateAccountIds, onSchedulePost, onClose, onRenderVideo]);
+  }, [
+    posts,
+    selectedHandle,
+    scheduleDate,
+    scheduleTime,
+    intervalType,
+    fixedInterval,
+    randomMin,
+    randomMax,
+    platforms,
+    lateAccountIds,
+    onSchedulePost,
+    onClose,
+    onRenderVideo,
+  ]);
 
   return (
     <div style={styles.overlay}>
@@ -466,13 +496,14 @@ const ScheduleQueue = ({
         {isRendering && (
           <div style={styles.renderingBar}>
             <div style={styles.renderingText}>
-              🎬 Rendering {renderProgress.current}/{renderProgress.total}: {renderProgress.videoName}
+              🎬 Rendering {renderProgress.current}/{renderProgress.total}:{' '}
+              {renderProgress.videoName}
             </div>
             <div style={styles.progressBarContainer}>
               <div
                 style={{
                   ...styles.progressBar,
-                  width: `${(renderProgress.current / renderProgress.total) * 100}%`
+                  width: `${(renderProgress.current / renderProgress.total) * 100}%`,
                 }}
               />
             </div>
@@ -493,8 +524,10 @@ const ScheduleQueue = ({
                   style={styles.select}
                 >
                   <option value="">Select account...</option>
-                  {availableHandles.map(handle => (
-                    <option key={handle} value={handle}>{handle}</option>
+                  {availableHandles.map((handle) => (
+                    <option key={handle} value={handle}>
+                      {handle}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -506,7 +539,7 @@ const ScheduleQueue = ({
                     <input
                       type="checkbox"
                       checked={platforms.tiktok}
-                      onChange={(e) => setPlatforms(p => ({ ...p, tiktok: e.target.checked }))}
+                      onChange={(e) => setPlatforms((p) => ({ ...p, tiktok: e.target.checked }))}
                     />
                     TikTok
                   </label>
@@ -514,14 +547,19 @@ const ScheduleQueue = ({
                     <input
                       type="checkbox"
                       checked={platforms.instagram}
-                      onChange={(e) => setPlatforms(p => ({ ...p, instagram: e.target.checked }))}
+                      onChange={(e) => setPlatforms((p) => ({ ...p, instagram: e.target.checked }))}
                     />
                     Instagram
                   </label>
                 </div>
               </div>
 
-              <Button variant="neutral-secondary" size="small" icon={<FeatherShuffle />} onClick={handleShuffle}>
+              <Button
+                variant="neutral-secondary"
+                size="small"
+                icon={<FeatherShuffle />}
+                onClick={handleShuffle}
+              >
                 Shuffle
               </Button>
 
@@ -617,7 +655,12 @@ const ScheduleQueue = ({
             {error && (
               <div style={styles.errorBar}>
                 <span>⚠️ {error}</span>
-                <IconButton size="small" icon={<FeatherX />} onClick={() => setError(null)} aria-label="Dismiss error" />
+                <IconButton
+                  size="small"
+                  icon={<FeatherX />}
+                  onClick={() => setError(null)}
+                  aria-label="Dismiss error"
+                />
               </div>
             )}
 
@@ -662,23 +705,33 @@ const ScheduleQueue = ({
             <div style={styles.sidebar}>
               <div style={styles.sidebarHeader}>
                 <h3 style={styles.sidebarTitle}>Collection Banks</h3>
-                <IconButton size="small" icon={<FeatherX />} onClick={() => setShowBankEditor(false)} aria-label="Close bank editor" />
+                <IconButton
+                  size="small"
+                  icon={<FeatherX />}
+                  onClick={() => setShowBankEditor(false)}
+                  aria-label="Close bank editor"
+                />
               </div>
 
               <div style={styles.sidebarContent}>
                 {collectionsInQueue.length === 0 ? (
                   <p style={styles.sidebarEmpty}>No collections in queue</p>
                 ) : (
-                  collectionsInQueue.map(collection => (
+                  collectionsInQueue.map((collection) => (
                     <button
                       key={collection.id}
                       style={{
                         ...styles.collectionBtn,
-                        backgroundColor: editingCollectionId === collection.id ? theme.accent.primary : theme.bg.elevated
+                        backgroundColor:
+                          editingCollectionId === collection.id
+                            ? theme.accent.primary
+                            : theme.bg.elevated,
                       }}
-                      onClick={() => setEditingCollectionId(
-                        editingCollectionId === collection.id ? null : collection.id
-                      )}
+                      onClick={() =>
+                        setEditingCollectionId(
+                          editingCollectionId === collection.id ? null : collection.id,
+                        )
+                      }
                     >
                       {collection.name}
                     </button>
@@ -713,8 +766,7 @@ const ScheduleQueue = ({
           >
             {isScheduling
               ? `Scheduling... (${successCount}/${posts.length})`
-              : `Schedule ${posts.length} Post${posts.length !== 1 ? 's' : ''}`
-            }
+              : `Schedule ${posts.length} Post${posts.length !== 1 ? 's' : ''}`}
           </Button>
         </div>
       </div>
@@ -744,14 +796,14 @@ const ScheduleQueueCard = ({
   onHashtagsChange,
   onToggleEdit,
   onRandomize,
-  onRemove
+  onRemove,
 }) => {
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [generatedThumb, setGeneratedThumb] = useState(null);
   const captionInputRef = React.useRef(null);
   const hashtagInputRef = React.useRef(null);
 
-  const styles = getStyles(theme);
+  const styles = useMemo(() => getStyles(theme), [theme]);
 
   // Generate thumbnail for videos
   React.useEffect(() => {
@@ -764,7 +816,9 @@ const ScheduleQueueCard = ({
     video.crossOrigin = 'anonymous';
     video.muted = true;
     video.src = videoSrc;
-    video.onloadeddata = () => { video.currentTime = 0.5; };
+    video.onloadeddata = () => {
+      video.currentTime = 0.5;
+    };
     video.onseeked = () => {
       try {
         const canvas = document.createElement('canvas');
@@ -773,7 +827,9 @@ const ScheduleQueueCard = ({
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         setGeneratedThumb(canvas.toDataURL('image/jpeg', 0.7));
-      } catch (e) { /* CORS or other issue */ }
+      } catch (e) {
+        /* CORS or other issue */
+      }
     };
     video.onerror = () => {};
   }, [post.thumbnail, post.videoUrl, post.videoRef, generatedThumb, post.type]);
@@ -787,14 +843,14 @@ const ScheduleQueueCard = ({
     let scheduledFor;
     if (intervalType === 'fixed') {
       const baseDate = new Date(`${scheduleDate}T${scheduleTime}`);
-      scheduledFor = new Date(baseDate.getTime() + (index * fixedInterval * 60 * 1000));
+      scheduledFor = new Date(baseDate.getTime() + index * fixedInterval * 60 * 1000);
     } else {
       const baseDate = new Date(`${scheduleDate}T${scheduleTime}`);
       let totalMinutes = 0;
       for (let j = 0; j <= index; j++) {
         totalMinutes += Math.floor(Math.random() * (randomMax - randomMin + 1)) + randomMin;
       }
-      scheduledFor = new Date(baseDate.getTime() + (totalMinutes * 60 * 1000));
+      scheduledFor = new Date(baseDate.getTime() + totalMinutes * 60 * 1000);
     }
 
     return scheduledFor.toLocaleString('en-US', {
@@ -802,7 +858,7 @@ const ScheduleQueueCard = ({
       month: 'short',
       day: 'numeric',
       hour: 'numeric',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   }, [scheduleDate, scheduleTime, index, intervalType, fixedInterval, randomMin, randomMax]);
 
@@ -839,7 +895,7 @@ const ScheduleQueueCard = ({
       style={{
         ...styles.postCard,
         opacity: isDragging ? 0.5 : 1,
-        cursor: isDragging ? 'grabbing' : 'grab'
+        cursor: isDragging ? 'grabbing' : 'grab',
       }}
     >
       {/* Thumbnail */}
@@ -847,9 +903,7 @@ const ScheduleQueueCard = ({
         {thumbSrc ? (
           <img src={thumbSrc} alt={post.title} style={styles.thumbnailImg} />
         ) : (
-          <div style={styles.thumbnailPlaceholder}>
-            {post.type === 'slideshow' ? '🎞️' : '📹'}
-          </div>
+          <div style={styles.thumbnailPlaceholder}>{post.type === 'slideshow' ? '🎞️' : '📹'}</div>
         )}
         <span style={styles.postNumber}>#{index + 1}</span>
       </div>
@@ -859,12 +913,8 @@ const ScheduleQueueCard = ({
         <div style={styles.postHeader}>
           <div>
             <span style={styles.postTitle}>{post.title}</span>
-            {post.needsRender && (
-              <span style={styles.badge}>Needs Render</span>
-            )}
-            {post.isManuallyEdited && (
-              <span style={styles.badgeEdited}>Edited</span>
-            )}
+            {post.needsRender && <span style={styles.badge}>Needs Render</span>}
+            {post.isManuallyEdited && <span style={styles.badgeEdited}>Edited</span>}
           </div>
           <span style={styles.postTime}>{scheduledTime || 'No date set'}</span>
         </div>
@@ -888,11 +938,11 @@ const ScheduleQueueCard = ({
                 ...styles.captionText,
                 cursor: 'pointer',
                 borderBottom: '1px dashed transparent',
-                transition: 'border-color 0.2s'
+                transition: 'border-color 0.2s',
               }}
               onClick={() => onToggleEdit(post.id)}
-              onMouseEnter={(e) => e.target.style.borderBottomColor = theme.text.muted}
-              onMouseLeave={(e) => e.target.style.borderBottomColor = 'transparent'}
+              onMouseEnter={(e) => (e.target.style.borderBottomColor = theme.text.muted)}
+              onMouseLeave={(e) => (e.target.style.borderBottomColor = 'transparent')}
               title="Click to edit"
             >
               {post.caption || '(click to add caption)'}
@@ -919,11 +969,11 @@ const ScheduleQueueCard = ({
                 ...styles.hashtagText,
                 cursor: 'pointer',
                 borderBottom: '1px dashed transparent',
-                transition: 'border-color 0.2s'
+                transition: 'border-color 0.2s',
               }}
               onClick={() => onToggleEdit(post.id)}
-              onMouseEnter={(e) => e.target.style.borderBottomColor = theme.text.muted}
-              onMouseLeave={(e) => e.target.style.borderBottomColor = 'transparent'}
+              onMouseEnter={(e) => (e.target.style.borderBottomColor = theme.text.muted)}
+              onMouseLeave={(e) => (e.target.style.borderBottomColor = 'transparent')}
               title="Click to edit"
             >
               {post.hashtagString || '(click to add hashtags)'}
@@ -945,7 +995,7 @@ const ScheduleQueueCard = ({
         <button
           style={{
             ...styles.actionBtn,
-            opacity: post.isManuallyEdited ? 0.5 : 1
+            opacity: post.isManuallyEdited ? 0.5 : 1,
           }}
           onClick={() => onRandomize(post.id)}
           disabled={post.isManuallyEdited}
@@ -958,7 +1008,7 @@ const ScheduleQueueCard = ({
           style={{
             ...styles.actionBtnDanger,
             backgroundColor: showRemoveConfirm ? '#dc2626' : undefined,
-            color: showRemoveConfirm ? '#fff' : undefined
+            color: showRemoveConfirm ? '#fff' : undefined,
           }}
           onClick={handleRemove}
           title={showRemoveConfirm ? 'Click again to confirm' : 'Remove'}
@@ -981,7 +1031,7 @@ const getStyles = (theme) => ({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,
-    padding: '20px'
+    padding: '20px',
   },
   modal: {
     backgroundColor: theme.bg.surface,
@@ -991,57 +1041,57 @@ const getStyles = (theme) => ({
     maxHeight: '90vh',
     display: 'flex',
     flexDirection: 'column',
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     padding: '20px 24px',
-    borderBottom: `1px solid ${theme.bg.elevated}`
+    borderBottom: `1px solid ${theme.bg.elevated}`,
   },
   title: {
     margin: 0,
     fontSize: '20px',
     fontWeight: '600',
-    color: theme.text.primary
+    color: theme.text.primary,
   },
   subtitle: {
     margin: '4px 0 0 0',
     fontSize: '14px',
-    color: theme.text.muted
+    color: theme.text.muted,
   },
   renderingBar: {
     backgroundColor: theme.bg.surface,
     padding: '12px 24px',
-    borderBottom: `1px solid ${theme.bg.elevated}`
+    borderBottom: `1px solid ${theme.bg.elevated}`,
   },
   renderingText: {
     fontSize: '14px',
     color: '#f59e0b',
-    marginBottom: '8px'
+    marginBottom: '8px',
   },
   progressBarContainer: {
     height: '4px',
     backgroundColor: theme.bg.elevated,
     borderRadius: '2px',
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   progressBar: {
     height: '100%',
     backgroundColor: '#f59e0b',
-    transition: 'width 0.3s ease'
+    transition: 'width 0.3s ease',
   },
   bodyContainer: {
     display: 'flex',
     flex: 1,
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   mainContent: {
     flex: 1,
     display: 'flex',
     flexDirection: 'column',
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   controlsBar: {
     display: 'flex',
@@ -1049,7 +1099,7 @@ const getStyles = (theme) => ({
     padding: '16px 24px',
     borderBottom: `1px solid ${theme.bg.elevated}`,
     flexWrap: 'wrap',
-    alignItems: 'flex-end'
+    alignItems: 'flex-end',
   },
   scheduleBar: {
     display: 'flex',
@@ -1058,19 +1108,19 @@ const getStyles = (theme) => ({
     borderBottom: `1px solid ${theme.bg.elevated}`,
     backgroundColor: theme.bg.page,
     flexWrap: 'wrap',
-    alignItems: 'flex-end'
+    alignItems: 'flex-end',
   },
   controlGroup: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px'
+    gap: '4px',
   },
   label: {
     fontSize: '12px',
     fontWeight: '500',
     color: theme.text.secondary,
     textTransform: 'uppercase',
-    letterSpacing: '0.5px'
+    letterSpacing: '0.5px',
   },
   select: {
     padding: '8px 12px',
@@ -1080,7 +1130,7 @@ const getStyles = (theme) => ({
     color: theme.text.primary,
     fontSize: '14px',
     minWidth: '150px',
-    cursor: 'pointer'
+    cursor: 'pointer',
   },
   dateInput: {
     padding: '8px 12px',
@@ -1088,7 +1138,7 @@ const getStyles = (theme) => ({
     border: `1px solid ${theme.border.default}`,
     backgroundColor: theme.bg.elevated,
     color: theme.text.primary,
-    fontSize: '14px'
+    fontSize: '14px',
   },
   timeInput: {
     padding: '8px 12px',
@@ -1096,7 +1146,7 @@ const getStyles = (theme) => ({
     border: `1px solid ${theme.border.default}`,
     backgroundColor: theme.bg.elevated,
     color: theme.text.primary,
-    fontSize: '14px'
+    fontSize: '14px',
   },
   numberInput: {
     padding: '8px 12px',
@@ -1105,11 +1155,11 @@ const getStyles = (theme) => ({
     backgroundColor: theme.bg.elevated,
     color: theme.text.primary,
     fontSize: '14px',
-    width: '100px'
+    width: '100px',
   },
   platformToggles: {
     display: 'flex',
-    gap: '12px'
+    gap: '12px',
   },
   checkLabel: {
     display: 'flex',
@@ -1117,7 +1167,7 @@ const getStyles = (theme) => ({
     gap: '6px',
     fontSize: '14px',
     color: theme.text.primary,
-    cursor: 'pointer'
+    cursor: 'pointer',
   },
   errorBar: {
     display: 'flex',
@@ -1126,22 +1176,22 @@ const getStyles = (theme) => ({
     padding: '12px 24px',
     backgroundColor: '#7f1d1d',
     color: '#fecaca',
-    fontSize: '14px'
+    fontSize: '14px',
   },
   postsList: {
     flex: 1,
     overflowY: 'auto',
-    padding: '16px 24px'
+    padding: '16px 24px',
   },
   emptyState: {
     textAlign: 'center',
     padding: '48px 24px',
-    color: theme.text.muted
+    color: theme.text.muted,
   },
   emptyHint: {
     fontSize: '14px',
     marginTop: '8px',
-    color: theme.text.muted
+    color: theme.text.muted,
   },
   postCard: {
     display: 'flex',
@@ -1150,7 +1200,7 @@ const getStyles = (theme) => ({
     backgroundColor: theme.bg.elevated,
     borderRadius: '12px',
     marginBottom: '12px',
-    transition: 'opacity 0.2s'
+    transition: 'opacity 0.2s',
   },
   postThumbnail: {
     position: 'relative',
@@ -1159,12 +1209,12 @@ const getStyles = (theme) => ({
     borderRadius: '8px',
     overflow: 'hidden',
     backgroundColor: theme.bg.surface,
-    flexShrink: 0
+    flexShrink: 0,
   },
   thumbnailImg: {
     width: '100%',
     height: '100%',
-    objectFit: 'cover'
+    objectFit: 'cover',
   },
   thumbnailPlaceholder: {
     width: '100%',
@@ -1172,7 +1222,7 @@ const getStyles = (theme) => ({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '24px'
+    fontSize: '24px',
   },
   postNumber: {
     position: 'absolute',
@@ -1182,23 +1232,23 @@ const getStyles = (theme) => ({
     color: theme.text.primary,
     fontSize: '11px',
     padding: '2px 6px',
-    borderRadius: '4px'
+    borderRadius: '4px',
   },
   postContent: {
     flex: 1,
-    minWidth: 0
+    minWidth: 0,
   },
   postHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: '12px',
-    gap: '12px'
+    gap: '12px',
   },
   postTitle: {
     fontWeight: '600',
     color: theme.text.primary,
-    fontSize: '14px'
+    fontSize: '14px',
   },
   badge: {
     display: 'inline-block',
@@ -1208,7 +1258,7 @@ const getStyles = (theme) => ({
     fontSize: '10px',
     padding: '2px 6px',
     borderRadius: '4px',
-    fontWeight: '600'
+    fontWeight: '600',
   },
   badgeEdited: {
     display: 'inline-block',
@@ -1218,26 +1268,26 @@ const getStyles = (theme) => ({
     fontSize: '10px',
     padding: '2px 6px',
     borderRadius: '4px',
-    fontWeight: '600'
+    fontWeight: '600',
   },
   postTime: {
     fontSize: '12px',
     color: theme.text.secondary,
-    whiteSpace: 'nowrap'
+    whiteSpace: 'nowrap',
   },
   fieldGroup: {
-    marginBottom: '8px'
+    marginBottom: '8px',
   },
   fieldLabel: {
     fontSize: '11px',
     color: theme.text.muted,
     marginBottom: '2px',
-    display: 'block'
+    display: 'block',
   },
   captionText: {
     margin: 0,
     fontSize: '14px',
-    color: theme.text.primary
+    color: theme.text.primary,
   },
   captionInput: {
     width: '100%',
@@ -1246,13 +1296,13 @@ const getStyles = (theme) => ({
     border: `1px solid ${theme.border.default}`,
     backgroundColor: theme.bg.surface,
     color: theme.text.primary,
-    fontSize: '14px'
+    fontSize: '14px',
   },
   hashtagText: {
     margin: 0,
     fontSize: '13px',
     color: '#a78bfa',
-    wordBreak: 'break-all'
+    wordBreak: 'break-all',
   },
   hashtagInput: {
     width: '100%',
@@ -1261,12 +1311,12 @@ const getStyles = (theme) => ({
     border: `1px solid ${theme.border.default}`,
     backgroundColor: theme.bg.surface,
     color: '#a78bfa',
-    fontSize: '13px'
+    fontSize: '13px',
   },
   postActions: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px'
+    gap: '4px',
   },
   actionBtn: {
     padding: '6px 10px',
@@ -1275,7 +1325,7 @@ const getStyles = (theme) => ({
     backgroundColor: theme.bg.elevated,
     color: theme.text.primary,
     fontSize: '14px',
-    cursor: 'pointer'
+    cursor: 'pointer',
   },
   actionBtnDanger: {
     padding: '6px 10px',
@@ -1284,7 +1334,7 @@ const getStyles = (theme) => ({
     backgroundColor: '#7f1d1d',
     color: '#fecaca',
     fontSize: '14px',
-    cursor: 'pointer'
+    cursor: 'pointer',
   },
   sidebar: {
     width: '300px',
@@ -1292,20 +1342,20 @@ const getStyles = (theme) => ({
     backgroundColor: theme.bg.surface,
     display: 'flex',
     flexDirection: 'column',
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   sidebarHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '16px 20px',
-    borderBottom: `1px solid ${theme.bg.elevated}`
+    borderBottom: `1px solid ${theme.bg.elevated}`,
   },
   sidebarTitle: {
     margin: 0,
     fontSize: '14px',
     fontWeight: '600',
-    color: theme.text.primary
+    color: theme.text.primary,
   },
   sidebarContent: {
     flex: 1,
@@ -1313,13 +1363,13 @@ const getStyles = (theme) => ({
     padding: '12px 16px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px'
+    gap: '8px',
   },
   sidebarEmpty: {
     fontSize: '13px',
     color: theme.text.muted,
     textAlign: 'center',
-    padding: '24px 16px'
+    padding: '24px 16px',
   },
   collectionBtn: {
     padding: '10px 12px',
@@ -1330,19 +1380,19 @@ const getStyles = (theme) => ({
     fontSize: '13px',
     cursor: 'pointer',
     transition: 'background-color 0.2s',
-    textAlign: 'left'
+    textAlign: 'left',
   },
   sidebarEditor: {
     borderTop: `1px solid ${theme.bg.elevated}`,
     maxHeight: '50%',
-    overflowY: 'auto'
+    overflowY: 'auto',
   },
   footer: {
     display: 'flex',
     justifyContent: 'flex-end',
     gap: '12px',
     padding: '16px 24px',
-    borderTop: `1px solid ${theme.bg.elevated}`
+    borderTop: `1px solid ${theme.bg.elevated}`,
   },
 });
 

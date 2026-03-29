@@ -4,7 +4,13 @@
  */
 
 import { initializeApp, getApps } from 'firebase/app';
-import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
+import {
+  getStorage,
+  ref,
+  uploadBytesResumable,
+  getDownloadURL,
+  deleteObject,
+} from 'firebase/storage';
 import { getFirestore } from 'firebase/firestore';
 import log from '../utils/logger';
 import { checkQuotaBeforeUpload, incrementStorageUsed } from './storageQuotaService';
@@ -17,13 +23,13 @@ const firebaseConfig = {
   projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
   storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
 };
 
 // Validate required config in development
 if (process.env.NODE_ENV === 'development') {
   const required = ['apiKey', 'authDomain', 'projectId'];
-  const missing = required.filter(key => !firebaseConfig[key]);
+  const missing = required.filter((key) => !firebaseConfig[key]);
   if (missing.length > 0) {
     log.error('❌ Missing Firebase config:', missing.join(', '));
     log.error('Set REACT_APP_FIREBASE_* environment variables in .env.local');
@@ -33,7 +39,17 @@ if (process.env.NODE_ENV === 'development') {
 // File upload constraints
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'];
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/aiff', 'audio/x-aiff', 'audio/x-m4a', 'audio/aac', 'audio/flac'];
+const ALLOWED_AUDIO_TYPES = [
+  'audio/mpeg',
+  'audio/wav',
+  'audio/ogg',
+  'audio/mp4',
+  'audio/aiff',
+  'audio/x-aiff',
+  'audio/x-m4a',
+  'audio/aac',
+  'audio/flac',
+];
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB max
 
 // Initialize Firebase only if not already initialized
@@ -70,7 +86,7 @@ export async function uploadFile(file, folder = 'uploads', onProgress = null, op
     thumbnails: ALLOWED_IMAGE_TYPES,
     images: ALLOWED_IMAGE_TYPES,
     audio: ALLOWED_AUDIO_TYPES,
-    uploads: [...ALLOWED_VIDEO_TYPES, ...ALLOWED_IMAGE_TYPES, ...ALLOWED_AUDIO_TYPES]
+    uploads: [...ALLOWED_VIDEO_TYPES, ...ALLOWED_IMAGE_TYPES, ...ALLOWED_AUDIO_TYPES],
   };
 
   const allowed = allowedTypes[folder] || allowedTypes.uploads;
@@ -85,8 +101,8 @@ export async function uploadFile(file, folder = 'uploads', onProgress = null, op
     const header = await file.slice(0, 4).arrayBuffer();
     const bytes = new Uint8Array(header);
     const isValidImage =
-      (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) || // JPEG
-      (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) || // PNG
+      (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) || // JPEG
+      (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) || // PNG
       (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) || // GIF
       (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46); // WEBP (RIFF)
     if (!isValidImage) {
@@ -127,7 +143,7 @@ export async function uploadFile(file, folder = 'uploads', onProgress = null, op
         } catch (error) {
           reject(error);
         }
-      }
+      },
     );
   });
 }
@@ -170,7 +186,10 @@ export function getMediaDuration(url, type = 'video') {
     element.preload = 'metadata';
     element.crossOrigin = 'anonymous';
     element.onloadedmetadata = () => done(element.duration || 0);
-    element.onerror = () => { log.warn('Could not load media metadata:', url); done(0); };
+    element.onerror = () => {
+      log.warn('Could not load media metadata:', url);
+      done(0);
+    };
     const timeoutId = setTimeout(() => done(0), 5000);
     element.src = url;
   });
@@ -218,7 +237,10 @@ export function generateThumbnail(videoUrl, time = 1) {
       }
     };
 
-    video.onerror = () => { log.warn('Could not load video for thumbnail'); done(null); };
+    video.onerror = () => {
+      log.warn('Could not load video for thumbnail');
+      done(null);
+    };
     const timeoutId = setTimeout(() => done(null), 10000);
     video.src = videoUrl;
   });
@@ -266,7 +288,13 @@ export async function uploadThumbnail(dataUrl, fileName) {
  * @param {object} quotaContext - { userData, userEmail } for quota enforcement
  * @returns {Promise<{url: string, path: string}>}
  */
-export async function uploadFileWithQuota(file, folder, onProgress, options = {}, quotaContext = {}) {
+export async function uploadFileWithQuota(
+  file,
+  folder,
+  onProgress,
+  options = {},
+  quotaContext = {},
+) {
   const { userData, userEmail } = quotaContext;
 
   // Check quota before upload (skip if no userData — backwards compatible)
@@ -294,5 +322,5 @@ export default {
   uploadThumbnail,
   deleteFile,
   getMediaDuration,
-  generateThumbnail
+  generateThumbnail,
 };

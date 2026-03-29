@@ -6,12 +6,26 @@ import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { Badge } from '../../ui/components/Badge';
 import {
-  FeatherPlay, FeatherSquare, FeatherImage, FeatherFilm, FeatherLayers, FeatherCamera,
-  FeatherPlus, FeatherX, FeatherEdit2, FeatherCheck,
+  FeatherPlay,
+  FeatherSquare,
+  FeatherImage,
+  FeatherFilm,
+  FeatherLayers,
+  FeatherCamera,
+  FeatherPlus,
+  FeatherX,
+  FeatherEdit2,
+  FeatherCheck,
   FeatherType,
-  FeatherUpload, FeatherDownloadCloud, FeatherScissors, FeatherLink,
+  FeatherUpload,
+  FeatherDownloadCloud,
+  FeatherScissors,
+  FeatherLink,
   FeatherMusic,
-  FeatherChevronDown, FeatherChevronRight,
+  FeatherChevronDown,
+  FeatherChevronRight,
+  FeatherMic,
+  FeatherTrash2,
 } from '@subframe/core';
 import {
   updateNicheAudioId,
@@ -30,6 +44,7 @@ import {
   moveMediaBetweenBanks,
   getBankColor,
   MAX_MEDIA_BANKS,
+  updateLibraryItemAsync,
 } from '../../services/libraryService';
 import { getLyrics } from '../../services/libraryService';
 import useMediaMultiSelect from './shared/useMediaMultiSelect';
@@ -71,8 +86,10 @@ const VideoNicheContent = ({
   onAddLyrics,
   onUpdateLyrics,
   onDeleteLyrics,
+  onRemoveAudio,
 }) => {
-  const activeFormat = niche?.formats?.find(f => f.id === niche.activeFormatId) || niche?.formats?.[0];
+  const activeFormat =
+    niche?.formats?.find((f) => f.id === niche.activeFormatId) || niche?.formats?.[0];
   const IconComponent = FORMAT_ICONS[activeFormat?.id] || FeatherPlay;
   const [textBankInput1, setTextBankInput1] = useState('');
   const [textBankInput2, setTextBankInput2] = useState('');
@@ -101,30 +118,70 @@ const VideoNicheContent = ({
   const audioPreviewRef = useRef(null);
   const { success: toastSuccess, error: toastError } = useToast();
 
-  const handlePlayAudio = useCallback((e, audio) => {
-    e.stopPropagation();
-    const el = audioPreviewRef.current;
-    if (!el) return;
-    if (playingAudioId === audio.id) {
-      el.pause();
-      el.currentTime = 0;
-      setPlayingAudioId(null);
-    } else {
-      // Pick the best available URL — skip blob: URLs (stale after reload)
-      const validUrl = (u) => u && !u.startsWith('blob:');
-      const src = validUrl(audio.url) ? audio.url : validUrl(audio.localUrl) ? audio.localUrl : null;
-      if (!src) {
-        toastError('This track has no valid URL — please re-upload it');
-        return;
-      }
-      el.src = src;
-      el.play().catch(() => {
-        toastError('Could not play this track — the file may need to be re-uploaded');
+  const handlePlayAudio = useCallback(
+    (e, audio) => {
+      e.stopPropagation();
+      const el = audioPreviewRef.current;
+      if (!el) return;
+      if (playingAudioId === audio.id) {
+        el.pause();
+        el.currentTime = 0;
         setPlayingAudioId(null);
-      });
-      setPlayingAudioId(audio.id);
+      } else {
+        // Pick the best available URL — skip blob: URLs (stale after reload)
+        const validUrl = (u) => u && !u.startsWith('blob:');
+        const src = validUrl(audio.url)
+          ? audio.url
+          : validUrl(audio.localUrl)
+            ? audio.localUrl
+            : null;
+        if (!src) {
+          toastError('This track has no valid URL — please re-upload it');
+          return;
+        }
+        el.src = src;
+        el.play().catch(() => {
+          toastError('Could not play this track — the file may need to be re-uploaded');
+          setPlayingAudioId(null);
+        });
+        setPlayingAudioId(audio.id);
+      }
+    },
+    [playingAudioId, toastError],
+  );
+
+  // Audio rename
+  const [renamingAudioId, setRenamingAudioId] = useState(null);
+  const [renameAudioValue, setRenameAudioValue] = useState('');
+
+  const handleStartRenameAudio = useCallback((e, audio) => {
+    e.stopPropagation();
+    setRenamingAudioId(audio.id);
+    setRenameAudioValue(audio.name?.replace(/\.[^.]+$/, '') || '');
+  }, []);
+
+  const handleSaveRenameAudio = useCallback(async () => {
+    if (!renamingAudioId || !renameAudioValue.trim()) {
+      setRenamingAudioId(null);
+      return;
     }
-  }, [playingAudioId, toastError]);
+    const audio = projectAudio.find((a) => a.id === renamingAudioId);
+    const ext = audio?.name?.match(/\.[^.]+$/)?.[0] || '';
+    await updateLibraryItemAsync(db, artistId, renamingAudioId, {
+      name: renameAudioValue.trim() + ext,
+    });
+    toastSuccess('Audio renamed');
+    setRenamingAudioId(null);
+  }, [renamingAudioId, renameAudioValue, projectAudio, db, artistId, toastSuccess]);
+
+  // Trim specific audio track
+  const [trimAudioTarget, setTrimAudioTarget] = useState(null);
+
+  const handleOpenAudioTrimmer = useCallback((e, audio) => {
+    e.stopPropagation();
+    setTrimAudioTarget(audio);
+    setShowAudioTrimmer(true);
+  }, []);
 
   // Lyric bank state
   const [lyricsBank, setLyricsBank] = useState([]);
@@ -150,36 +207,58 @@ const VideoNicheContent = ({
   const wtAnimRef = useRef(null);
 
   // Drafts for this niche
-  const nicheDrafts = useMemo(() =>
-    (createdContent?.videos || []).filter(v => v.collectionId === niche?.id),
-    [createdContent, niche?.id]
+  const nicheDrafts = useMemo(
+    () => (createdContent?.videos || []).filter((v) => v.collectionId === niche?.id),
+    [createdContent, niche?.id],
   );
+
+  // Per-niche audio: audio items in this niche's mediaIds
+  const nicheAudio = useMemo(() => {
+    const nicheMediaIds = niche?.mediaIds || [];
+    return library.filter((m) => m.type === 'audio' && nicheMediaIds.includes(m.id));
+  }, [niche?.mediaIds, library]);
+
+  // Combined audio: niche audio first, then project audio (for import/selection)
+  const allAvailableAudio = useMemo(() => {
+    const nicheIds = new Set(nicheAudio.map((a) => a.id));
+    const otherAudio = projectAudio.filter((a) => !nicheIds.has(a.id));
+    return [...nicheAudio, ...otherAudio];
+  }, [nicheAudio, projectAudio]);
 
   // Per-niche audio selection
   const selectedAudio = useMemo(
-    () => projectAudio.find(a => a.id === niche?.audioId) || projectAudio[0] || null,
-    [projectAudio, niche?.audioId]
+    () => allAvailableAudio.find((a) => a.id === niche?.audioId) || nicheAudio[0] || null,
+    [allAvailableAudio, nicheAudio, niche?.audioId],
   );
 
-  const handleSelectAudio = useCallback((audioId) => {
-    if (!niche) return;
-    updateNicheAudioId(artistId, niche.id, audioId, db);
-  }, [artistId, niche, db]);
+  const handleSelectAudio = useCallback(
+    (audioId) => {
+      if (!niche) return;
+      updateNicheAudioId(artistId, niche.id, audioId, db);
+    },
+    [artistId, niche, db],
+  );
 
   // Text banks (videoTextBank1 / videoTextBank2)
   const textBank1 = niche?.videoTextBank1 || [];
   const textBank2 = niche?.videoTextBank2 || [];
 
-  const handleAddTextBank = useCallback((bankNum, text, setter) => {
-    if (!text.trim() || !niche) return;
-    addToVideoTextBank(artistId, niche.id, bankNum, text.trim(), db);
-    setter('');
-  }, [artistId, niche, db]);
+  const handleAddTextBank = useCallback(
+    (bankNum, text, setter) => {
+      if (!text.trim() || !niche) return;
+      addToVideoTextBank(artistId, niche.id, bankNum, text.trim(), db);
+      setter('');
+    },
+    [artistId, niche, db],
+  );
 
-  const handleRemoveTextBank = useCallback((bankNum, idx) => {
-    if (!niche) return;
-    removeFromVideoTextBank(artistId, niche.id, bankNum, idx, db);
-  }, [artistId, niche, db]);
+  const handleRemoveTextBank = useCallback(
+    (bankNum, idx) => {
+      if (!niche) return;
+      removeFromVideoTextBank(artistId, niche.id, bankNum, idx, db);
+    },
+    [artistId, niche, db],
+  );
 
   // Post-process Whisper words for singing:
   // 1. Enforce minimum duration (sung words are never < 0.15s)
@@ -288,7 +367,10 @@ const VideoNicheContent = ({
     }
     try {
       const result = await analyzeAudio(audioSrc);
-      if (!result?.words?.length) { toastError('No words transcribed'); return; }
+      if (!result?.words?.length) {
+        toastError('No words transcribed');
+        return;
+      }
       const dur = result.duration || 30;
       const legatoWords = postProcessWords(result.words, dur);
       setTranscribedWords(legatoWords);
@@ -301,9 +383,11 @@ const VideoNicheContent = ({
         wordTimelineAudioRef.current.currentTime = 0;
       }
       setShowWordTimeline(true);
-      toastSuccess(`Transcribed ${result.words.length} word${result.words.length !== 1 ? 's' : ''}`);
+      toastSuccess(
+        `Transcribed ${result.words.length} word${result.words.length !== 1 ? 's' : ''}`,
+      );
       // Async energy-based refinement — updates WordTimeline in place
-      refineWordsWithEnergy(legatoWords, audioSrc, dur).then(refined => {
+      refineWordsWithEnergy(legatoWords, audioSrc, dur).then((refined) => {
         setTranscribedWords(refined);
       });
     } catch (err) {
@@ -315,19 +399,27 @@ const VideoNicheContent = ({
     }
   }, [selectedAudio, analyzeAudio, toastSuccess, toastError]);
 
-  // Pick audio then auto-transcribe for "Add Lyrics"
-  const handlePickAudioAndTranscribe = useCallback(async (audio) => {
-    setShowAudioPicker(false);
-    if (!audio) return;
-    const validUrl = (u) => u && !u.startsWith('blob:');
-    const src = validUrl(audio.url) ? audio.url : validUrl(audio.localUrl) ? audio.localUrl : null;
-    if (!src) { toastError('Audio has no valid URL — please re-upload'); return; }
-    // Select this audio as the niche audio
-    if (niche) updateNicheAudioId(artistId, niche.id, audio.id, db);
-    try {
-      const result = await analyzeAudio(src);
-      if (result?.words?.length > 0) {
-        const dur = result.duration || audio.duration || audio.endTime || 60;
+  // Per-track transcribe — select audio then transcribe via WordTimeline
+  const handleTranscribeTrack = useCallback(
+    async (audio) => {
+      if (niche) updateNicheAudioId(artistId, niche.id, audio.id, db);
+      const validUrl = (u) => u && !u.startsWith('blob:');
+      const src = validUrl(audio.url)
+        ? audio.url
+        : validUrl(audio.localUrl)
+          ? audio.localUrl
+          : null;
+      if (!src) {
+        toastError('Audio URL not available for transcription');
+        return;
+      }
+      try {
+        const result = await analyzeAudio(src);
+        if (!result?.words?.length) {
+          toastError('No words transcribed');
+          return;
+        }
+        const dur = result.duration || audio.duration || 30;
         const legatoWords = postProcessWords(result.words, dur);
         setTranscribedWords(legatoWords);
         setTranscribedDuration(dur);
@@ -338,21 +430,91 @@ const VideoNicheContent = ({
           wordTimelineAudioRef.current.currentTime = 0;
         }
         setShowWordTimeline(true);
-        toastSuccess(`Transcribed ${result.words.length} word${result.words.length !== 1 ? 's' : ''}`);
-        refineWordsWithEnergy(legatoWords, src, dur).then(refined => {
+        toastSuccess(
+          `Transcribed ${result.words.length} word${result.words.length !== 1 ? 's' : ''}`,
+        );
+        refineWordsWithEnergy(legatoWords, src, dur).then((refined) => {
           setTranscribedWords(refined);
         });
-      } else {
-        toastError('No words transcribed');
+      } catch (err) {
+        if (err.message === 'API_KEY_REQUIRED') {
+          toastError('OpenAI API key required — set it in Settings');
+        } else {
+          toastError(`Transcription failed: ${err.message}`);
+        }
       }
-    } catch (err) {
-      if (err.message === 'API_KEY_REQUIRED') {
-        toastError('OpenAI API key required — set it in Settings');
-      } else {
-        toastError(`Transcription failed: ${err.message}`);
+    },
+    [
+      artistId,
+      niche,
+      db,
+      analyzeAudio,
+      postProcessWords,
+      refineWordsWithEnergy,
+      toastSuccess,
+      toastError,
+    ],
+  );
+
+  // Pick audio then auto-transcribe for "Add Lyrics"
+  const handlePickAudioAndTranscribe = useCallback(
+    async (audio) => {
+      setShowAudioPicker(false);
+      if (!audio) return;
+      const validUrl = (u) => u && !u.startsWith('blob:');
+      const src = validUrl(audio.url)
+        ? audio.url
+        : validUrl(audio.localUrl)
+          ? audio.localUrl
+          : null;
+      if (!src) {
+        toastError('Audio has no valid URL — please re-upload');
+        return;
       }
-    }
-  }, [artistId, niche, db, analyzeAudio, postProcessWords, refineWordsWithEnergy, toastSuccess, toastError]);
+      // Select this audio as the niche audio
+      if (niche) updateNicheAudioId(artistId, niche.id, audio.id, db);
+      try {
+        const result = await analyzeAudio(src);
+        if (result?.words?.length > 0) {
+          const dur = result.duration || audio.duration || audio.endTime || 60;
+          const legatoWords = postProcessWords(result.words, dur);
+          setTranscribedWords(legatoWords);
+          setTranscribedDuration(dur);
+          setWtCurrentTime(0);
+          setWtIsPlaying(false);
+          if (wordTimelineAudioRef.current) {
+            wordTimelineAudioRef.current.src = src;
+            wordTimelineAudioRef.current.currentTime = 0;
+          }
+          setShowWordTimeline(true);
+          toastSuccess(
+            `Transcribed ${result.words.length} word${result.words.length !== 1 ? 's' : ''}`,
+          );
+          refineWordsWithEnergy(legatoWords, src, dur).then((refined) => {
+            setTranscribedWords(refined);
+          });
+        } else {
+          toastError('No words transcribed');
+        }
+      } catch (err) {
+        if (err.message === 'API_KEY_REQUIRED') {
+          toastError('OpenAI API key required — set it in Settings');
+        } else {
+          toastError(`Transcription failed: ${err.message}`);
+        }
+      }
+    },
+    [
+      artistId,
+      niche,
+      db,
+      analyzeAudio,
+      postProcessWords,
+      refineWordsWithEnergy,
+      toastSuccess,
+      toastError,
+    ],
+  );
 
   // WordTimeline playback controls
   const handleWtPlayPause = useCallback(() => {
@@ -383,101 +545,142 @@ const VideoNicheContent = ({
   // Stop WordTimeline playback on close or audio end
   const handleWtClose = useCallback(() => {
     const audio = wordTimelineAudioRef.current;
-    if (audio) { audio.pause(); audio.currentTime = 0; }
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
     cancelAnimationFrame(wtAnimRef.current);
     setWtIsPlaying(false);
     setShowWordTimeline(false);
   }, []);
 
-  // WordTimeline "Add to Bank" — collects all words as lines, opens bank picker
-  const handleWtAddToBank = useCallback((lyricId, wordsToSave) => {
-    const allText = (wordsToSave || transcribedWords).map(w => w.text).join(' ');
-    const lines = allText.split(/[.!?]+/).map(s => s.trim()).filter(Boolean);
-    setPendingTranscription(lines.length > 0 ? lines : [allText]);
-    setShowWordTimeline(false);
-    setShowBankPicker(true);
-  }, [transcribedWords]);
+  // WordTimeline "Add to Bank" — saves transcribed words to Lyric Bank with full timing
+  // WordTimeline passes { title, content, words } from its save prompt
+  const handleWtAddToBank = useCallback(
+    (lyricData) => {
+      const words = lyricData?.words || transcribedWords;
+      if (!words?.length) return;
+      const lyricEntry = {
+        id: `lyric_${Date.now()}`,
+        title: lyricData?.title || selectedAudio?.name || 'Untitled',
+        words,
+        content: lyricData?.content || words.map((w) => w.text).join(' '),
+        audioName: selectedAudio?.name || 'Unknown',
+        createdAt: new Date().toISOString(),
+      };
+      if (onAddLyrics) {
+        onAddLyrics(lyricEntry);
+      }
+      setLyricsBank((prev) => [...prev, lyricEntry]);
+      setShowWordTimeline(false);
+      cancelAnimationFrame(wtAnimRef.current);
+      setWtIsPlaying(false);
+      toastSuccess('Saved to Lyric Bank');
+    },
+    [transcribedWords, selectedAudio, onAddLyrics, toastSuccess],
+  );
 
-  const handleAssignToBank = useCallback((bankNum) => {
-    if (!pendingTranscription || !niche) return;
-    pendingTranscription.forEach(text => addToVideoTextBank(artistId, niche.id, bankNum, text, db));
-    setPendingTranscription(null);
-    setShowBankPicker(false);
-  }, [pendingTranscription, artistId, niche, db]);
+  const handleAssignToBank = useCallback(
+    (bankNum) => {
+      if (!pendingTranscription || !niche) return;
+      pendingTranscription.forEach((text) =>
+        addToVideoTextBank(artistId, niche.id, bankNum, text, db),
+      );
+      setPendingTranscription(null);
+      setShowBankPicker(false);
+    },
+    [pendingTranscription, artistId, niche, db],
+  );
 
   // Migrate niche to mediaBanks format
-  const migratedNiche = useMemo(() => niche ? migrateToMediaBanks(niche) : niche, [niche]);
+  const migratedNiche = useMemo(() => (niche ? migrateToMediaBanks(niche) : niche), [niche]);
   const mediaBanks = migratedNiche?.mediaBanks || [];
 
   // All niche media (images + videos) for the grid
   const nicheMedia = useMemo(() => {
     if (!niche) return [];
-    return library.filter(item => (niche.mediaIds || []).includes(item.id) && item.type !== 'audio');
+    return library.filter(
+      (item) => (niche.mediaIds || []).includes(item.id) && item.type !== 'audio',
+    );
   }, [niche, library]);
 
   // Initialize selectedBankIds to all banks when banks change
   useEffect(() => {
     if (mediaBanks.length > 0 && selectedBankIds === null) {
-      setSelectedBankIds(new Set(mediaBanks.map(b => b.id)));
+      setSelectedBankIds(new Set(mediaBanks.map((b) => b.id)));
     }
   }, [mediaBanks, selectedBankIds]);
 
   // Multi-select callbacks (must be after mediaBanks is defined)
-  const handleBankItemClick = useCallback((itemId, bankId, e) => {
-    if (selectionBankId !== bankId) {
-      setSelectionBankId(bankId);
-      setBankSelectedIds(new Set([itemId]));
-      return;
-    }
-    setBankSelectedIds(prev => {
-      const next = new Set(prev);
-      if (e?.shiftKey && prev.size > 0) {
-        const bankObj = mediaBanks.find(b => b.id === bankId);
-        const ids = (bankObj?.mediaIds || []).filter(id => library.some(l => l.id === id && l.type !== 'audio'));
-        const lastSelected = [...prev].pop();
-        const startIdx = ids.indexOf(lastSelected);
-        const endIdx = ids.indexOf(itemId);
-        if (startIdx >= 0 && endIdx >= 0) {
-          const [lo, hi] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
-          for (let i = lo; i <= hi; i++) next.add(ids[i]);
-        }
-      } else if (e?.metaKey || e?.ctrlKey) {
-        if (next.has(itemId)) next.delete(itemId);
-        else next.add(itemId);
-      } else {
-        if (next.size === 1 && next.has(itemId)) return new Set();
-        return new Set([itemId]);
+  const handleBankItemClick = useCallback(
+    (itemId, bankId, e) => {
+      if (selectionBankId !== bankId) {
+        setSelectionBankId(bankId);
+        setBankSelectedIds(new Set([itemId]));
+        return;
       }
-      return next;
-    });
-  }, [selectionBankId, mediaBanks, library]);
+      setBankSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (e?.shiftKey && prev.size > 0) {
+          const bankObj = mediaBanks.find((b) => b.id === bankId);
+          const ids = (bankObj?.mediaIds || []).filter((id) =>
+            library.some((l) => l.id === id && l.type !== 'audio'),
+          );
+          const lastSelected = [...prev].pop();
+          const startIdx = ids.indexOf(lastSelected);
+          const endIdx = ids.indexOf(itemId);
+          if (startIdx >= 0 && endIdx >= 0) {
+            const [lo, hi] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+            for (let i = lo; i <= hi; i++) next.add(ids[i]);
+          }
+        } else if (e?.metaKey || e?.ctrlKey) {
+          if (next.has(itemId)) next.delete(itemId);
+          else next.add(itemId);
+        } else {
+          if (next.size === 1 && next.has(itemId)) return new Set();
+          return new Set([itemId]);
+        }
+        return next;
+      });
+    },
+    [selectionBankId, mediaBanks, library],
+  );
 
   const clearBankSelection = useCallback(() => {
     setBankSelectedIds(new Set());
     setSelectionBankId(null);
   }, []);
 
-  const handleBankGridMouseDown = useCallback((e, bankId) => {
-    if (e.button !== 0) return;
-    const gridEl = bankGridRefs.current[bankId];
-    if (!gridEl) return;
-    if (e.target.closest('button')) return;
-    const mediaEl = e.target.closest('[data-media-id]');
-    // If clicking a media item with Cmd/Ctrl/Shift, let onClick handle it (don't start rubber-band)
-    if (mediaEl && (e.metaKey || e.ctrlKey || e.shiftKey)) return;
-    // If clicking an already-selected item, don't start rubber-band (allow drag)
-    if (mediaEl && bankSelectedIds.has(mediaEl.getAttribute('data-media-id')) && selectionBankId === bankId) return;
-    // If clicking on a media item without modifier, let onClick handle selection (but still prep rubber-band)
-    if (mediaEl) return;
-    e.preventDefault();
-    const rect = gridEl.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top + gridEl.scrollTop;
-    bankDragStartRef.current = { x, y, bankId };
-    bankDragPriorRef.current = (e.shiftKey && selectionBankId === bankId) ? new Set(bankSelectedIds) : new Set();
-    setSelectionBankId(bankId);
-    if (!e.shiftKey && !e.metaKey && !e.ctrlKey) setBankSelectedIds(new Set());
-  }, [bankSelectedIds, selectionBankId]);
+  const handleBankGridMouseDown = useCallback(
+    (e, bankId) => {
+      if (e.button !== 0) return;
+      const gridEl = bankGridRefs.current[bankId];
+      if (!gridEl) return;
+      if (e.target.closest('button')) return;
+      const mediaEl = e.target.closest('[data-media-id]');
+      // If clicking a media item with Cmd/Ctrl/Shift, let onClick handle it (don't start rubber-band)
+      if (mediaEl && (e.metaKey || e.ctrlKey || e.shiftKey)) return;
+      // If clicking an already-selected item, don't start rubber-band (allow drag)
+      if (
+        mediaEl &&
+        bankSelectedIds.has(mediaEl.getAttribute('data-media-id')) &&
+        selectionBankId === bankId
+      )
+        return;
+      // If clicking on a media item without modifier, let onClick handle selection (but still prep rubber-band)
+      if (mediaEl) return;
+      e.preventDefault();
+      const rect = gridEl.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top + gridEl.scrollTop;
+      bankDragStartRef.current = { x, y, bankId };
+      bankDragPriorRef.current =
+        e.shiftKey && selectionBankId === bankId ? new Set(bankSelectedIds) : new Set();
+      setSelectionBankId(bankId);
+      if (!e.shiftKey && !e.metaKey && !e.ctrlKey) setBankSelectedIds(new Set());
+    },
+    [bankSelectedIds, selectionBankId],
+  );
 
   const handleBankGridMouseMove = useCallback((e) => {
     if (!bankDragStartRef.current) return;
@@ -504,7 +707,7 @@ const VideoNicheContent = ({
     const maxY = Math.max(startY, curY);
     const els = gridEl.querySelectorAll('[data-media-id]');
     const next = new Set(bankDragPriorRef.current);
-    els.forEach(el => {
+    els.forEach((el) => {
       const elLeft = el.offsetLeft;
       const elTop = el.offsetTop;
       const elRight = elLeft + el.offsetWidth;
@@ -521,12 +724,30 @@ const VideoNicheContent = ({
     setBankRubberBand(null);
   }, []);
 
-  const handleMoveToBank = useCallback((toBankId) => {
-    if (!niche || !selectionBankId || bankSelectedIds.size === 0) return;
-    moveMediaBetweenBanks(artistId, niche.id, [...bankSelectedIds], selectionBankId, toBankId, db);
-    clearBankSelection();
-    onRefreshCollections?.();
-  }, [niche, artistId, selectionBankId, bankSelectedIds, db, clearBankSelection, onRefreshCollections]);
+  const handleMoveToBank = useCallback(
+    (toBankId) => {
+      if (!niche || !selectionBankId || bankSelectedIds.size === 0) return;
+      moveMediaBetweenBanks(
+        artistId,
+        niche.id,
+        [...bankSelectedIds],
+        selectionBankId,
+        toBankId,
+        db,
+      );
+      clearBankSelection();
+      onRefreshCollections?.();
+    },
+    [
+      niche,
+      artistId,
+      selectionBankId,
+      bankSelectedIds,
+      db,
+      clearBankSelection,
+      onRefreshCollections,
+    ],
+  );
 
   const handleDeleteSelected = useCallback(() => {
     if (!niche || !selectionBankId || bankSelectedIds.size === 0) return;
@@ -542,22 +763,36 @@ const VideoNicheContent = ({
         setConfirmDialog({ isOpen: false });
       },
     });
-  }, [niche, artistId, selectionBankId, bankSelectedIds, db, clearBankSelection, onRefreshCollections]);
+  }, [
+    niche,
+    artistId,
+    selectionBankId,
+    bankSelectedIds,
+    db,
+    clearBankSelection,
+    onRefreshCollections,
+  ]);
 
   // Bank selection toggle
-  const toggleBankSelection = useCallback((bankId) => {
-    setSelectedBankIds(prev => {
-      const next = new Set(prev || mediaBanks.map(b => b.id));
-      if (next.has(bankId)) next.delete(bankId);
-      else next.add(bankId);
-      return next;
-    });
-  }, [mediaBanks]);
+  const toggleBankSelection = useCallback(
+    (bankId) => {
+      setSelectedBankIds((prev) => {
+        const next = new Set(prev || mediaBanks.map((b) => b.id));
+        if (next.has(bankId)) next.delete(bankId);
+        else next.add(bankId);
+        return next;
+      });
+    },
+    [mediaBanks],
+  );
 
   // Add new media bank handler
   const [bankNameError, setBankNameError] = useState('');
   const handleAddMediaBank = useCallback(() => {
-    if (!newBankName.trim()) { setBankNameError('Bank name is required'); return; }
+    if (!newBankName.trim()) {
+      setBankNameError('Bank name is required');
+      return;
+    }
     if (!niche) return;
     setBankNameError('');
     addMediaBank(artistId, niche.id, newBankName.trim(), db);
@@ -576,102 +811,126 @@ const VideoNicheContent = ({
   }, [renameValue, artistId, niche, renamingBankId, db, onRefreshCollections]);
 
   // Delete media bank handler
-  const handleDeleteMediaBank = useCallback((bankId, bankName) => {
-    if (!niche) return;
-    setConfirmDialog({
-      isOpen: true,
-      title: 'Delete Bank',
-      message: `Delete bank "${bankName || 'Untitled'}"? Media will be unlinked from this bank.`,
-      confirmLabel: 'Delete',
-      onConfirm: () => {
-        removeMediaBank(artistId, niche.id, bankId, db);
-        setSelectedBankIds(prev => {
-          if (!prev) return prev;
-          const next = new Set(prev);
-          next.delete(bankId);
-          return next;
-        });
-        onRefreshCollections?.();
-        setConfirmDialog({ isOpen: false });
-      },
-    });
-  }, [artistId, niche, db, onRefreshCollections]);
+  const handleDeleteMediaBank = useCallback(
+    (bankId, bankName) => {
+      if (!niche) return;
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Delete Bank',
+        message: `Delete bank "${bankName || 'Untitled'}"? Media will be unlinked from this bank.`,
+        confirmLabel: 'Delete',
+        onConfirm: () => {
+          removeMediaBank(artistId, niche.id, bankId, db);
+          setSelectedBankIds((prev) => {
+            if (!prev) return prev;
+            const next = new Set(prev);
+            next.delete(bankId);
+            return next;
+          });
+          onRefreshCollections?.();
+          setConfirmDialog({ isOpen: false });
+        },
+      });
+    },
+    [artistId, niche, db, onRefreshCollections],
+  );
 
   // Remove item from bank + niche entirely in one atomic write
-  const handleRemoveFromBank = useCallback((mediaId, bankId) => {
-    if (!niche) return;
-    removeFromMediaBank(artistId, niche.id, [mediaId], bankId, db, true);
-    onRefreshCollections?.();
-  }, [artistId, niche, db, onRefreshCollections]);
+  const handleRemoveFromBank = useCallback(
+    (mediaId, bankId) => {
+      if (!niche) return;
+      removeFromMediaBank(artistId, niche.id, [mediaId], bankId, db, true);
+      onRefreshCollections?.();
+    },
+    [artistId, niche, db, onRefreshCollections],
+  );
 
   // Filtered onMakeVideo — passes selected bank IDs
-  const handleMakeVideoFiltered = useCallback((format, nicheId, existingDraft) => {
-    if (!onMakeVideo) return;
-    const bankIds = selectedBankIds && selectedBankIds.size > 0 ? [...selectedBankIds] : null;
-    onMakeVideo(format, nicheId, existingDraft, bankIds);
-  }, [onMakeVideo, selectedBankIds]);
+  const handleMakeVideoFiltered = useCallback(
+    (format, nicheId, existingDraft) => {
+      if (!onMakeVideo) return;
+      const bankIds = selectedBankIds && selectedBankIds.size > 0 ? [...selectedBankIds] : null;
+      onMakeVideo(format, nicheId, existingDraft, bankIds);
+    },
+    [onMakeVideo, selectedBankIds],
+  );
 
   // Drag-to-reorder media
-  const handleMediaReorder = useCallback((reordered) => {
-    if (!niche) return;
-    const orderedIds = reordered.map(m => m.id);
-    updateNicheMediaOrder(artistId, niche.id, orderedIds, db);
-  }, [artistId, niche, db]);
-  const { makeDragProps, dragOverIndex, isDragging } = useDragReorder(nicheMedia, handleMediaReorder);
+  const handleMediaReorder = useCallback(
+    (reordered) => {
+      if (!niche) return;
+      const orderedIds = reordered.map((m) => m.id);
+      updateNicheMediaOrder(artistId, niche.id, orderedIds, db);
+    },
+    [artistId, niche, db],
+  );
+  const { makeDragProps, dragOverIndex, isDragging } = useDragReorder(
+    nicheMedia,
+    handleMediaReorder,
+  );
 
   // Quick trim handlers
-  const handleTrimSave = useCallback((trimStart, trimEnd) => {
-    if (!niche || !trimItemId) return;
-    updateMediaTrimPoints(artistId, niche.id, trimItemId, trimStart, trimEnd, db);
-    setTrimItemId(null);
-  }, [artistId, niche, trimItemId, db]);
+  const handleTrimSave = useCallback(
+    (trimStart, trimEnd) => {
+      if (!niche || !trimItemId) return;
+      updateMediaTrimPoints(artistId, niche.id, trimItemId, trimStart, trimEnd, db);
+      setTrimItemId(null);
+    },
+    [artistId, niche, trimItemId, db],
+  );
 
-  const trimItem = useMemo(() => nicheMedia.find(m => m.id === trimItemId), [nicheMedia, trimItemId]);
+  const trimItem = useMemo(
+    () => nicheMedia.find((m) => m.id === trimItemId),
+    [nicheMedia, trimItemId],
+  );
   const trimData = niche?.trimData || {};
 
   // Handle "Trim & Use" from AudioClipSelector — upload trimmed file, add to library, select as niche audio
-  const handleAudioTrimAndUse = useCallback(async (trimResult) => {
-    setShowAudioTrimmer(false);
-    if (!trimResult?.trimmedFile || !niche) return;
+  const handleAudioTrimAndUse = useCallback(
+    async (trimResult) => {
+      setShowAudioTrimmer(false);
+      if (!trimResult?.trimmedFile || !niche) return;
 
-    const { trimmedFile, trimmedName, duration: trimDuration } = trimResult;
+      const { trimmedFile, trimmedName, duration: trimDuration } = trimResult;
 
-    try {
-      // Create a local blob URL for immediate use
-      const localUrl = URL.createObjectURL(trimmedFile);
+      try {
+        // Create a local blob URL for immediate use
+        const localUrl = URL.createObjectURL(trimmedFile);
 
-      // Upload to Firebase Storage
-      const { uploadFile } = await import('../../services/firebaseStorage');
-      const { url: storageUrl } = await uploadFile(trimmedFile, 'audio');
+        // Upload to Firebase Storage
+        const { uploadFile } = await import('../../services/firebaseStorage');
+        const { url: storageUrl } = await uploadFile(trimmedFile, 'audio');
 
-      // Add to library
-      const mediaItem = {
-        type: 'audio',
-        name: trimmedName || trimmedFile.name,
-        url: storageUrl,
-        localUrl: storageUrl,
-        duration: trimDuration,
-        isTrimmed: true,
-        originalName: selectedAudio?.name,
-        createdAt: new Date().toISOString(),
-      };
-      const savedItem = await addToLibraryAsync(db, artistId, mediaItem);
+        // Add to library
+        const mediaItem = {
+          type: 'audio',
+          name: trimmedName || trimmedFile.name,
+          url: storageUrl,
+          localUrl: storageUrl,
+          duration: trimDuration,
+          isTrimmed: true,
+          originalName: trimAudioTarget?.name || selectedAudio?.name,
+          createdAt: new Date().toISOString(),
+        };
+        const savedItem = await addToLibraryAsync(db, artistId, mediaItem);
 
-      // Add to niche collection + project pool
-      await addToCollectionAsync(db, artistId, niche.id, savedItem.id);
-      if (niche.projectId) {
-        addToProjectPool(artistId, niche.projectId, [savedItem.id], db);
+        // Add to niche collection + project pool
+        await addToCollectionAsync(db, artistId, niche.id, savedItem.id);
+        if (niche.projectId) {
+          addToProjectPool(artistId, niche.projectId, [savedItem.id], db);
+        }
+
+        // Select as niche audio
+        updateNicheAudioId(artistId, niche.id, savedItem.id, db);
+
+        URL.revokeObjectURL(localUrl);
+        toastSuccess(`Trimmed audio "${trimmedName}" is now active`);
+      } catch (err) {
+        toastError(`Failed to use trimmed audio: ${err.message}`);
       }
-
-      // Select as niche audio
-      updateNicheAudioId(artistId, niche.id, savedItem.id, db);
-
-      URL.revokeObjectURL(localUrl);
-      toastSuccess(`Trimmed audio "${trimmedName}" is now active`);
-    } catch (err) {
-      toastError(`Failed to use trimmed audio: ${err.message}`);
-    }
-  }, [niche, artistId, db, selectedAudio, toastSuccess, toastError]);
+    },
+    [niche, artistId, db, selectedAudio, toastSuccess, toastError],
+  );
 
   if (!niche || !activeFormat) return null;
 
@@ -688,11 +947,19 @@ const VideoNicheContent = ({
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-500/10 border border-indigo-500/30">
                   <IconComponent className="text-indigo-400" style={{ width: 28, height: 28 }} />
                 </div>
-                <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{activeFormat.name}</span>
-                <span className="text-body font-body text-neutral-400 text-center max-w-sm">No media banks yet — add one to organize your content</span>
+                <span className="text-heading-2 font-heading-2 text-[#ffffffff]">
+                  {activeFormat.name}
+                </span>
+                <span className="text-body font-body text-neutral-400 text-center max-w-sm">
+                  No media banks yet — add one to organize your content
+                </span>
               </div>
-              <Button variant="brand-primary" size="large" icon={<FeatherPlus />}
-                onClick={() => setShowNewBankInput(true)}>
+              <Button
+                variant="brand-primary"
+                size="large"
+                icon={<FeatherPlus />}
+                onClick={() => setShowNewBankInput(true)}
+              >
                 Add Bank
               </Button>
             </div>
@@ -700,13 +967,14 @@ const VideoNicheContent = ({
             <>
               {mediaBanks.map((bank, bankIdx) => {
                 const color = getBankColor(bankIdx);
-                const bankMedia = library.filter(item =>
-                  (bank.mediaIds || []).includes(item.id) && item.type !== 'audio'
+                const bankMedia = library.filter(
+                  (item) => (bank.mediaIds || []).includes(item.id) && item.type !== 'audio',
                 );
                 const isSelected = selectedBankIds === null || selectedBankIds.has(bank.id);
                 const isRenaming = renamingBankId === bank.id;
                 return (
-                  <div key={bank.id}
+                  <div
+                    key={bank.id}
                     className="flex w-full flex-col gap-2 rounded-lg border border-solid p-3"
                     style={{ borderColor: color.border, backgroundColor: color.bg }}
                   >
@@ -722,20 +990,33 @@ const VideoNicheContent = ({
                         onClick={() => toggleBankSelection(bank.id)}
                         title={isSelected ? 'Exclude from editor' : 'Include in editor'}
                       >
-                        {isSelected && <FeatherCheck className="text-white" style={{ width: 10, height: 10 }} />}
+                        {isSelected && (
+                          <FeatherCheck className="text-white" style={{ width: 10, height: 10 }} />
+                        )}
                       </button>
-                      <div className="h-2.5 w-2.5 rounded-full flex-none" style={{ backgroundColor: color.primary }} />
+                      <div
+                        className="h-2.5 w-2.5 rounded-full flex-none"
+                        style={{ backgroundColor: color.primary }}
+                      />
                       {isRenaming ? (
                         <input
                           className="flex-1 rounded-md border border-solid border-neutral-200 bg-black px-2 py-0.5 text-caption-bold font-caption-bold text-white outline-none"
                           value={renameValue}
-                          onChange={e => setRenameValue(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') handleRenameMediaBank(); if (e.key === 'Escape') setRenamingBankId(null); }}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleRenameMediaBank();
+                            if (e.key === 'Escape') setRenamingBankId(null);
+                          }}
                           onBlur={handleRenameMediaBank}
                           autoFocus
                         />
                       ) : (
-                        <span className="text-caption-bold font-caption-bold" style={{ color: color.light }}>{bank.name}</span>
+                        <span
+                          className="text-caption-bold font-caption-bold"
+                          style={{ color: color.light }}
+                        >
+                          {bank.name}
+                        </span>
                       )}
                       <Badge variant="neutral">{bankMedia.length}</Badge>
                       <div className="flex-1" />
@@ -745,27 +1026,42 @@ const VideoNicheContent = ({
                           className="text-caption font-caption hover:text-white bg-transparent border-none cursor-pointer px-1 py-0.5 rounded transition-colors"
                           style={{ color: color.light }}
                           onClick={() => onUploadToMediaBank?.(bank.id)}
-                        >Upload</button>
+                        >
+                          Upload
+                        </button>
                         <button
                           className="text-caption font-caption hover:text-white bg-transparent border-none cursor-pointer px-1 py-0.5 rounded transition-colors"
                           style={{ color: color.light }}
                           onClick={() => onImportToMediaBank?.(bank.id)}
-                        >Import</button>
+                        >
+                          Import
+                        </button>
                         <button
                           className="text-caption font-caption hover:text-white bg-transparent border-none cursor-pointer px-1 py-0.5 rounded transition-colors"
                           style={{ color: color.light }}
                           onClick={() => onWebImportToMediaBank?.(bank.id)}
-                        >Web</button>
+                        >
+                          Web
+                        </button>
                       </div>
                       {!isRenaming && (
-                        <IconButton variant="neutral-tertiary" size="small"
-                          icon={<FeatherEdit2 />} aria-label="Rename bank"
-                          onClick={() => { setRenamingBankId(bank.id); setRenameValue(bank.name); }}
+                        <IconButton
+                          variant="neutral-tertiary"
+                          size="small"
+                          icon={<FeatherEdit2 />}
+                          aria-label="Rename bank"
+                          onClick={() => {
+                            setRenamingBankId(bank.id);
+                            setRenameValue(bank.name);
+                          }}
                         />
                       )}
                       {mediaBanks.length > 1 && (
-                        <IconButton variant="neutral-tertiary" size="small"
-                          icon={<FeatherX />} aria-label="Delete bank"
+                        <IconButton
+                          variant="neutral-tertiary"
+                          size="small"
+                          icon={<FeatherX />}
+                          aria-label="Delete bank"
                           onClick={() => handleDeleteMediaBank(bank.id, bank.name)}
                         />
                       )}
@@ -773,21 +1069,30 @@ const VideoNicheContent = ({
                     {/* Selection action bar */}
                     {selectionBankId === bank.id && bankSelectedIds.size > 0 && (
                       <div className="flex items-center gap-2 rounded-md bg-neutral-100 px-3 py-1.5">
-                        <span className="text-caption-bold font-caption-bold text-white">{bankSelectedIds.size} selected</span>
+                        <span className="text-caption-bold font-caption-bold text-white">
+                          {bankSelectedIds.size} selected
+                        </span>
                         <div className="flex-1" />
-                        {mediaBanks.length > 1 && mediaBanks.filter(b => b.id !== bank.id).map((targetBank, tIdx) => {
-                          const tColor = getBankColor(mediaBanks.indexOf(targetBank));
-                          return (
-                            <button key={targetBank.id}
-                              className="flex items-center gap-1 rounded px-2 py-0.5 text-caption font-caption bg-transparent border border-solid cursor-pointer hover:brightness-125 transition-colors"
-                              style={{ borderColor: tColor.primary, color: tColor.light }}
-                              onClick={() => handleMoveToBank(targetBank.id)}
-                            >
-                              <div className="h-2 w-2 rounded-full" style={{ backgroundColor: tColor.primary }} />
-                              Move to {targetBank.name}
-                            </button>
-                          );
-                        })}
+                        {mediaBanks.length > 1 &&
+                          mediaBanks
+                            .filter((b) => b.id !== bank.id)
+                            .map((targetBank, tIdx) => {
+                              const tColor = getBankColor(mediaBanks.indexOf(targetBank));
+                              return (
+                                <button
+                                  key={targetBank.id}
+                                  className="flex items-center gap-1 rounded px-2 py-0.5 text-caption font-caption bg-transparent border border-solid cursor-pointer hover:brightness-125 transition-colors"
+                                  style={{ borderColor: tColor.primary, color: tColor.light }}
+                                  onClick={() => handleMoveToBank(targetBank.id)}
+                                >
+                                  <div
+                                    className="h-2 w-2 rounded-full"
+                                    style={{ backgroundColor: tColor.primary }}
+                                  />
+                                  Move to {targetBank.name}
+                                </button>
+                              );
+                            })}
                         <button
                           className="flex items-center gap-1 rounded px-2 py-0.5 text-caption font-caption bg-transparent border border-solid border-red-500/50 text-red-400 cursor-pointer hover:bg-red-500/10 transition-colors"
                           onClick={handleDeleteSelected}
@@ -797,7 +1102,9 @@ const VideoNicheContent = ({
                         <button
                           className="text-caption font-caption text-neutral-400 bg-transparent border-none cursor-pointer hover:text-white"
                           onClick={clearBankSelection}
-                        >Cancel</button>
+                        >
+                          Cancel
+                        </button>
                       </div>
                     )}
                     {/* Bank media grid */}
@@ -805,85 +1112,133 @@ const VideoNicheContent = ({
                       <div
                         className="relative w-full overflow-y-auto rounded-lg border border-solid border-neutral-200 bg-[#111118] p-2 select-none"
                         style={{ maxHeight: 220 }}
-                        ref={el => { bankGridRefs.current[bank.id] = el; }}
-                        onMouseDown={e => handleBankGridMouseDown(e, bank.id)}
+                        ref={(el) => {
+                          bankGridRefs.current[bank.id] = el;
+                        }}
+                        onMouseDown={(e) => handleBankGridMouseDown(e, bank.id)}
                         onMouseMove={handleBankGridMouseMove}
                         onMouseUp={handleBankGridMouseUp}
                         onMouseLeave={handleBankGridMouseUp}
                       >
                         {/* Rubber-band overlay */}
                         {bankRubberBand && bankRubberBand.bankId === bank.id && (
-                          <div className="absolute z-10 rounded border border-solid border-blue-400/60 bg-blue-400/15 pointer-events-none"
-                            style={{ left: bankRubberBand.left, top: bankRubberBand.top, width: bankRubberBand.width, height: bankRubberBand.height }}
+                          <div
+                            className="absolute z-10 rounded border border-solid border-blue-400/60 bg-blue-400/15 pointer-events-none"
+                            style={{
+                              left: bankRubberBand.left,
+                              top: bankRubberBand.top,
+                              width: bankRubberBand.width,
+                              height: bankRubberBand.height,
+                            }}
                           />
                         )}
                         <div className="grid w-full grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-1.5">
                           {bankMedia.map((item, idx) => {
-                            const isItemSelected = selectionBankId === bank.id && bankSelectedIds.has(item.id);
+                            const isItemSelected =
+                              selectionBankId === bank.id && bankSelectedIds.has(item.id);
                             return (
-                            <div
-                              key={item.id}
-                              data-media-id={item.id}
-                              className="relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group"
-                              style={isItemSelected ? { outline: '2px solid #60a5fa', outlineOffset: -1 } : undefined}
-                              onClick={(e) => { e.stopPropagation(); handleBankItemClick(item.id, bank.id, e); }}
-                            >
-                              {item.type === 'video' ? (
-                                <>
-                                  {item.thumbnailUrl ? (
-                                    <img src={item.thumbnailUrl} alt={item.name} className="w-full h-full object-cover" loading="lazy" draggable={false} />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center">
-                                      <FeatherFilm className="text-neutral-600" style={{ width: 16, height: 16 }} />
+                              <div
+                                key={item.id}
+                                data-media-id={item.id}
+                                className="relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group"
+                                style={
+                                  isItemSelected
+                                    ? { outline: '2px solid #60a5fa', outlineOffset: -1 }
+                                    : undefined
+                                }
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleBankItemClick(item.id, bank.id, e);
+                                }}
+                              >
+                                {item.type === 'video' ? (
+                                  <>
+                                    {item.thumbnailUrl ? (
+                                      <img
+                                        src={item.thumbnailUrl}
+                                        alt={item.name}
+                                        className="w-full h-full object-cover"
+                                        loading="lazy"
+                                        draggable={false}
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center">
+                                        <FeatherFilm
+                                          className="text-neutral-600"
+                                          style={{ width: 16, height: 16 }}
+                                        />
+                                      </div>
+                                    )}
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-black/60 border border-white/20">
+                                        <FeatherPlay
+                                          className="text-white"
+                                          style={{ width: 8, height: 8 }}
+                                        />
+                                      </div>
                                     </div>
-                                  )}
-                                  <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-black/60 border border-white/20">
-                                      <FeatherPlay className="text-white" style={{ width: 8, height: 8 }} />
-                                    </div>
-                                  </div>
-                                  <button
-                                    className="absolute bottom-0.5 right-0.5 z-[4] flex h-4 w-4 items-center justify-center rounded bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-                                    onClick={(e) => { e.stopPropagation(); setTrimItemId(item.id); }}
-                                    title="Quick trim"
-                                  >
-                                    <FeatherScissors className="text-white" style={{ width: 9, height: 9 }} />
-                                  </button>
-                                  {trimData[item.id] && (
-                                    <div className="absolute bottom-0.5 left-0.5 z-[3] rounded bg-green-500/80 px-0.5 py-px">
-                                      <span className="text-[7px] font-mono text-white">trimmed</span>
-                                    </div>
-                                  )}
-                                </>
-                              ) : (
-                                <img
-                                  src={item.thumbnailUrl || item.url}
-                                  alt={item.name}
-                                  className="w-full h-full object-cover"
-                                  loading="lazy"
-                                  draggable={false}
-                                />
-                              )}
-                              <div className="absolute top-0.5 left-0.5 z-[3] rounded bg-black/60 px-1 py-px">
-                                <span className="text-[9px] font-mono text-white/70">{idx + 1}</span>
-                              </div>
-                              {/* Selection checkmark */}
-                              {isItemSelected && (
-                                <div className="absolute top-0.5 right-0.5 z-[5] flex h-4 w-4 items-center justify-center rounded-full bg-blue-500">
-                                  <FeatherCheck className="text-white" style={{ width: 9, height: 9 }} />
+                                    <button
+                                      className="absolute bottom-0.5 right-0.5 z-[4] flex h-4 w-4 items-center justify-center rounded bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setTrimItemId(item.id);
+                                      }}
+                                      title="Quick trim"
+                                    >
+                                      <FeatherScissors
+                                        className="text-white"
+                                        style={{ width: 9, height: 9 }}
+                                      />
+                                    </button>
+                                    {trimData[item.id] && (
+                                      <div className="absolute bottom-0.5 left-0.5 z-[3] rounded bg-green-500/80 px-0.5 py-px">
+                                        <span className="text-[7px] font-mono text-white">
+                                          trimmed
+                                        </span>
+                                      </div>
+                                    )}
+                                  </>
+                                ) : (
+                                  <img
+                                    src={item.thumbnailUrl || item.url}
+                                    alt={item.name}
+                                    className="w-full h-full object-cover"
+                                    loading="lazy"
+                                    draggable={false}
+                                  />
+                                )}
+                                <div className="absolute top-0.5 left-0.5 z-[3] rounded bg-black/60 px-1 py-px">
+                                  <span className="text-[9px] font-mono text-white/70">
+                                    {idx + 1}
+                                  </span>
                                 </div>
-                              )}
-                              {!isItemSelected && (
-                                <button
-                                  className="absolute top-0.5 right-0.5 z-[4] flex h-4 w-4 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
-                                  onClick={(e) => { e.stopPropagation(); handleRemoveFromBank(item.id, bank.id); }}
-                                  title="Remove from bank"
-                                >
-                                  <FeatherX className="text-white" style={{ width: 8, height: 8 }} />
-                                </button>
-                              )}
-                            </div>
-                          );})}
+                                {/* Selection checkmark */}
+                                {isItemSelected && (
+                                  <div className="absolute top-0.5 right-0.5 z-[5] flex h-4 w-4 items-center justify-center rounded-full bg-blue-500">
+                                    <FeatherCheck
+                                      className="text-white"
+                                      style={{ width: 9, height: 9 }}
+                                    />
+                                  </div>
+                                )}
+                                {!isItemSelected && (
+                                  <button
+                                    className="absolute top-0.5 right-0.5 z-[4] flex h-4 w-4 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemoveFromBank(item.id, bank.id);
+                                    }}
+                                    title="Remove from bank"
+                                  >
+                                    <FeatherX
+                                      className="text-white"
+                                      style={{ width: 8, height: 8 }}
+                                    />
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
                           <div
                             className="flex flex-col items-center justify-center aspect-square rounded border border-dashed cursor-pointer hover:bg-opacity-10 transition-colors"
                             style={{ borderColor: color.border }}
@@ -900,7 +1255,9 @@ const VideoNicheContent = ({
                         style={{ borderColor: color.border }}
                         onClick={() => onUploadToMediaBank?.(bank.id)}
                       >
-                        <span className="text-caption font-caption text-neutral-500">Drop media here or click to upload</span>
+                        <span className="text-caption font-caption text-neutral-500">
+                          Drop media here or click to upload
+                        </span>
                       </div>
                     )}
                   </div>
@@ -916,18 +1273,51 @@ const VideoNicheContent = ({
                           className={`flex-1 rounded-md border border-solid ${bankNameError ? 'border-red-500' : 'border-neutral-200'} bg-black px-3 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500`}
                           placeholder="Bank name..."
                           value={newBankName}
-                          onChange={e => { setNewBankName(e.target.value); if (bankNameError) setBankNameError(''); }}
-                          onKeyDown={e => { if (e.key === 'Enter') handleAddMediaBank(); if (e.key === 'Escape') { setShowNewBankInput(false); setNewBankName(''); setBankNameError(''); } }}
+                          onChange={(e) => {
+                            setNewBankName(e.target.value);
+                            if (bankNameError) setBankNameError('');
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleAddMediaBank();
+                            if (e.key === 'Escape') {
+                              setShowNewBankInput(false);
+                              setNewBankName('');
+                              setBankNameError('');
+                            }
+                          }}
                           autoFocus
                         />
-                        <Button variant="brand-primary" size="small" onClick={handleAddMediaBank} disabled={!newBankName.trim()}>Add</Button>
-                        <Button variant="neutral-tertiary" size="small" onClick={() => { setShowNewBankInput(false); setNewBankName(''); setBankNameError(''); }}>Cancel</Button>
+                        <Button
+                          variant="brand-primary"
+                          size="small"
+                          onClick={handleAddMediaBank}
+                          disabled={!newBankName.trim()}
+                        >
+                          Add
+                        </Button>
+                        <Button
+                          variant="neutral-tertiary"
+                          size="small"
+                          onClick={() => {
+                            setShowNewBankInput(false);
+                            setNewBankName('');
+                            setBankNameError('');
+                          }}
+                        >
+                          Cancel
+                        </Button>
                       </div>
-                      {bankNameError && <span className="text-[11px] text-red-400">{bankNameError}</span>}
+                      {bankNameError && (
+                        <span className="text-[11px] text-red-400">{bankNameError}</span>
+                      )}
                     </div>
                   ) : (
-                    <Button variant="neutral-tertiary" size="small" icon={<FeatherPlus />}
-                      onClick={() => setShowNewBankInput(true)}>
+                    <Button
+                      variant="neutral-tertiary"
+                      size="small"
+                      icon={<FeatherPlus />}
+                      onClick={() => setShowNewBankInput(true)}
+                    >
                       Add Bank
                     </Button>
                   )}
@@ -937,14 +1327,15 @@ const VideoNicheContent = ({
           )}
         </div>
 
-
         {/* Text Banks */}
         <div className="flex w-full gap-4 px-8 pb-4">
           {/* Bank A — Indigo */}
           <div className="flex flex-1 min-w-0 flex-col gap-2 rounded-lg border border-solid border-indigo-500/30 bg-indigo-500/5 p-3 overflow-hidden">
             <div className="flex items-center gap-2">
               <div className="h-2.5 w-2.5 rounded-full bg-indigo-500 flex-none" />
-              <span className="text-caption-bold font-caption-bold text-indigo-300">Text Bank A</span>
+              <span className="text-caption-bold font-caption-bold text-indigo-300">
+                Text Bank A
+              </span>
               <Badge variant="brand">{textBank1.length}</Badge>
             </div>
             {textBank1.length > 0 && (
@@ -954,8 +1345,13 @@ const VideoNicheContent = ({
                     key={idx}
                     className="flex items-center gap-2 rounded-md px-2 py-1 min-w-0 group bg-black/40 hover:bg-black/60 transition-colors"
                   >
-                    <FeatherType className="text-indigo-400 flex-none" style={{ width: 10, height: 10 }} />
-                    <span className="grow text-caption font-caption text-neutral-300 truncate">{text}</span>
+                    <FeatherType
+                      className="text-indigo-400 flex-none"
+                      style={{ width: 10, height: 10 }}
+                    />
+                    <span className="grow text-caption font-caption text-neutral-300 truncate">
+                      {text}
+                    </span>
                     <button
                       className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={() => handleRemoveTextBank(1, idx)}
@@ -971,11 +1367,18 @@ const VideoNicheContent = ({
                 className="flex-1 rounded-md border border-solid border-neutral-200 bg-neutral-0 px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
                 placeholder="Add text..."
                 value={textBankInput1}
-                onChange={e => setTextBankInput1(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleAddTextBank(1, textBankInput1, setTextBankInput1); }}
+                onChange={(e) => setTextBankInput1(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddTextBank(1, textBankInput1, setTextBankInput1);
+                }}
               />
-              <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add"
-                onClick={() => handleAddTextBank(1, textBankInput1, setTextBankInput1)} />
+              <IconButton
+                variant="brand-tertiary"
+                size="small"
+                icon={<FeatherPlus />}
+                aria-label="Add"
+                onClick={() => handleAddTextBank(1, textBankInput1, setTextBankInput1)}
+              />
             </div>
           </div>
 
@@ -983,7 +1386,9 @@ const VideoNicheContent = ({
           <div className="flex flex-1 min-w-0 flex-col gap-2 rounded-lg border border-solid border-amber-500/30 bg-amber-500/5 p-3 overflow-hidden">
             <div className="flex items-center gap-2">
               <div className="h-2.5 w-2.5 rounded-full bg-amber-500 flex-none" />
-              <span className="text-caption-bold font-caption-bold text-amber-300">Text Bank B</span>
+              <span className="text-caption-bold font-caption-bold text-amber-300">
+                Text Bank B
+              </span>
               <Badge variant="warning">{textBank2.length}</Badge>
             </div>
             {textBank2.length > 0 && (
@@ -993,8 +1398,13 @@ const VideoNicheContent = ({
                     key={idx}
                     className="flex items-center gap-2 rounded-md px-2 py-1 min-w-0 group bg-black/40 hover:bg-black/60 transition-colors"
                   >
-                    <FeatherType className="text-amber-400 flex-none" style={{ width: 10, height: 10 }} />
-                    <span className="grow text-caption font-caption text-neutral-300 truncate">{text}</span>
+                    <FeatherType
+                      className="text-amber-400 flex-none"
+                      style={{ width: 10, height: 10 }}
+                    />
+                    <span className="grow text-caption font-caption text-neutral-300 truncate">
+                      {text}
+                    </span>
                     <button
                       className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={() => handleRemoveTextBank(2, idx)}
@@ -1010,17 +1420,27 @@ const VideoNicheContent = ({
                 className="flex-1 rounded-md border border-solid border-neutral-200 bg-neutral-0 px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
                 placeholder="Add text..."
                 value={textBankInput2}
-                onChange={e => setTextBankInput2(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleAddTextBank(2, textBankInput2, setTextBankInput2); }}
+                onChange={(e) => setTextBankInput2(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddTextBank(2, textBankInput2, setTextBankInput2);
+                }}
               />
-              <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add"
-                onClick={() => handleAddTextBank(2, textBankInput2, setTextBankInput2)} />
+              <IconButton
+                variant="brand-tertiary"
+                size="small"
+                icon={<FeatherPlus />}
+                aria-label="Add"
+                onClick={() => handleAddTextBank(2, textBankInput2, setTextBankInput2)}
+              />
             </div>
           </div>
         </div>
 
         {/* Lyric Bank */}
-        <div className="flex w-full flex-col gap-2 rounded-lg border border-solid border-green-500/30 bg-green-500/5 p-3 mx-8 mb-4" style={{ maxWidth: 'calc(100% - 64px)' }}>
+        <div
+          className="flex w-full flex-col gap-2 rounded-lg border border-solid border-green-500/30 bg-green-500/5 p-3 mx-8 mb-4"
+          style={{ maxWidth: 'calc(100% - 64px)' }}
+        >
           <div className="flex items-center gap-2 mb-1">
             <FeatherMusic className="text-green-400 flex-none" style={{ width: 14, height: 14 }} />
             <span className="text-caption-bold font-caption-bold text-green-300">Lyric Bank</span>
@@ -1028,13 +1448,16 @@ const VideoNicheContent = ({
           </div>
           <LyricBankSection
             lyrics={lyricsBank}
-            hasAudio={projectAudio.length > 0}
+            hasAudio={allAvailableAudio.length > 0}
             isTranscribing={isAnalyzing}
             onAddNew={() => {
-              if (projectAudio.length === 0) { toastError('Upload audio first'); return; }
-              if (projectAudio.length === 1) {
+              if (allAvailableAudio.length === 0) {
+                toastError('Upload audio first');
+                return;
+              }
+              if (allAvailableAudio.length === 1) {
                 // Only one audio — pick it automatically
-                handlePickAudioAndTranscribe(projectAudio[0]);
+                handlePickAudioAndTranscribe(allAvailableAudio[0]);
               } else {
                 // Multiple audio — show picker
                 setShowAudioPicker(true);
@@ -1046,9 +1469,14 @@ const VideoNicheContent = ({
                 setTranscribedDuration(lyric.words[lyric.words.length - 1]?.end || 30);
                 setShowWordTimeline(true);
               } else if (lyric.content) {
-                const plainWords = lyric.content.split(/\s+/).filter(Boolean).map((text, i) => ({
-                  text, start: i * 0.5, end: (i + 1) * 0.5
-                }));
+                const plainWords = lyric.content
+                  .split(/\s+/)
+                  .filter(Boolean)
+                  .map((text, i) => ({
+                    text,
+                    start: i * 0.5,
+                    end: (i + 1) * 0.5,
+                  }));
                 setTranscribedWords(plainWords);
                 setTranscribedDuration(plainWords.length * 0.5);
                 setShowWordTimeline(true);
@@ -1058,80 +1486,264 @@ const VideoNicheContent = ({
             }}
             onDeleteLyric={(lyricId) => {
               if (onDeleteLyrics) onDeleteLyrics(lyricId);
-              setLyricsBank(prev => prev.filter(l => l.id !== lyricId));
+              setLyricsBank((prev) => prev.filter((l) => l.id !== lyricId));
             }}
           />
         </div>
 
-        {/* Audio Bank — vertical list like text banks */}
-        <div className="flex w-full flex-col gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-4 py-3 mx-8 mb-4" style={{ maxWidth: 'calc(100% - 64px)', maxHeight: 200 }}>
+        {/* Audio Bank — per-niche audio with import from other niches */}
+        <div
+          className="flex w-full flex-col gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] px-4 py-3 mx-8 mb-4"
+          style={{ maxWidth: 'calc(100% - 64px)', maxHeight: 260 }}
+        >
           <div className="flex w-full flex-none items-center justify-between">
             <div className="flex items-center gap-2">
               <FeatherMusic className="text-neutral-400" style={{ width: 14, height: 14 }} />
               <span className="text-caption-bold font-caption-bold text-[#ffffffff]">Audio</span>
-              <Badge variant="neutral">{projectAudio.length}</Badge>
+              <Badge variant="neutral">{nicheAudio.length}</Badge>
+              {projectAudio.length > nicheAudio.length && (
+                <span className="text-[10px] text-neutral-500">
+                  {projectAudio.length - nicheAudio.length} in project
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1">
               <button
                 className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
                 onClick={() => onImportAudio?.()}
-              >Import</button>
+              >
+                Import
+              </button>
               <button
                 className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
                 onClick={() => onUploadAudio?.()}
-              >Upload</button>
+              >
+                Upload
+              </button>
               <button
                 className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
                 onClick={() => onWebImportAudio?.()}
-              >Web</button>
+              >
+                Web
+              </button>
             </div>
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="flex flex-col gap-1.5">
-              {projectAudio.length === 0 ? (
+              {nicheAudio.length === 0 && projectAudio.length === 0 ? (
                 <div className="flex items-center justify-center rounded-md border-2 border-dashed border-neutral-200 py-3">
-                  <span className="text-caption font-caption text-neutral-500">No audio uploaded</span>
+                  <span className="text-caption font-caption text-neutral-500">
+                    No audio uploaded
+                  </span>
                 </div>
               ) : (
-                projectAudio.map(audio => {
-                  const isActive = niche?.audioId === audio.id;
-                  const isPlaying = playingAudioId === audio.id;
-                  const dur = audio.duration ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}` : '';
-                  return (
-                    <div
-                      key={audio.id}
-                      className={`group flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 cursor-pointer transition-colors flex-none ${
-                        isActive ? 'bg-indigo-500/15 border border-indigo-500 ring-1 ring-indigo-500' : 'bg-black border border-transparent hover:border-neutral-200'
-                      }`}
-                      onClick={() => handleSelectAudio(audio.id)}
-                    >
-                      <button
-                        className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-neutral-100 hover:bg-neutral-200 border-none cursor-pointer transition-colors"
-                        onClick={(e) => handlePlayAudio(e, audio)}
-                        title={isPlaying ? 'Stop' : 'Preview'}
+                <>
+                  {/* Niche audio (primary) */}
+                  {nicheAudio.map((audio) => {
+                    const isActive = niche?.audioId === audio.id;
+                    const isPlaying = playingAudioId === audio.id;
+                    const isRenaming = renamingAudioId === audio.id;
+                    const dur = audio.duration
+                      ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}`
+                      : '';
+                    return (
+                      <div
+                        key={audio.id}
+                        className={`group flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 cursor-pointer transition-colors flex-none ${
+                          isActive
+                            ? 'bg-indigo-500/15 border border-indigo-500 ring-1 ring-indigo-500'
+                            : 'bg-black border border-transparent hover:border-neutral-200'
+                        }`}
+                        onClick={() => handleSelectAudio(audio.id)}
                       >
-                        {isPlaying
-                          ? <FeatherSquare className="text-indigo-400" style={{ width: 8, height: 8 }} />
-                          : <FeatherPlay className={isActive ? 'text-indigo-400' : 'text-neutral-400'} style={{ width: 8, height: 8 }} />
-                        }
-                      </button>
-                      <span className="text-caption font-caption text-white truncate flex-1">{audio.name}</span>
-                      <span className="text-[10px] text-neutral-500 flex-none">{dur}</span>
-                      <button
-                        className="flex-none opacity-0 group-hover:opacity-100 flex items-center justify-center w-4 h-4 bg-transparent border-none cursor-pointer transition-opacity"
-                        onClick={(e) => { e.stopPropagation(); /* remove handled by parent */ }}
-                        title="Remove"
-                      >
-                        <FeatherX className="text-neutral-500 hover:text-red-400" style={{ width: 10, height: 10 }} />
-                      </button>
-                    </div>
-                  );
-                })
+                        <button
+                          className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-neutral-100 hover:bg-neutral-200 border-none cursor-pointer transition-colors"
+                          onClick={(e) => handlePlayAudio(e, audio)}
+                          title={isPlaying ? 'Stop' : 'Preview'}
+                        >
+                          {isPlaying ? (
+                            <FeatherSquare
+                              className="text-indigo-400"
+                              style={{ width: 8, height: 8 }}
+                            />
+                          ) : (
+                            <FeatherPlay
+                              className={isActive ? 'text-indigo-400' : 'text-neutral-400'}
+                              style={{ width: 8, height: 8 }}
+                            />
+                          )}
+                        </button>
+                        {isRenaming ? (
+                          <input
+                            autoFocus
+                            className="text-caption font-caption text-white truncate flex-1 bg-neutral-100 rounded px-1 py-0.5 outline-none border border-indigo-500"
+                            value={renameAudioValue}
+                            onChange={(e) => setRenameAudioValue(e.target.value)}
+                            onBlur={handleSaveRenameAudio}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveRenameAudio();
+                              if (e.key === 'Escape') setRenamingAudioId(null);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <span className="text-caption font-caption text-white truncate flex-1">
+                            {audio.name}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-neutral-400 flex-none">{dur}</span>
+                        {!isRenaming && (
+                          <div className="flex-none flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              className="flex items-center justify-center w-5 h-5 bg-transparent border-none cursor-pointer rounded hover:bg-indigo-500/20 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTranscribeTrack(audio);
+                              }}
+                              title="Transcribe to text banks"
+                            >
+                              <FeatherMic
+                                className="text-indigo-400"
+                                style={{ width: 10, height: 10 }}
+                              />
+                            </button>
+                            <button
+                              className="flex items-center justify-center w-5 h-5 bg-transparent border-none cursor-pointer rounded hover:bg-amber-500/20 transition-colors"
+                              onClick={(e) => handleOpenAudioTrimmer(e, audio)}
+                              title="Trim & save new"
+                            >
+                              <FeatherScissors
+                                className="text-amber-400"
+                                style={{ width: 10, height: 10 }}
+                              />
+                            </button>
+                            <button
+                              className="flex items-center justify-center w-5 h-5 bg-transparent border-none cursor-pointer rounded hover:bg-neutral-200/20 transition-colors"
+                              onClick={(e) => handleStartRenameAudio(e, audio)}
+                              title="Rename"
+                            >
+                              <FeatherEdit2
+                                className="text-neutral-400"
+                                style={{ width: 10, height: 10 }}
+                              />
+                            </button>
+                            <button
+                              className="flex items-center justify-center w-5 h-5 bg-transparent border-none cursor-pointer rounded hover:bg-red-500/20 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onRemoveAudio?.(audio.id);
+                              }}
+                              title="Remove from project"
+                            >
+                              <FeatherTrash2
+                                className="text-red-400"
+                                style={{ width: 10, height: 10 }}
+                              />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {/* Project audio not in this niche (available to import) */}
+                  {projectAudio.filter((a) => !nicheAudio.some((na) => na.id === a.id)).length >
+                    0 && (
+                    <>
+                      <div className="flex items-center gap-2 pt-1.5">
+                        <div className="flex-1 h-px bg-neutral-200" />
+                        <span className="text-[10px] text-neutral-500 flex-none">from project</span>
+                        <div className="flex-1 h-px bg-neutral-200" />
+                      </div>
+                      {projectAudio
+                        .filter((a) => !nicheAudio.some((na) => na.id === a.id))
+                        .map((audio) => {
+                          const isActive = niche?.audioId === audio.id;
+                          const isPlaying = playingAudioId === audio.id;
+                          const dur = audio.duration
+                            ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}`
+                            : '';
+                          return (
+                            <div
+                              key={audio.id}
+                              className={`group flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 cursor-pointer transition-colors flex-none ${
+                                isActive
+                                  ? 'bg-indigo-500/15 border border-indigo-500 ring-1 ring-indigo-500'
+                                  : 'bg-black/50 border border-transparent hover:border-neutral-200 opacity-70 hover:opacity-100'
+                              }`}
+                              onClick={() => handleSelectAudio(audio.id)}
+                            >
+                              <button
+                                className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-neutral-100 hover:bg-neutral-200 border-none cursor-pointer transition-colors"
+                                onClick={(e) => handlePlayAudio(e, audio)}
+                                title={isPlaying ? 'Stop' : 'Preview'}
+                              >
+                                {isPlaying ? (
+                                  <FeatherSquare
+                                    className="text-indigo-400"
+                                    style={{ width: 8, height: 8 }}
+                                  />
+                                ) : (
+                                  <FeatherPlay
+                                    className="text-neutral-400"
+                                    style={{ width: 8, height: 8 }}
+                                  />
+                                )}
+                              </button>
+                              <span className="text-caption font-caption text-white truncate flex-1">
+                                {audio.name}
+                              </span>
+                              <span className="text-[10px] text-neutral-400 flex-none">{dur}</span>
+                              <div className="flex-none flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  className="flex items-center justify-center w-5 h-5 bg-transparent border-none cursor-pointer rounded hover:bg-indigo-500/20 transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleTranscribeTrack(audio);
+                                  }}
+                                  title="Transcribe"
+                                >
+                                  <FeatherMic
+                                    className="text-indigo-400"
+                                    style={{ width: 10, height: 10 }}
+                                  />
+                                </button>
+                                <button
+                                  className="flex items-center justify-center w-5 h-5 bg-transparent border-none cursor-pointer rounded hover:bg-amber-500/20 transition-colors"
+                                  onClick={(e) => handleOpenAudioTrimmer(e, audio)}
+                                  title="Trim"
+                                >
+                                  <FeatherScissors
+                                    className="text-amber-400"
+                                    style={{ width: 10, height: 10 }}
+                                  />
+                                </button>
+                                <button
+                                  className="flex items-center justify-center w-5 h-5 bg-transparent border-none cursor-pointer rounded hover:bg-neutral-200/20 transition-colors"
+                                  onClick={(e) => handleStartRenameAudio(e, audio)}
+                                  title="Rename"
+                                >
+                                  <FeatherEdit2
+                                    className="text-neutral-400"
+                                    style={{ width: 10, height: 10 }}
+                                  />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </>
+                  )}
+                </>
               )}
             </div>
           </div>
         </div>
-        <audio ref={audioPreviewRef} preload="none" style={{ display: 'none' }} onEnded={() => setPlayingAudioId(null)} />
+        <audio
+          ref={audioPreviewRef}
+          preload="none"
+          style={{ display: 'none' }}
+          onEnded={() => setPlayingAudioId(null)}
+        />
 
         {/* Draft grid */}
         {nicheDrafts.length > 0 && (
@@ -1143,7 +1755,7 @@ const VideoNicheContent = ({
             <div className="grid w-full grid-cols-2 sm:grid-cols-3 gap-3">
               {nicheDrafts
                 .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
-                .map(draft => (
+                .map((draft) => (
                   <div
                     key={draft.id}
                     className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
@@ -1151,44 +1763,78 @@ const VideoNicheContent = ({
                   >
                     {draft.thumbnail ? (
                       <div className="w-full aspect-video bg-[#171717]">
-                        <img src={draft.thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" />
+                        <img
+                          src={draft.thumbnail}
+                          alt=""
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
                       </div>
                     ) : (
                       <div className="w-full aspect-video bg-[#171717] flex items-center justify-center">
-                        <FeatherImage className="text-neutral-700" style={{ width: 24, height: 24 }} />
+                        <FeatherImage
+                          className="text-neutral-700"
+                          style={{ width: 24, height: 24 }}
+                        />
                       </div>
                     )}
                     <div className="flex w-full flex-col gap-0.5 px-3 pb-3">
-                      <span className="text-caption font-caption text-neutral-300 truncate">{draft.name || 'Untitled'}</span>
+                      <span className="text-caption font-caption text-neutral-300 truncate">
+                        {draft.name || 'Untitled'}
+                      </span>
                     </div>
                   </div>
                 ))}
             </div>
           </div>
         )}
-
       </div>
 
       {/* Audio Picker for Add Lyrics */}
       {showAudioPicker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowAudioPicker(false)}>
-          <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-[#111111] overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+          onClick={() => setShowAudioPicker(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-neutral-200 bg-[#111111] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200">
-              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Choose a Song to Transcribe</span>
-              <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close" onClick={() => setShowAudioPicker(false)} />
+              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">
+                Choose a Song to Transcribe
+              </span>
+              <IconButton
+                variant="neutral-tertiary"
+                size="medium"
+                icon={<FeatherX />}
+                aria-label="Close"
+                onClick={() => setShowAudioPicker(false)}
+              />
             </div>
             <div className="px-6 py-4 flex flex-col gap-2 max-h-[400px] overflow-y-auto">
-              {projectAudio.map(audio => {
-                const dur = audio.duration ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}` : '';
+              {allAvailableAudio.map((audio) => {
+                const dur = audio.duration
+                  ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}`
+                  : '';
                 return (
                   <button
                     key={audio.id}
                     className="flex w-full items-center gap-3 rounded-lg px-4 py-3 bg-neutral-50 hover:bg-neutral-100 border border-transparent hover:border-indigo-500 cursor-pointer transition-colors text-left"
                     onClick={() => handlePickAudioAndTranscribe(audio)}
                   >
-                    <FeatherMusic className="text-indigo-400 flex-none" style={{ width: 16, height: 16 }} />
-                    <span className="text-body font-body text-white truncate flex-1">{audio.name}</span>
-                    {dur && <span className="text-caption font-caption text-neutral-400 flex-none">{dur}</span>}
+                    <FeatherMusic
+                      className="text-indigo-400 flex-none"
+                      style={{ width: 16, height: 16 }}
+                    />
+                    <span className="text-body font-body text-white truncate flex-1">
+                      {audio.name}
+                    </span>
+                    {dur && (
+                      <span className="text-caption font-caption text-neutral-400 flex-none">
+                        {dur}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -1198,12 +1844,17 @@ const VideoNicheContent = ({
       )}
 
       {/* Audio Trimmer Modal */}
-      {showAudioTrimmer && selectedAudio && (
+      {showAudioTrimmer && (trimAudioTarget || selectedAudio) && (
         <AudioClipSelector
-          audioUrl={selectedAudio.localUrl || selectedAudio.url}
-          audioName={selectedAudio.name || 'Audio'}
+          audioUrl={
+            (trimAudioTarget || selectedAudio).localUrl || (trimAudioTarget || selectedAudio).url
+          }
+          audioName={(trimAudioTarget || selectedAudio).name || 'Audio'}
           onSave={handleAudioTrimAndUse}
-          onCancel={() => setShowAudioTrimmer(false)}
+          onCancel={() => {
+            setShowAudioTrimmer(false);
+            setTrimAudioTarget(null);
+          }}
           db={db}
           artistId={artistId}
         />
@@ -1214,7 +1865,10 @@ const VideoNicheContent = ({
         ref={wordTimelineAudioRef}
         preload="none"
         style={{ display: 'none' }}
-        onEnded={() => { cancelAnimationFrame(wtAnimRef.current); setWtIsPlaying(false); }}
+        onEnded={() => {
+          cancelAnimationFrame(wtAnimRef.current);
+          setWtIsPlaying(false);
+        }}
       />
 
       {/* Word Timeline — after transcription */}
@@ -1230,32 +1884,57 @@ const VideoNicheContent = ({
           onClose={handleWtClose}
           audioRef={wordTimelineAudioRef}
           onAddToBank={handleWtAddToBank}
-          onSaveToBank={onUpdateLyrics ? (lyricId, wordsToSave) => {
-            onUpdateLyrics(lyricId, { words: wordsToSave });
-            setLyricsBank(prev => prev.map(l => l.id === lyricId ? { ...l, words: wordsToSave } : l));
-            toastSuccess('Lyric timings saved');
-          } : undefined}
+          onSaveToBank={
+            onUpdateLyrics
+              ? (lyricId, wordsToSave) => {
+                  onUpdateLyrics(lyricId, { words: wordsToSave });
+                  setLyricsBank((prev) =>
+                    prev.map((l) => (l.id === lyricId ? { ...l, words: wordsToSave } : l)),
+                  );
+                  toastSuccess('Lyric timings saved');
+                }
+              : undefined
+          }
         />
       )}
 
       {/* Bank Picker Modal — after transcription */}
       {showBankPicker && pendingTranscription && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowBankPicker(false)}>
-          <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-[#111111] overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+          onClick={() => setShowBankPicker(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-neutral-200 bg-[#111111] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200">
-              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Add to Text Bank</span>
-              <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close" onClick={() => setShowBankPicker(false)} />
+              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">
+                Add to Text Bank
+              </span>
+              <IconButton
+                variant="neutral-tertiary"
+                size="medium"
+                icon={<FeatherX />}
+                aria-label="Close"
+                onClick={() => setShowBankPicker(false)}
+              />
             </div>
             <div className="px-6 py-4">
               <span className="text-caption font-caption text-neutral-400 mb-3 block">
-                {pendingTranscription.length} line{pendingTranscription.length !== 1 ? 's' : ''} transcribed
+                {pendingTranscription.length} line{pendingTranscription.length !== 1 ? 's' : ''}{' '}
+                transcribed
               </span>
               <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto mb-4 rounded-lg border border-neutral-200 bg-black p-3">
                 {pendingTranscription.slice(0, 5).map((line, idx) => (
-                  <span key={idx} className="text-caption font-caption text-neutral-300 truncate">{line}</span>
+                  <span key={idx} className="text-caption font-caption text-neutral-300 truncate">
+                    {line}
+                  </span>
                 ))}
                 {pendingTranscription.length > 5 && (
-                  <span className="text-caption font-caption text-neutral-500">...and {pendingTranscription.length - 5} more</span>
+                  <span className="text-caption font-caption text-neutral-500">
+                    ...and {pendingTranscription.length - 5} more
+                  </span>
                 )}
               </div>
               <div className="flex items-center gap-3">
@@ -1287,10 +1966,12 @@ const VideoNicheContent = ({
         </div>
       )}
 
-
       {/* Quick Trim Popover */}
       {trimItemId && trimItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setTrimItemId(null)}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={() => setTrimItemId(null)}
+        >
           <QuickTrimPopover
             item={trimItem}
             initialTrimStart={trimData[trimItemId]?.trimStart || 0}
@@ -1314,7 +1995,10 @@ const VideoNicheContent = ({
           >
             <FeatherX className="text-white" style={{ width: 20, height: 20 }} />
           </button>
-          <div className="flex flex-col items-center gap-3 max-w-[90vw] max-h-[90vh]" onClick={e => e.stopPropagation()}>
+          <div
+            className="flex flex-col items-center gap-3 max-w-[90vw] max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
             {lightboxItem.type === 'video' ? (
               <video
                 className="max-w-[90vw] max-h-[85vh] rounded-lg"
@@ -1330,7 +2014,9 @@ const VideoNicheContent = ({
                 alt={lightboxItem.name}
               />
             )}
-            <span className="text-caption font-caption text-neutral-400 truncate max-w-[60vw]">{lightboxItem.name}</span>
+            <span className="text-caption font-caption text-neutral-400 truncate max-w-[60vw]">
+              {lightboxItem.name}
+            </span>
           </div>
         </div>
       )}

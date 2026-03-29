@@ -24,13 +24,12 @@ export async function recognizeSong(audioSource) {
   const idToken = await auth.currentUser?.getIdToken();
   if (!idToken) throw new Error('Not authenticated. Please sign in first.');
 
-  const baseUrl = window.location.hostname === 'localhost'
-    ? `http://localhost:${window.location.port}`
-    : '';
+  const baseUrl =
+    window.location.hostname === 'localhost' ? `http://localhost:${window.location.port}` : '';
 
   const response = await fetch(`${baseUrl}${SONG_RECOGNIZE_URL}`, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${idToken}` },
+    headers: { Authorization: `Bearer ${idToken}` },
     body: snippet,
   });
 
@@ -65,7 +64,7 @@ export async function fetchSyncedLyrics(artist, title) {
     if (!Array.isArray(results) || results.length === 0) return null;
 
     // Prefer result with synced lyrics
-    const withSynced = results.find(r => r.syncedLyrics);
+    const withSynced = results.find((r) => r.syncedLyrics);
     if (withSynced) {
       return {
         syncedLyrics: withSynced.syncedLyrics,
@@ -74,7 +73,7 @@ export async function fetchSyncedLyrics(artist, title) {
     }
 
     // Fall back to plain lyrics
-    const withPlain = results.find(r => r.plainLyrics);
+    const withPlain = results.find((r) => r.plainLyrics);
     if (withPlain) {
       return {
         syncedLyrics: null,
@@ -109,9 +108,8 @@ export function parseLRC(lrcString) {
     const minutes = parseInt(match[1], 10);
     const seconds = parseInt(match[2], 10);
     // Handle both 2-digit (centiseconds) and 3-digit (milliseconds) formats
-    const frac = match[3].length === 2
-      ? parseInt(match[3], 10) / 100
-      : parseInt(match[3], 10) / 1000;
+    const frac =
+      match[3].length === 2 ? parseInt(match[3], 10) / 100 : parseInt(match[3], 10) / 1000;
     const startTime = minutes * 60 + seconds + frac;
     const text = match[4].trim();
 
@@ -148,16 +146,15 @@ export function lrcToWordTimeline(lines, fullDuration) {
   // Adjust last line endTime to full duration if available
   const adjustedLines = lines.map((line, i) => ({
     ...line,
-    endTime: i === lines.length - 1 && fullDuration
-      ? Math.min(line.endTime, fullDuration)
-      : line.endTime,
+    endTime:
+      i === lines.length - 1 && fullDuration ? Math.min(line.endTime, fullDuration) : line.endTime,
   }));
 
   const allWords = [];
   const now = Date.now();
 
   for (const line of adjustedLines) {
-    const words = line.text.split(/\s+/).filter(w => w.length > 0);
+    const words = line.text.split(/\s+/).filter((w) => w.length > 0);
     if (words.length === 0) continue;
 
     const lineDuration = Math.max(line.endTime - line.startTime, 0.1);
@@ -173,6 +170,6 @@ export function lrcToWordTimeline(lines, fullDuration) {
     }
   }
 
-  const text = allWords.map(w => w.text).join(' ');
+  const text = allWords.map((w) => w.text).join(' ');
   return { text, words: allWords, lines: adjustedLines };
 }

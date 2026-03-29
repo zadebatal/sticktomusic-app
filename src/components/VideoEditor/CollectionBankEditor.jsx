@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   getCollectionCaptionBank,
   getCollectionHashtagBank,
@@ -16,13 +16,13 @@ const CollectionBankEditor = ({
   artistId,
   db = null,
   onBankChange,
-  compact = false // When true, uses smaller layout for sidebar
+  compact = false, // When true, uses smaller layout for sidebar
 }) => {
   const { theme } = useTheme();
   const [captionBank, setCaptionBank] = useState(() => getCollectionCaptionBank(collection));
   const [hashtagBank, setHashtagBank] = useState(() => getCollectionHashtagBank(collection));
 
-  const styles = getStyles(theme);
+  const styles = useMemo(() => getStyles(theme), [theme]);
 
   // Sync when collection changes
   useEffect(() => {
@@ -31,61 +31,91 @@ const CollectionBankEditor = ({
   }, [collection?.id, collection?.captionBank, collection?.hashtagBank]);
 
   // Save and notify parent
-  const saveCaptionBank = useCallback((updated) => {
-    setCaptionBank(updated);
-    updateCollectionCaptionBank(artistId, collection.id, updated, db);
-    onBankChange?.();
-  }, [artistId, db, collection, onBankChange]);
+  const saveCaptionBank = useCallback(
+    (updated) => {
+      setCaptionBank(updated);
+      updateCollectionCaptionBank(artistId, collection.id, updated, db);
+      onBankChange?.();
+    },
+    [artistId, db, collection, onBankChange],
+  );
 
-  const saveHashtagBank = useCallback((updated) => {
-    setHashtagBank(updated);
-    updateCollectionHashtagBank(artistId, collection.id, updated, db);
-    onBankChange?.();
-  }, [artistId, db, collection, onBankChange]);
+  const saveHashtagBank = useCallback(
+    (updated) => {
+      setHashtagBank(updated);
+      updateCollectionHashtagBank(artistId, collection.id, updated, db);
+      onBankChange?.();
+    },
+    [artistId, db, collection, onBankChange],
+  );
 
   // Caption handlers
-  const addCaptionAlways = useCallback((text) => {
-    const updated = { ...captionBank, always: [...captionBank.always, text] };
-    saveCaptionBank(updated);
-  }, [captionBank, saveCaptionBank]);
+  const addCaptionAlways = useCallback(
+    (text) => {
+      const updated = { ...captionBank, always: [...captionBank.always, text] };
+      saveCaptionBank(updated);
+    },
+    [captionBank, saveCaptionBank],
+  );
 
-  const removeCaptionAlways = useCallback((index) => {
-    const updated = { ...captionBank, always: captionBank.always.filter((_, i) => i !== index) };
-    saveCaptionBank(updated);
-  }, [captionBank, saveCaptionBank]);
+  const removeCaptionAlways = useCallback(
+    (index) => {
+      const updated = { ...captionBank, always: captionBank.always.filter((_, i) => i !== index) };
+      saveCaptionBank(updated);
+    },
+    [captionBank, saveCaptionBank],
+  );
 
-  const addCaptionPool = useCallback((text) => {
-    const updated = { ...captionBank, pool: [...captionBank.pool, text] };
-    saveCaptionBank(updated);
-  }, [captionBank, saveCaptionBank]);
+  const addCaptionPool = useCallback(
+    (text) => {
+      const updated = { ...captionBank, pool: [...captionBank.pool, text] };
+      saveCaptionBank(updated);
+    },
+    [captionBank, saveCaptionBank],
+  );
 
-  const removeCaptionPool = useCallback((index) => {
-    const updated = { ...captionBank, pool: captionBank.pool.filter((_, i) => i !== index) };
-    saveCaptionBank(updated);
-  }, [captionBank, saveCaptionBank]);
+  const removeCaptionPool = useCallback(
+    (index) => {
+      const updated = { ...captionBank, pool: captionBank.pool.filter((_, i) => i !== index) };
+      saveCaptionBank(updated);
+    },
+    [captionBank, saveCaptionBank],
+  );
 
   // Hashtag handlers
-  const addHashtagAlways = useCallback((text) => {
-    const tag = text.startsWith('#') ? text : '#' + text;
-    const updated = { ...hashtagBank, always: [...hashtagBank.always, tag] };
-    saveHashtagBank(updated);
-  }, [hashtagBank, saveHashtagBank]);
+  const addHashtagAlways = useCallback(
+    (text) => {
+      const tag = text.startsWith('#') ? text : '#' + text;
+      const updated = { ...hashtagBank, always: [...hashtagBank.always, tag] };
+      saveHashtagBank(updated);
+    },
+    [hashtagBank, saveHashtagBank],
+  );
 
-  const removeHashtagAlways = useCallback((index) => {
-    const updated = { ...hashtagBank, always: hashtagBank.always.filter((_, i) => i !== index) };
-    saveHashtagBank(updated);
-  }, [hashtagBank, saveHashtagBank]);
+  const removeHashtagAlways = useCallback(
+    (index) => {
+      const updated = { ...hashtagBank, always: hashtagBank.always.filter((_, i) => i !== index) };
+      saveHashtagBank(updated);
+    },
+    [hashtagBank, saveHashtagBank],
+  );
 
-  const addHashtagPool = useCallback((text) => {
-    const tag = text.startsWith('#') ? text : '#' + text;
-    const updated = { ...hashtagBank, pool: [...hashtagBank.pool, tag] };
-    saveHashtagBank(updated);
-  }, [hashtagBank, saveHashtagBank]);
+  const addHashtagPool = useCallback(
+    (text) => {
+      const tag = text.startsWith('#') ? text : '#' + text;
+      const updated = { ...hashtagBank, pool: [...hashtagBank.pool, tag] };
+      saveHashtagBank(updated);
+    },
+    [hashtagBank, saveHashtagBank],
+  );
 
-  const removeHashtagPool = useCallback((index) => {
-    const updated = { ...hashtagBank, pool: hashtagBank.pool.filter((_, i) => i !== index) };
-    saveHashtagBank(updated);
-  }, [hashtagBank, saveHashtagBank]);
+  const removeHashtagPool = useCallback(
+    (index) => {
+      const updated = { ...hashtagBank, pool: hashtagBank.pool.filter((_, i) => i !== index) };
+      saveHashtagBank(updated);
+    },
+    [hashtagBank, saveHashtagBank],
+  );
 
   if (!collection) {
     return (
@@ -101,7 +131,8 @@ const CollectionBankEditor = ({
         <div style={styles.header}>
           <h3 style={styles.title}>Captions & Hashtags</h3>
           <p style={styles.subtitle}>
-            Banks for <strong>{collection.name}</strong> — used when scheduling posts from this collection
+            Banks for <strong>{collection.name}</strong> — used when scheduling posts from this
+            collection
           </p>
         </div>
       )}
@@ -118,12 +149,12 @@ const CollectionBankEditor = ({
               {hashtagBank.always.map((tag, i) => (
                 <span key={i} style={styles.tagAlways}>
                   {tag}
-                  <button onClick={() => removeHashtagAlways(i)} style={styles.tagRemoveAlways}>×</button>
+                  <button onClick={() => removeHashtagAlways(i)} style={styles.tagRemoveAlways}>
+                    ×
+                  </button>
                 </span>
               ))}
-              {hashtagBank.always.length === 0 && (
-                <span style={styles.emptyHint}>None yet</span>
-              )}
+              {hashtagBank.always.length === 0 && <span style={styles.emptyHint}>None yet</span>}
             </div>
             <input
               type="text"
@@ -140,17 +171,19 @@ const CollectionBankEditor = ({
 
           {/* Pool */}
           <div style={styles.bankGroup}>
-            <label style={styles.bankLabel}>Random Pool <span style={styles.bankHint}>(3-5 selected per post)</span></label>
+            <label style={styles.bankLabel}>
+              Random Pool <span style={styles.bankHint}>(3-5 selected per post)</span>
+            </label>
             <div style={styles.tagList}>
               {hashtagBank.pool.map((tag, i) => (
                 <span key={i} style={styles.tagPool}>
                   {tag}
-                  <button onClick={() => removeHashtagPool(i)} style={styles.tagRemovePool}>×</button>
+                  <button onClick={() => removeHashtagPool(i)} style={styles.tagRemovePool}>
+                    ×
+                  </button>
                 </span>
               ))}
-              {hashtagBank.pool.length === 0 && (
-                <span style={styles.emptyHint}>None yet</span>
-              )}
+              {hashtagBank.pool.length === 0 && <span style={styles.emptyHint}>None yet</span>}
             </div>
             <input
               type="text"
@@ -177,12 +210,12 @@ const CollectionBankEditor = ({
               {captionBank.always.map((cap, i) => (
                 <span key={i} style={styles.tagAlways}>
                   {cap}
-                  <button onClick={() => removeCaptionAlways(i)} style={styles.tagRemoveAlways}>×</button>
+                  <button onClick={() => removeCaptionAlways(i)} style={styles.tagRemoveAlways}>
+                    ×
+                  </button>
                 </span>
               ))}
-              {captionBank.always.length === 0 && (
-                <span style={styles.emptyHint}>None yet</span>
-              )}
+              {captionBank.always.length === 0 && <span style={styles.emptyHint}>None yet</span>}
             </div>
             <input
               type="text"
@@ -199,17 +232,19 @@ const CollectionBankEditor = ({
 
           {/* Pool */}
           <div style={styles.bankGroup}>
-            <label style={styles.bankLabel}>Random Pool <span style={styles.bankHint}>(1 selected per post)</span></label>
+            <label style={styles.bankLabel}>
+              Random Pool <span style={styles.bankHint}>(1 selected per post)</span>
+            </label>
             <div style={styles.tagList}>
               {captionBank.pool.map((cap, i) => (
                 <span key={i} style={styles.tagPool}>
                   {cap}
-                  <button onClick={() => removeCaptionPool(i)} style={styles.tagRemovePool}>×</button>
+                  <button onClick={() => removeCaptionPool(i)} style={styles.tagRemovePool}>
+                    ×
+                  </button>
                 </span>
               ))}
-              {captionBank.pool.length === 0 && (
-                <span style={styles.emptyHint}>None yet</span>
-              )}
+              {captionBank.pool.length === 0 && <span style={styles.emptyHint}>None yet</span>}
             </div>
             <input
               type="text"
@@ -231,49 +266,49 @@ const CollectionBankEditor = ({
 
 const getStyles = (theme) => ({
   container: {
-    padding: '20px'
+    padding: '20px',
   },
   containerCompact: {
-    padding: '12px'
+    padding: '12px',
   },
   header: {
-    marginBottom: '20px'
+    marginBottom: '20px',
   },
   title: {
     margin: 0,
     fontSize: '18px',
     fontWeight: '600',
-    color: theme.text.primary
+    color: theme.text.primary,
   },
   subtitle: {
     margin: '6px 0 0 0',
     fontSize: '13px',
-    color: theme.text.muted
+    color: theme.text.muted,
   },
   sections: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: '24px'
+    gap: '24px',
   },
   sectionsCompact: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px'
+    gap: '16px',
   },
   section: {
     backgroundColor: theme.bg.surface,
     borderRadius: '12px',
     padding: '16px',
-    border: `1px solid ${theme.bg.elevated}`
+    border: `1px solid ${theme.bg.elevated}`,
   },
   sectionTitle: {
     margin: '0 0 16px 0',
     fontSize: '14px',
     fontWeight: '600',
-    color: theme.text.primary
+    color: theme.text.primary,
   },
   bankGroup: {
-    marginBottom: '16px'
+    marginBottom: '16px',
   },
   bankLabel: {
     display: 'block',
@@ -282,20 +317,20 @@ const getStyles = (theme) => ({
     color: theme.text.secondary,
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
-    marginBottom: '8px'
+    marginBottom: '8px',
   },
   bankHint: {
     textTransform: 'none',
     letterSpacing: '0',
     color: theme.text.muted,
-    fontWeight: '400'
+    fontWeight: '400',
   },
   tagList: {
     display: 'flex',
     flexWrap: 'wrap',
     gap: '6px',
     marginBottom: '8px',
-    minHeight: '28px'
+    minHeight: '28px',
   },
   tagAlways: {
     display: 'inline-flex',
@@ -305,7 +340,7 @@ const getStyles = (theme) => ({
     color: '#34d399',
     borderRadius: '6px',
     fontSize: '12px',
-    fontFamily: 'monospace'
+    fontFamily: 'monospace',
   },
   tagRemoveAlways: {
     background: 'none',
@@ -315,7 +350,7 @@ const getStyles = (theme) => ({
     marginLeft: '6px',
     padding: '0 2px',
     fontSize: '14px',
-    lineHeight: '1'
+    lineHeight: '1',
   },
   tagPool: {
     display: 'inline-flex',
@@ -325,7 +360,7 @@ const getStyles = (theme) => ({
     color: theme.text.secondary,
     borderRadius: '6px',
     fontSize: '12px',
-    fontFamily: 'monospace'
+    fontFamily: 'monospace',
   },
   tagRemovePool: {
     background: 'none',
@@ -335,7 +370,7 @@ const getStyles = (theme) => ({
     marginLeft: '6px',
     padding: '0 2px',
     fontSize: '14px',
-    lineHeight: '1'
+    lineHeight: '1',
   },
   input: {
     width: '100%',
@@ -346,21 +381,21 @@ const getStyles = (theme) => ({
     color: theme.text.primary,
     fontSize: '13px',
     outline: 'none',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
   },
   emptyHint: {
     fontSize: '12px',
     color: theme.text.muted,
-    fontStyle: 'italic'
+    fontStyle: 'italic',
   },
   empty: {
     padding: '40px 20px',
-    textAlign: 'center'
+    textAlign: 'center',
   },
   emptyText: {
     color: theme.text.muted,
-    fontSize: '14px'
-  }
+    fontSize: '14px',
+  },
 });
 
 export default CollectionBankEditor;

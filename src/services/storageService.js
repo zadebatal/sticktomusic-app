@@ -19,7 +19,7 @@ const STORAGE_KEYS = {
   PRESETS: 'stm_presets',
   SETTINGS: 'stm_settings',
   API_KEYS: 'stm_api_keys',
-  LYRIC_TEMPLATES: 'stm_lyric_templates'
+  LYRIC_TEMPLATES: 'stm_lyric_templates',
 };
 
 // Artist-namespaced storage keys
@@ -76,26 +76,25 @@ function loadFromStorage(key, defaultValue = null) {
  */
 export function saveCategories(categories) {
   // Filter out blob URLs and strip thumbnails (they're huge base64 strings)
-  const cleanedCategories = categories.map(cat => ({
+  const cleanedCategories = categories.map((cat) => ({
     ...cat,
     // Clean videos - remove thumbnails and blob URLs
     videos: (cat.videos || [])
-      .filter(v => v.url && !v.url.startsWith('blob:'))
-      .map(v => ({
+      .filter((v) => v.url && !v.url.startsWith('blob:'))
+      .map((v) => ({
         ...v,
-        thumbnail: null // Don't store base64 thumbnails - they fill localStorage
+        thumbnail: null, // Don't store base64 thumbnails - they fill localStorage
       })),
     // Clean audio - remove blob URLs
-    audio: (cat.audio || [])
-      .filter(a => a.url && !a.url.startsWith('blob:')),
+    audio: (cat.audio || []).filter((a) => a.url && !a.url.startsWith('blob:')),
     // Clean created videos - strip clip thumbnails too
-    createdVideos: (cat.createdVideos || []).map(video => ({
+    createdVideos: (cat.createdVideos || []).map((video) => ({
       ...video,
-      clips: (video.clips || []).map(clip => ({
+      clips: (video.clips || []).map((clip) => ({
         ...clip,
-        thumbnail: null // Strip clip thumbnails too
-      }))
-    }))
+        thumbnail: null, // Strip clip thumbnails too
+      })),
+    })),
   }));
 
   // INVARIANT CHECK: Verify no blob URLs remain after cleaning
@@ -130,26 +129,25 @@ export function saveArtistCategories(artistId, categories) {
   }
 
   // Filter out blob URLs and strip thumbnails (they're huge base64 strings)
-  const cleanedCategories = categories.map(cat => ({
+  const cleanedCategories = categories.map((cat) => ({
     ...cat,
     // Clean videos - remove thumbnails and blob URLs
     videos: (cat.videos || [])
-      .filter(v => v.url && !v.url.startsWith('blob:'))
-      .map(v => ({
+      .filter((v) => v.url && !v.url.startsWith('blob:'))
+      .map((v) => ({
         ...v,
-        thumbnail: null // Don't store base64 thumbnails - they fill localStorage
+        thumbnail: null, // Don't store base64 thumbnails - they fill localStorage
       })),
     // Clean audio - remove blob URLs
-    audio: (cat.audio || [])
-      .filter(a => a.url && !a.url.startsWith('blob:')),
+    audio: (cat.audio || []).filter((a) => a.url && !a.url.startsWith('blob:')),
     // Clean created videos - strip clip thumbnails too
-    createdVideos: (cat.createdVideos || []).map(video => ({
+    createdVideos: (cat.createdVideos || []).map((video) => ({
       ...video,
-      clips: (video.clips || []).map(clip => ({
+      clips: (video.clips || []).map((clip) => ({
         ...clip,
-        thumbnail: null // Strip clip thumbnails too
-      }))
-    }))
+        thumbnail: null, // Strip clip thumbnails too
+      })),
+    })),
   }));
 
   // INVARIANT CHECK: Verify no blob URLs remain after cleaning
@@ -321,7 +319,7 @@ export function loadSettings() {
   return loadFromStorage(STORAGE_KEYS.SETTINGS, {
     autoCensor: true,
     defaultCropMode: '9:16',
-    showSafeZones: true
+    showSafeZones: true,
   });
 }
 
@@ -385,5 +383,5 @@ export default {
   loadSettings,
   saveLyricTemplate,
   loadLyricTemplate,
-  cleanupStorage
+  cleanupStorage,
 };

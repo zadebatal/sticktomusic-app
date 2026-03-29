@@ -6,7 +6,12 @@ import { IconButton } from '../../ui/components/IconButton';
 import { FeatherX } from '@subframe/core';
 import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
 import { getStoredApiKey } from '../../services/whisperService';
-import { recognizeSong, fetchSyncedLyrics, parseLRC, lrcToWordTimeline } from '../../services/lyricsLookupService';
+import {
+  recognizeSong,
+  fetchSyncedLyrics,
+  parseLRC,
+  lrcToWordTimeline,
+} from '../../services/lyricsLookupService';
 import { trimAudio } from '../../utils/audioSnippet';
 import { loadLyricTemplate, saveLyricTemplate } from '../../services/storageService';
 import log from '../../utils/logger';
@@ -15,17 +20,27 @@ import log from '../../utils/logger';
  * Status step component — shows spinner → checkmark/x for each pipeline step.
  */
 const StatusStep = ({ status, label, theme }) => {
-  const icon = status === 'pending' ? '○'
-    : status === 'active' ? null
-    : status === 'success' ? '✓'
-    : status === 'skipped' ? '—'
-    : '✗';
+  const icon =
+    status === 'pending'
+      ? '○'
+      : status === 'active'
+        ? null
+        : status === 'success'
+          ? '✓'
+          : status === 'skipped'
+            ? '—'
+            : '✗';
 
-  const color = status === 'pending' ? theme.text.muted
-    : status === 'active' ? theme.accent.primary
-    : status === 'success' ? '#22c55e'
-    : status === 'skipped' ? theme.text.muted
-    : '#ef4444';
+  const color =
+    status === 'pending'
+      ? theme.text.muted
+      : status === 'active'
+        ? theme.accent.primary
+        : status === 'success'
+          ? '#22c55e'
+          : status === 'skipped'
+            ? theme.text.muted
+            : '#ef4444';
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 0' }}>
@@ -97,11 +112,12 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
           const user = auth.currentUser;
           if (user) {
             const token = await user.getIdToken();
-            const baseUrl = window.location.hostname === 'localhost'
-              ? `http://localhost:${window.location.port}`
-              : '';
+            const baseUrl =
+              window.location.hostname === 'localhost'
+                ? `http://localhost:${window.location.port}`
+                : '';
             const response = await fetch(`${baseUrl}/api/whisper?action=status`, {
-              headers: { 'Authorization': `Bearer ${token}` }
+              headers: { Authorization: `Bearer ${token}` },
             });
             if (response.ok) {
               const data = await response.json();
@@ -125,21 +141,24 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
   }, [audioSource]);
 
   // Run Whisper as fallback
-  const runWhisper = useCallback(async (source, key) => {
-    setWhisperStatus('active');
-    let sourceToAnalyze = source;
-    if (needsTrimming && source) {
-      setIsTrimming(true);
-      try {
-        sourceToAnalyze = await trimAudio(source, startTime, endTime);
-      } finally {
-        setIsTrimming(false);
+  const runWhisper = useCallback(
+    async (source, key) => {
+      setWhisperStatus('active');
+      let sourceToAnalyze = source;
+      if (needsTrimming && source) {
+        setIsTrimming(true);
+        try {
+          sourceToAnalyze = await trimAudio(source, startTime, endTime);
+        } finally {
+          setIsTrimming(false);
+        }
       }
-    }
-    const result = await analyze(sourceToAnalyze, key || undefined);
-    setWhisperStatus('done');
-    return result;
-  }, [analyze, needsTrimming, startTime, endTime]);
+      const result = await analyze(sourceToAnalyze, key || undefined);
+      setWhisperStatus('done');
+      return result;
+    },
+    [analyze, needsTrimming, startTime, endTime],
+  );
 
   const handleAnalyze = async () => {
     if (!apiKey && !hasApiKey) {
@@ -250,7 +269,8 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
   // Determine step labels for the status feed
   const getRecognitionLabel = () => {
     if (recognitionStatus === 'active') return 'Identifying song...';
-    if (recognitionStatus === 'found' && recognizedSong) return `Found: ${recognizedSong.title} \u2014 ${recognizedSong.artist}`;
+    if (recognitionStatus === 'found' && recognizedSong)
+      return `Found: ${recognizedSong.title} \u2014 ${recognizedSong.artist}`;
     if (recognitionStatus === 'not_found') return 'Song not in database';
     if (recognitionStatus === 'error') return 'Recognition unavailable';
     return 'Identify song';
@@ -264,7 +284,8 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
   };
 
   const getWhisperLabel = () => {
-    if (whisperStatus === 'active') return isTrimming ? 'Trimming audio...' : (progress || 'Transcribing with AI...');
+    if (whisperStatus === 'active')
+      return isTrimming ? 'Trimming audio...' : progress || 'Transcribing with AI...';
     if (whisperStatus === 'done') return 'Transcription complete';
     return 'Transcribe with AI';
   };
@@ -277,7 +298,7 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 1200
+      zIndex: 1200,
     },
     modal: {
       width: '90%',
@@ -285,23 +306,23 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       backgroundColor: theme.bg.input,
       borderRadius: '16px',
       overflow: 'hidden',
-      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
     },
     header: {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
       padding: '20px 24px',
-      borderBottom: `1px solid ${theme.bg.surface}`
+      borderBottom: `1px solid ${theme.bg.surface}`,
     },
     title: {
       margin: 0,
       fontSize: '18px',
       fontWeight: '600',
-      color: theme.text.primary
+      color: theme.text.primary,
     },
     content: {
-      padding: '24px'
+      padding: '24px',
     },
     audioInfo: {
       display: 'flex',
@@ -310,7 +331,7 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       padding: '16px',
       backgroundColor: theme.bg.page,
       borderRadius: '12px',
-      marginBottom: '20px'
+      marginBottom: '20px',
     },
     audioIcon: {
       fontSize: '28px',
@@ -320,7 +341,7 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.accent.primary,
-      borderRadius: '10px'
+      borderRadius: '10px',
     },
     audioName: {
       margin: 0,
@@ -330,34 +351,34 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       overflow: 'hidden',
       textOverflow: 'ellipsis',
       whiteSpace: 'nowrap',
-      maxWidth: '350px'
+      maxWidth: '350px',
     },
     cachedSection: {
       backgroundColor: '#0f2a1f',
       border: '1px solid #22c55e',
       borderRadius: '12px',
       padding: '16px',
-      marginBottom: '20px'
+      marginBottom: '20px',
     },
     cachedHeader: {
       display: 'flex',
       alignItems: 'center',
       gap: '12px',
-      marginBottom: '12px'
+      marginBottom: '12px',
     },
     cachedIcon: {
-      fontSize: '24px'
+      fontSize: '24px',
     },
     cachedTitle: {
       margin: 0,
       fontSize: '15px',
       fontWeight: '600',
-      color: '#22c55e'
+      color: '#22c55e',
     },
     cachedInfo: {
       margin: '4px 0 0',
       fontSize: '12px',
-      color: '#86efac'
+      color: '#86efac',
     },
     cachedPreview: {
       padding: '12px',
@@ -368,31 +389,31 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       fontStyle: 'italic',
       marginBottom: '12px',
       maxHeight: '60px',
-      overflow: 'hidden'
+      overflow: 'hidden',
     },
     cachedActions: {
       display: 'flex',
-      gap: '8px'
+      gap: '8px',
     },
     apiKeySection: {
-      marginBottom: '20px'
+      marginBottom: '20px',
     },
     label: {
       display: 'block',
       fontWeight: '600',
       marginBottom: '8px',
       color: theme.text.primary,
-      fontSize: '14px'
+      fontSize: '14px',
     },
     hint: {
       display: 'block',
       fontSize: '12px',
       fontWeight: '400',
       color: theme.text.muted,
-      marginTop: '4px'
+      marginTop: '4px',
     },
     link: {
-      color: theme.accent.primary
+      color: theme.accent.primary,
     },
     input: {
       width: '100%',
@@ -403,18 +424,18 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       fontSize: '14px',
       color: theme.text.primary,
       boxSizing: 'border-box',
-      outline: 'none'
+      outline: 'none',
     },
     cost: {
       margin: '10px 0 0',
       fontSize: '12px',
-      color: '#22c55e'
+      color: '#22c55e',
     },
     statusFeed: {
       padding: '16px',
       backgroundColor: theme.bg.page,
       borderRadius: '12px',
-      marginBottom: '16px'
+      marginBottom: '16px',
     },
     error: {
       padding: '16px',
@@ -423,25 +444,25 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       borderRadius: '8px',
       color: '#fca5a5',
       textAlign: 'center',
-      fontSize: '14px'
+      fontSize: '14px',
     },
     info: {
       padding: '16px',
       backgroundColor: theme.bg.page,
-      borderRadius: '12px'
+      borderRadius: '12px',
     },
     infoTitle: {
       margin: '0 0 8px 0',
       fontSize: '14px',
       fontWeight: '600',
-      color: theme.text.primary
+      color: theme.text.primary,
     },
     steps: {
       margin: '0',
       paddingLeft: '20px',
       lineHeight: '1.8',
       color: theme.text.secondary,
-      fontSize: '13px'
+      fontSize: '13px',
     },
     footer: {
       display: 'flex',
@@ -449,7 +470,7 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       gap: '12px',
       padding: '16px 24px',
       borderTop: `1px solid ${theme.bg.surface}`,
-      backgroundColor: theme.bg.page
+      backgroundColor: theme.bg.page,
     },
     emptyState: {
       display: 'flex',
@@ -457,23 +478,23 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       alignItems: 'center',
       justifyContent: 'center',
       padding: '40px 20px',
-      textAlign: 'center'
+      textAlign: 'center',
     },
     emptyIcon: {
       fontSize: '48px',
-      marginBottom: '16px'
+      marginBottom: '16px',
     },
     emptyTitle: {
       margin: '0 0 8px 0',
       fontSize: '16px',
       fontWeight: '600',
-      color: theme.text.primary
+      color: theme.text.primary,
     },
     emptyText: {
       margin: 0,
       fontSize: '13px',
-      color: theme.text.muted
-    }
+      color: theme.text.muted,
+    },
   };
 
   // Map status values to StatusStep status prop
@@ -508,102 +529,127 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
               </p>
             </div>
           ) : (
-          <>
-          {/* Audio Info */}
-          <div style={styles.audioInfo}>
-            <div style={styles.audioIcon}>🎵</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={styles.audioName}>{(() => {
-                const raw = audioFile?.name || (typeof audioUrl === 'string' ? decodeURIComponent(audioUrl.split('/').pop().split('?')[0]) : 'Audio file');
-                return raw;
-              })()}</p>
-            </div>
-          </div>
-
-          {/* Cached Lyrics Found */}
-          {cachedLyrics && !isProcessing && (
-            <div style={styles.cachedSection}>
-              <div style={styles.cachedHeader}>
-                <span style={styles.cachedIcon}>✅</span>
-                <div>
-                  <h4 style={styles.cachedTitle}>Cached Lyrics Found!</h4>
-                  <p style={styles.cachedInfo}>
-                    Analyzed on {new Date(cachedLyrics.createdAt).toLocaleDateString()} • {cachedLyrics.words?.length || 0} words
+            <>
+              {/* Audio Info */}
+              <div style={styles.audioInfo}>
+                <div style={styles.audioIcon}>🎵</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={styles.audioName}>
+                    {(() => {
+                      const raw =
+                        audioFile?.name ||
+                        (typeof audioUrl === 'string'
+                          ? decodeURIComponent(audioUrl.split('/').pop().split('?')[0])
+                          : 'Audio file');
+                      return raw;
+                    })()}
                   </p>
                 </div>
               </div>
-              <div style={styles.cachedPreview}>
-                {cachedLyrics.lyrics?.slice(0, 150)}...
-              </div>
-              <div style={styles.cachedActions}>
-                <Button variant="brand-primary" size="small" onClick={handleUseCached}>Use Cached Lyrics</Button>
-                <Button variant="neutral-secondary" size="small" onClick={handleClearCache}>Re-analyze Instead</Button>
-              </div>
-            </div>
-          )}
 
-          {/* API Key Input */}
-          {(showApiKeyInput || error) && !cachedLyrics && !isProcessing && (
-            <div style={styles.apiKeySection}>
-              <label style={styles.label}>
-                OpenAI API Key
-                <span style={styles.hint}>
-                  Get yours at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" style={styles.link}>platform.openai.com</a>
-                </span>
-              </label>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Enter your API key..."
-                style={styles.input}
-              />
-              <p style={styles.cost}>Needed as fallback for Whisper transcription</p>
-            </div>
-          )}
-          {!showApiKeyInput && !error && !cachedLyrics && apiKey && !isProcessing && (
-            <Button variant="neutral-tertiary" size="small" onClick={() => setShowApiKeyInput(true)}>Change API Key</Button>
-          )}
+              {/* Cached Lyrics Found */}
+              {cachedLyrics && !isProcessing && (
+                <div style={styles.cachedSection}>
+                  <div style={styles.cachedHeader}>
+                    <span style={styles.cachedIcon}>✅</span>
+                    <div>
+                      <h4 style={styles.cachedTitle}>Cached Lyrics Found!</h4>
+                      <p style={styles.cachedInfo}>
+                        Analyzed on {new Date(cachedLyrics.createdAt).toLocaleDateString()} •{' '}
+                        {cachedLyrics.words?.length || 0} words
+                      </p>
+                    </div>
+                  </div>
+                  <div style={styles.cachedPreview}>{cachedLyrics.lyrics?.slice(0, 150)}...</div>
+                  <div style={styles.cachedActions}>
+                    <Button variant="brand-primary" size="small" onClick={handleUseCached}>
+                      Use Cached Lyrics
+                    </Button>
+                    <Button variant="neutral-secondary" size="small" onClick={handleClearCache}>
+                      Re-analyze Instead
+                    </Button>
+                  </div>
+                </div>
+              )}
 
-          {/* Live Status Feed — replaces "How it works" during processing */}
-          {isProcessing && (
-            <div style={styles.statusFeed}>
-              {!needsTrimming && (
-                <>
-                  <StatusStep
-                    status={stepStatus(recognitionStatus)}
-                    label={getRecognitionLabel()}
-                    theme={theme}
+              {/* API Key Input */}
+              {(showApiKeyInput || error) && !cachedLyrics && !isProcessing && (
+                <div style={styles.apiKeySection}>
+                  <label style={styles.label}>
+                    OpenAI API Key
+                    <span style={styles.hint}>
+                      Get yours at{' '}
+                      <a
+                        href="https://platform.openai.com/api-keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={styles.link}
+                      >
+                        platform.openai.com
+                      </a>
+                    </span>
+                  </label>
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="Enter your API key..."
+                    style={styles.input}
                   />
-                  {(recognitionStatus === 'found' || lrcStatus !== 'idle') && (
+                  <p style={styles.cost}>Needed as fallback for Whisper transcription</p>
+                </div>
+              )}
+              {!showApiKeyInput && !error && !cachedLyrics && apiKey && !isProcessing && (
+                <Button
+                  variant="neutral-tertiary"
+                  size="small"
+                  onClick={() => setShowApiKeyInput(true)}
+                >
+                  Change API Key
+                </Button>
+              )}
+
+              {/* Live Status Feed — replaces "How it works" during processing */}
+              {isProcessing && (
+                <div style={styles.statusFeed}>
+                  {!needsTrimming && (
+                    <>
+                      <StatusStep
+                        status={stepStatus(recognitionStatus)}
+                        label={getRecognitionLabel()}
+                        theme={theme}
+                      />
+                      {(recognitionStatus === 'found' || lrcStatus !== 'idle') && (
+                        <StatusStep
+                          status={stepStatus(lrcStatus)}
+                          label={getLrcLabel()}
+                          theme={theme}
+                        />
+                      )}
+                    </>
+                  )}
+                  {whisperStatus !== 'idle' && (
                     <StatusStep
-                      status={stepStatus(lrcStatus)}
-                      label={getLrcLabel()}
+                      status={stepStatus(whisperStatus)}
+                      label={getWhisperLabel()}
                       theme={theme}
                     />
                   )}
-                </>
+                </div>
               )}
-              {whisperStatus !== 'idle' && (
-                <StatusStep
-                  status={stepStatus(whisperStatus)}
-                  label={getWhisperLabel()}
-                  theme={theme}
-                />
-              )}
-            </div>
-          )}
 
-          {/* Error */}
-          {(error || pipelineError) && <div style={styles.error}>{error || pipelineError}</div>}
+              {/* Error */}
+              {(error || pipelineError) && <div style={styles.error}>{error || pipelineError}</div>}
 
-          {/* Spacer when idle — keeps modal from collapsing */}
-          </>
+              {/* Spacer when idle — keeps modal from collapsing */}
+            </>
           )}
         </div>
 
         <div style={styles.footer}>
-          <Button variant="neutral-secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="neutral-secondary" onClick={onClose}>
+            Cancel
+          </Button>
           {audioSource && !cachedLyrics && (
             <Button
               variant="brand-primary"

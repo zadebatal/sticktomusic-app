@@ -30,7 +30,7 @@ const QuickTrimPopover = ({ item, initialTrimStart = 0, initialTrimEnd, onSave, 
     if (!vid || item?.duration) return;
     const onMeta = () => {
       if (vid.duration && isFinite(vid.duration)) {
-        setTrimEnd(prev => prev > vid.duration ? vid.duration : prev);
+        setTrimEnd((prev) => (prev > vid.duration ? vid.duration : prev));
       }
     };
     vid.addEventListener('loadedmetadata', onMeta);
@@ -45,43 +45,49 @@ const QuickTrimPopover = ({ item, initialTrimStart = 0, initialTrimEnd, onSave, 
   }, [item?.duration]);
 
   // Compute position from time
-  const timeToPercent = useCallback((time) => {
-    const dur = getEffectiveDuration();
-    return dur > 0 ? (time / dur) * 100 : 0;
-  }, [getEffectiveDuration]);
+  const timeToPercent = useCallback(
+    (time) => {
+      const dur = getEffectiveDuration();
+      return dur > 0 ? (time / dur) * 100 : 0;
+    },
+    [getEffectiveDuration],
+  );
 
   // Handle dragging trim handles
-  const handlePointerDown = useCallback((handle, e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    draggingRef.current = handle;
+  const handlePointerDown = useCallback(
+    (handle, e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      draggingRef.current = handle;
 
-    const moveHandler = (moveEvent) => {
-      const track = trackRef.current;
-      if (!track) return;
-      const rect = track.getBoundingClientRect();
-      const x = (moveEvent.clientX || moveEvent.touches?.[0]?.clientX || 0) - rect.left;
-      const pct = Math.max(0, Math.min(1, x / rect.width));
-      const time = pct * getEffectiveDuration();
+      const moveHandler = (moveEvent) => {
+        const track = trackRef.current;
+        if (!track) return;
+        const rect = track.getBoundingClientRect();
+        const x = (moveEvent.clientX || moveEvent.touches?.[0]?.clientX || 0) - rect.left;
+        const pct = Math.max(0, Math.min(1, x / rect.width));
+        const time = pct * getEffectiveDuration();
 
-      if (handle === 'start') {
-        setTrimStart(Math.min(time, trimEnd - 0.1));
-      } else {
-        setTrimEnd(Math.max(time, trimStart + 0.1));
-      }
-    };
+        if (handle === 'start') {
+          setTrimStart(Math.min(time, trimEnd - 0.1));
+        } else {
+          setTrimEnd(Math.max(time, trimStart + 0.1));
+        }
+      };
 
-    const upHandler = () => {
-      draggingRef.current = null;
-      document.removeEventListener('pointermove', moveHandler);
-      document.removeEventListener('pointerup', upHandler);
-      document.removeEventListener('pointercancel', upHandler);
-    };
+      const upHandler = () => {
+        draggingRef.current = null;
+        document.removeEventListener('pointermove', moveHandler);
+        document.removeEventListener('pointerup', upHandler);
+        document.removeEventListener('pointercancel', upHandler);
+      };
 
-    document.addEventListener('pointermove', moveHandler);
-    document.addEventListener('pointerup', upHandler);
-    document.addEventListener('pointercancel', upHandler);
-  }, [trimStart, trimEnd, getEffectiveDuration]);
+      document.addEventListener('pointermove', moveHandler);
+      document.addEventListener('pointerup', upHandler);
+      document.addEventListener('pointercancel', upHandler);
+    },
+    [trimStart, trimEnd, getEffectiveDuration],
+  );
 
   // Preview trimmed region
   const handlePreview = useCallback(() => {
@@ -124,12 +130,20 @@ const QuickTrimPopover = ({ item, initialTrimStart = 0, initialTrimEnd, onSave, 
     <div
       className="absolute z-50 rounded-xl border border-neutral-200 bg-[#111111] shadow-2xl overflow-hidden"
       style={{ width: POPOVER_WIDTH }}
-      onClick={e => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-200">
-        <span className="text-caption-bold font-caption-bold text-white truncate flex-1">Quick Trim</span>
-        <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />} aria-label="Close" onClick={onClose} />
+        <span className="text-caption-bold font-caption-bold text-white truncate flex-1">
+          Quick Trim
+        </span>
+        <IconButton
+          variant="neutral-tertiary"
+          size="small"
+          icon={<FeatherX />}
+          aria-label="Close"
+          onClick={onClose}
+        />
       </div>
 
       {/* Video thumbnail */}
@@ -156,10 +170,7 @@ const QuickTrimPopover = ({ item, initialTrimStart = 0, initialTrimEnd, onSave, 
 
       {/* Trim track */}
       <div className="px-3 py-3">
-        <div
-          ref={trackRef}
-          className="relative h-6 w-full rounded bg-neutral-100 cursor-crosshair"
-        >
+        <div ref={trackRef} className="relative h-6 w-full rounded bg-neutral-100 cursor-crosshair">
           {/* Selected range */}
           <div
             className="absolute top-0 h-full bg-indigo-500/30 rounded"
@@ -187,14 +198,22 @@ const QuickTrimPopover = ({ item, initialTrimStart = 0, initialTrimEnd, onSave, 
         {/* Time labels */}
         <div className="flex items-center justify-between mt-1.5">
           <span className="text-[10px] font-mono text-green-400">{formatTime(trimStart)}</span>
-          <span className="text-[10px] font-mono text-neutral-500">{formatTime(trimEnd - trimStart)} selected</span>
+          <span className="text-[10px] font-mono text-neutral-500">
+            {formatTime(trimEnd - trimStart)} selected
+          </span>
           <span className="text-[10px] font-mono text-orange-400">{formatTime(trimEnd)}</span>
         </div>
       </div>
 
       {/* Actions */}
       <div className="flex items-center gap-2 px-3 pb-3">
-        <Button className="flex-1" variant="brand-primary" size="small" icon={<FeatherCheck />} onClick={handleSave}>
+        <Button
+          className="flex-1"
+          variant="brand-primary"
+          size="small"
+          icon={<FeatherCheck />}
+          onClick={handleSave}
+        >
           Save
         </Button>
         <Button className="flex-1" variant="neutral-secondary" size="small" onClick={onClose}>

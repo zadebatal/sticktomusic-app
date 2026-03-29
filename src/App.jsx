@@ -252,90 +252,6 @@ const OnboardingTooltip = ({
   );
 };
 
-// Password gate — remove this block to make site public again
-const SITE_PASSWORD = 'ILOVESTM!@#';
-const PasswordGate = () => {
-  const [input, setInput] = useState('');
-  const [error, setError] = useState(false);
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (input === SITE_PASSWORD) {
-      sessionStorage.setItem('stm_authed', '1');
-      window.location.reload();
-    } else {
-      setError(true);
-      setInput('');
-    }
-  };
-  return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: '#0a0a0a',
-        fontFamily: 'system-ui, sans-serif',
-      }}
-    >
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '16px',
-          padding: '40px',
-          borderRadius: '12px',
-          border: '1px solid #222',
-          background: '#111',
-        }}
-      >
-        <h2 style={{ color: '#fff', fontSize: '20px', fontWeight: 600, margin: 0 }}>
-          This site is private
-        </h2>
-        <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>Enter password to continue</p>
-        <input
-          type="password"
-          value={input}
-          onChange={(e) => {
-            setInput(e.target.value);
-            setError(false);
-          }}
-          placeholder="Password"
-          autoFocus
-          style={{
-            padding: '10px 16px',
-            borderRadius: '8px',
-            border: error ? '1px solid #ef4444' : '1px solid #333',
-            background: '#1a1a1a',
-            color: '#fff',
-            fontSize: '14px',
-            width: '260px',
-            outline: 'none',
-          }}
-        />
-        {error && <span style={{ color: '#ef4444', fontSize: '13px' }}>Incorrect password</span>}
-        <button
-          type="submit"
-          style={{
-            padding: '10px 32px',
-            borderRadius: '8px',
-            border: 'none',
-            background: '#6366f1',
-            color: '#fff',
-            fontSize: '14px',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          Enter
-        </button>
-      </form>
-    </div>
-  );
-};
-
 const StickToMusicInner = () => {
   // React Router hooks for URL-based navigation
   const navigate = useNavigate();
@@ -3107,11 +3023,7 @@ const StickToMusicInner = () => {
   );
 };
 
-// Wrapper that gates on password before rendering the app
 const StickToMusic = () => {
-  if (sessionStorage.getItem('stm_authed') !== '1') {
-    return <PasswordGate />;
-  }
   return <StickToMusicInner />;
 };
 

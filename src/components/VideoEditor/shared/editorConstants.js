@@ -2,6 +2,7 @@
 // Extracted from 5 editor files to eliminate duplication
 
 export const AVAILABLE_FONTS = [
+  { name: 'TikTok Sans', value: "'TikTok Sans', sans-serif" },
   { name: 'Inter', value: "'Inter', sans-serif" },
   { name: 'Arial', value: 'Arial, sans-serif' },
   { name: 'Arial Narrow', value: "'Arial Narrow', Arial, sans-serif" },
@@ -13,7 +14,6 @@ export const AVAILABLE_FONTS = [
   { name: 'Trebuchet', value: "'Trebuchet MS', sans-serif" },
   { name: 'Verdana', value: 'Verdana, sans-serif' },
   { name: 'Palatino', value: "'Palatino Linotype', serif" },
-  { name: 'TikTok Sans', value: "'TikTok Sans', sans-serif" },
 ];
 
 export const parseStroke = (str) => {
@@ -37,13 +37,13 @@ export const buildStroke = (width, color) => `${width}px ${color}`;
  * @returns {Function} A setter that accepts a value or updater function
  */
 export const makeFieldSetter = (setAll, activeIndex, field, fallback) => (updater) => {
-  setAll(prev => {
+  setAll((prev) => {
     const current = prev[activeIndex];
     if (!current) return prev;
     const copy = [...prev];
     copy[activeIndex] = {
       ...current,
-      [field]: typeof updater === 'function' ? updater(current[field] ?? fallback) : updater
+      [field]: typeof updater === 'function' ? updater(current[field] ?? fallback) : updater,
     };
     return copy;
   });

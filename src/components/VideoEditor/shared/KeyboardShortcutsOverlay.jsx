@@ -88,19 +88,12 @@ const KeyboardShortcutsOverlay = ({ open, onClose }) => {
               </h3>
               <div className="space-y-1.5">
                 {category.shortcuts.map((shortcut, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between py-1"
-                  >
-                    <span className="text-sm text-neutral-300">
-                      {shortcut.description}
-                    </span>
+                  <div key={idx} className="flex items-center justify-between py-1">
+                    <span className="text-sm text-neutral-300">{shortcut.description}</span>
                     <div className="flex items-center gap-1 ml-4 shrink-0">
                       {shortcut.keys.map((key, ki) => (
                         <React.Fragment key={ki}>
-                          {ki > 0 && (
-                            <span className="text-xs text-neutral-500 mx-0.5">+</span>
-                          )}
+                          {ki > 0 && <span className="text-xs text-neutral-500 mx-0.5">+</span>}
                           <KeyBadge>{key}</KeyBadge>
                         </React.Fragment>
                       ))}

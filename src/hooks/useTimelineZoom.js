@@ -17,45 +17,44 @@ import { useCallback, useEffect } from 'react';
  * @param {number} [options.basePixelsPerSecond=50] - Pixels per second at zoom 1x
  * @param {number} [options.sensitivity=0.01] - Zoom sensitivity per wheel delta unit
  */
-export default function useTimelineZoom(containerRef, {
-  zoom,
-  setZoom,
-  minZoom = 0.5,
-  maxZoom = 3,
-  basePixelsPerSecond = 50,
-  sensitivity = 0.01,
-} = {}) {
+export default function useTimelineZoom(
+  containerRef,
+  { zoom, setZoom, minZoom = 0.5, maxZoom = 3, basePixelsPerSecond = 50, sensitivity = 0.01 } = {},
+) {
   const pixelsPerSecond = basePixelsPerSecond * zoom;
 
-  const handleWheel = useCallback((e) => {
-    // Trackpad pinch-zoom is reported as wheel with ctrlKey
-    if (!(e.ctrlKey || e.metaKey)) return;
+  const handleWheel = useCallback(
+    (e) => {
+      // Trackpad pinch-zoom is reported as wheel with ctrlKey
+      if (!(e.ctrlKey || e.metaKey)) return;
 
-    e.preventDefault();
+      e.preventDefault();
 
-    const delta = -e.deltaY * sensitivity;
-    const container = containerRef.current;
-    if (!container) return;
+      const delta = -e.deltaY * sensitivity;
+      const container = containerRef.current;
+      if (!container) return;
 
-    const rect = container.getBoundingClientRect();
-    const scrollLeft = container.scrollLeft || 0;
-    const cursorX = e.clientX - rect.left + scrollLeft;
-    const cursorTime = cursorX / (basePixelsPerSecond * zoom);
+      const rect = container.getBoundingClientRect();
+      const scrollLeft = container.scrollLeft || 0;
+      const cursorX = e.clientX - rect.left + scrollLeft;
+      const cursorTime = cursorX / (basePixelsPerSecond * zoom);
 
-    const newZoom = Math.max(minZoom, Math.min(maxZoom, zoom + delta));
-    if (newZoom === zoom) return;
+      const newZoom = Math.max(minZoom, Math.min(maxZoom, zoom + delta));
+      if (newZoom === zoom) return;
 
-    setZoom(newZoom);
+      setZoom(newZoom);
 
-    // Re-center scroll on cursor position after zoom
-    requestAnimationFrame(() => {
-      if (!containerRef.current) return;
-      const newPxPerSec = basePixelsPerSecond * newZoom;
-      const newCursorX = cursorTime * newPxPerSec;
-      const cursorOffset = e.clientX - rect.left;
-      containerRef.current.scrollLeft = newCursorX - cursorOffset;
-    });
-  }, [zoom, setZoom, minZoom, maxZoom, basePixelsPerSecond, sensitivity, containerRef]);
+      // Re-center scroll on cursor position after zoom
+      requestAnimationFrame(() => {
+        if (!containerRef.current) return;
+        const newPxPerSec = basePixelsPerSecond * newZoom;
+        const newCursorX = cursorTime * newPxPerSec;
+        const cursorOffset = e.clientX - rect.left;
+        containerRef.current.scrollLeft = newCursorX - cursorOffset;
+      });
+    },
+    [zoom, setZoom, minZoom, maxZoom, basePixelsPerSecond, sensitivity, containerRef],
+  );
 
   // Attach with { passive: false } so we can preventDefault
   useEffect(() => {

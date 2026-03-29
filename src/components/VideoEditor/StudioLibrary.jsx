@@ -25,9 +25,17 @@ import { TextField } from '../../ui/components/TextField';
 import { DropdownMenu } from '../../ui/components/DropdownMenu';
 import { useToast } from '../ui';
 import {
-  FeatherSearch, FeatherGrid, FeatherMusic,
-  FeatherUpload, FeatherFileQuestion, FeatherPlay, FeatherPause,
-  FeatherArrowDownUp, FeatherChevronDown, FeatherFolder, FeatherFilm,
+  FeatherSearch,
+  FeatherGrid,
+  FeatherMusic,
+  FeatherUpload,
+  FeatherFileQuestion,
+  FeatherPlay,
+  FeatherPause,
+  FeatherArrowDownUp,
+  FeatherChevronDown,
+  FeatherFolder,
+  FeatherFilm,
 } from '@subframe/core';
 import * as SubframeCore from '@subframe/core';
 import CloudImportButton from './CloudImportButton';
@@ -50,7 +58,15 @@ const SORT_OPTIONS = [
 /**
  * MediaCard — renders a single media item (image, video, or audio)
  */
-const MediaCard = ({ item, pipelineColor, playingAudioId, onToggleAudio, playingVideoId, onToggleVideo, onViewImage }) => {
+const MediaCard = ({
+  item,
+  pipelineColor,
+  playingAudioId,
+  onToggleAudio,
+  playingVideoId,
+  onToggleVideo,
+  onViewImage,
+}) => {
   const isAudio = item.type === MEDIA_TYPES.AUDIO;
   const isVideo = item.type === MEDIA_TYPES.VIDEO;
   const isPlaying = playingAudioId === item.id;
@@ -72,14 +88,21 @@ const MediaCard = ({ item, pipelineColor, playingAudioId, onToggleAudio, playing
         ) : (
           <FeatherMusic className="flex-none text-neutral-500" style={{ width: 14, height: 14 }} />
         )}
-        <span className={`text-caption font-caption truncate grow ${isPlaying ? 'text-[#f59e0b]' : 'text-neutral-300'}`}>
+        <span
+          className={`text-caption font-caption truncate grow ${isPlaying ? 'text-[#f59e0b]' : 'text-neutral-300'}`}
+        >
           {item.name || 'Untitled'}
         </span>
-        <span className={`text-caption font-caption flex-none ${isPlaying ? 'text-[#f59e0b]/60' : 'text-neutral-500'}`}>
+        <span
+          className={`text-caption font-caption flex-none ${isPlaying ? 'text-[#f59e0b]/60' : 'text-neutral-500'}`}
+        >
           {formatDuration(item.duration)}
         </span>
         {pipelineColor && (
-          <div className="h-1.5 w-1.5 flex-none rounded-full" style={{ backgroundColor: pipelineColor }} />
+          <div
+            className="h-1.5 w-1.5 flex-none rounded-full"
+            style={{ backgroundColor: pipelineColor }}
+          />
         )}
       </div>
     );
@@ -131,7 +154,10 @@ const MediaCard = ({ item, pipelineColor, playingAudioId, onToggleAudio, playing
             {item.name || 'Untitled'}
           </span>
           {pipelineColor && (
-            <div className="flex h-2 w-2 flex-none rounded-full" style={{ backgroundColor: pipelineColor }} />
+            <div
+              className="flex h-2 w-2 flex-none rounded-full"
+              style={{ backgroundColor: pipelineColor }}
+            />
           )}
         </div>
       </div>
@@ -157,7 +183,10 @@ const MediaCard = ({ item, pipelineColor, playingAudioId, onToggleAudio, playing
           {item.name || 'Untitled'}
         </span>
         {pipelineColor && (
-          <div className="flex h-2 w-2 flex-none rounded-full" style={{ backgroundColor: pipelineColor }} />
+          <div
+            className="flex h-2 w-2 flex-none rounded-full"
+            style={{ backgroundColor: pipelineColor }}
+          />
         )}
       </div>
     </div>
@@ -168,15 +197,21 @@ const MediaCard = ({ item, pipelineColor, playingAudioId, onToggleAudio, playing
  * DraftCard — renders a draft (slideshow or video) in the drafts tab
  */
 const DraftCard = ({ draft, type }) => {
-  const thumbSrc = type === 'slideshow'
-    ? draft.slides?.[0]?.imageUrl || draft.slides?.[0]?.url
-    : draft.thumbnailUrl || draft.url;
+  const thumbSrc =
+    type === 'slideshow'
+      ? draft.slides?.[0]?.imageUrl || draft.slides?.[0]?.url
+      : draft.thumbnailUrl || draft.url;
 
   return (
     <div className="flex w-full flex-col items-start gap-2 rounded-lg border border-solid border-neutral-200 bg-[#1a1a1a] overflow-hidden hover:border-neutral-600 cursor-pointer transition-colors">
       <div className="w-full aspect-[9/16] bg-[#171717] relative">
         {thumbSrc ? (
-          <img className="w-full h-full object-cover" src={thumbSrc} alt={draft.name} loading="lazy" />
+          <img
+            className="w-full h-full object-cover"
+            src={thumbSrc}
+            alt={draft.name}
+            loading="lazy"
+          />
         ) : (
           <div className="flex w-full h-full items-center justify-center">
             <FeatherFilm className="text-neutral-700" style={{ width: 24, height: 24 }} />
@@ -251,7 +286,7 @@ const StudioLibrary = ({ db, artistId }) => {
       unsubs.push(subscribeToLibrary(db, artistId, setLibrary));
       unsubs.push(subscribeToCreatedContent(db, artistId, setCreatedContent));
     }
-    return () => unsubs.forEach(u => u && u());
+    return () => unsubs.forEach((u) => u && u());
   }, [db, artistId]);
 
   // Cleanup audio on unmount
@@ -265,15 +300,15 @@ const StudioLibrary = ({ db, artistId }) => {
 
   // Derived: pipelines
   const pipelines = useMemo(
-    () => collections.filter(c => c.isPipeline || c.pageId),
-    [collections]
+    () => collections.filter((c) => c.isPipeline || c.pageId),
+    [collections],
   );
 
   // Derived: pipeline color map (for dot indicators on media cards)
   const pipelineColorMap = useMemo(() => {
     const map = {};
-    pipelines.forEach(p => {
-      (p.mediaIds || []).forEach(id => {
+    pipelines.forEach((p) => {
+      (p.mediaIds || []).forEach((id) => {
         if (!map[id]) map[id] = p.pipelineColor || '#6366f1';
       });
     });
@@ -282,10 +317,10 @@ const StudioLibrary = ({ db, artistId }) => {
 
   // Derived: unassigned media
   const unassignedMedia = useMemo(() => {
-    const pipelineIds = new Set(pipelines.map(p => p.id));
-    return library.filter(item => {
+    const pipelineIds = new Set(pipelines.map((p) => p.id));
+    return library.filter((item) => {
       const ids = item.collectionIds || [];
-      return !ids.some(cid => pipelineIds.has(cid));
+      return !ids.some((cid) => pipelineIds.has(cid));
     });
   }, [library, pipelines]);
 
@@ -293,13 +328,13 @@ const StudioLibrary = ({ db, artistId }) => {
   const pipelineDrafts = useMemo(() => {
     if (selectedAlbum === 'all' || selectedAlbum === 'unassigned') return [];
     const slideshows = (createdContent.slideshows || [])
-      .filter(s => !s.isTemplate && s.collectionId === selectedAlbum)
-      .map(s => ({ ...s, _draftType: 'slideshow' }));
+      .filter((s) => !s.isTemplate && s.collectionId === selectedAlbum)
+      .map((s) => ({ ...s, _draftType: 'slideshow' }));
     const videos = (createdContent.videos || [])
-      .filter(v => v.collectionId === selectedAlbum)
-      .map(v => ({ ...v, _draftType: 'video' }));
-    return [...slideshows, ...videos].sort((a, b) =>
-      new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+      .filter((v) => v.collectionId === selectedAlbum)
+      .map((v) => ({ ...v, _draftType: 'video' }));
+    return [...slideshows, ...videos].sort(
+      (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
     );
   }, [selectedAlbum, createdContent]);
 
@@ -311,24 +346,22 @@ const StudioLibrary = ({ db, artistId }) => {
     if (selectedAlbum === 'unassigned') {
       items = unassignedMedia;
     } else if (selectedAlbum !== 'all') {
-      items = items.filter(item =>
-        (item.collectionIds || []).includes(selectedAlbum)
-      );
+      items = items.filter((item) => (item.collectionIds || []).includes(selectedAlbum));
     }
 
     // Type filter
     if (activeTypeTab === 'photos') {
-      items = items.filter(i => i.type === MEDIA_TYPES.IMAGE);
+      items = items.filter((i) => i.type === MEDIA_TYPES.IMAGE);
     } else if (activeTypeTab === 'videos') {
-      items = items.filter(i => i.type === MEDIA_TYPES.VIDEO);
+      items = items.filter((i) => i.type === MEDIA_TYPES.VIDEO);
     } else if (activeTypeTab === 'audio') {
-      items = items.filter(i => i.type === MEDIA_TYPES.AUDIO);
+      items = items.filter((i) => i.type === MEDIA_TYPES.AUDIO);
     }
 
     // Search
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      items = items.filter(i => (i.name || '').toLowerCase().includes(q));
+      items = items.filter((i) => (i.name || '').toLowerCase().includes(q));
     }
 
     // Sort
@@ -338,8 +371,8 @@ const StudioLibrary = ({ db, artistId }) => {
       items = [...items].sort((a, b) => (a.type || '').localeCompare(b.type || ''));
     } else {
       // date (newest first)
-      items = [...items].sort((a, b) =>
-        new Date(b.createdAt || b.addedAt || 0) - new Date(a.createdAt || a.addedAt || 0)
+      items = [...items].sort(
+        (a, b) => new Date(b.createdAt || b.addedAt || 0) - new Date(a.createdAt || a.addedAt || 0),
       );
     }
 
@@ -350,7 +383,7 @@ const StudioLibrary = ({ db, artistId }) => {
   const albumTitle = useMemo(() => {
     if (selectedAlbum === 'all') return 'All Media';
     if (selectedAlbum === 'unassigned') return 'Unassigned';
-    const p = pipelines.find(p => p.id === selectedAlbum);
+    const p = pipelines.find((p) => p.id === selectedAlbum);
     return p?.name || 'Unknown';
   }, [selectedAlbum, pipelines]);
 
@@ -358,126 +391,154 @@ const StudioLibrary = ({ db, artistId }) => {
   const itemCount = showDrafts ? pipelineDrafts.length : filteredMedia.length;
 
   // Toggle audio playback
-  const toggleAudioPlay = useCallback((item) => {
-    const audio = audioRef.current;
-    if (playingAudioId === item.id) {
-      audio.pause();
-      setPlayingAudioId(null);
-    } else {
-      audio.src = item.url;
-      audio.play().catch(() => {});
-      setPlayingAudioId(item.id);
-      audio.onended = () => setPlayingAudioId(null);
-    }
-  }, [playingAudioId]);
+  const toggleAudioPlay = useCallback(
+    (item) => {
+      const audio = audioRef.current;
+      if (playingAudioId === item.id) {
+        audio.pause();
+        setPlayingAudioId(null);
+      } else {
+        audio.src = item.url;
+        audio.play().catch(() => {});
+        setPlayingAudioId(item.id);
+        audio.onended = () => setPlayingAudioId(null);
+      }
+    },
+    [playingAudioId],
+  );
 
   // Toggle video playback
-  const toggleVideoPlay = useCallback((item) => {
-    if (playingVideoId === item.id) {
-      setPlayingVideoId(null);
-    } else {
-      // Stop any playing audio first
-      audioRef.current.pause();
-      setPlayingAudioId(null);
-      setPlayingVideoId(item.id);
-    }
-  }, [playingVideoId]);
+  const toggleVideoPlay = useCallback(
+    (item) => {
+      if (playingVideoId === item.id) {
+        setPlayingVideoId(null);
+      } else {
+        // Stop any playing audio first
+        audioRef.current.pause();
+        setPlayingAudioId(null);
+        setPlayingVideoId(item.id);
+      }
+    },
+    [playingVideoId],
+  );
 
   // Upload handler
-  const handleUpload = useCallback(async (files) => {
-    if (!files?.length) { toastError('No files selected'); return; }
-    if (!artistId) { toastError('No artist selected'); return; }
-    setIsUploading(true);
-    setUploadProgress({ current: 0, total: files.length });
-
-    const targetCollectionId = (selectedAlbum !== 'all' && selectedAlbum !== 'unassigned') ? selectedAlbum : null;
-
-    const processOne = async (rawFile) => {
-      let file = rawFile;
-      if (rawFile.type?.startsWith('image')) file = await convertImageIfNeeded(rawFile);
-      else if (rawFile.type?.startsWith('audio')) file = await convertAudioIfNeeded(rawFile);
-
-      const isAudio = file.type?.startsWith('audio');
-      const isVideo = file.type?.startsWith('video');
-      const folder = isAudio ? 'audio' : isVideo ? 'videos' : 'images';
-      const { url, path } = await uploadFile(file, folder);
-
-      // Thumbnail generation — 50% resolution for grid display
-      let thumbnailUrl = null;
-      if (!isAudio && !isVideo) {
-        // Image thumbnail: 50% of original dimensions
-        try {
-          const img = new Image();
-          img.src = URL.createObjectURL(file);
-          await new Promise(r => { img.onload = r; });
-          const scale = 0.5;
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.round(img.naturalWidth * scale);
-          canvas.height = Math.round(img.naturalHeight * scale);
-          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-          const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.7));
-          if (blob) {
-            const tf = new File([blob], `thumb_${file.name}`, { type: 'image/jpeg' });
-            const tr = await uploadFile(tf, 'thumbnails');
-            thumbnailUrl = tr.url;
-          }
-          URL.revokeObjectURL(img.src);
-        } catch (e) { /* skip thumb */ }
-      } else if (isVideo) {
-        // Video thumbnail: capture frame at 1s, scale to 50%
-        try {
-          const dataUrl = await generateThumbnail(url, 1);
-          if (dataUrl) {
-            const res = await fetch(dataUrl);
-            const blob = await res.blob();
-            const tf = new File([blob], `thumb_${file.name}.jpg`, { type: 'image/jpeg' });
-            const tr = await uploadFile(tf, 'thumbnails');
-            thumbnailUrl = tr.url;
-          }
-        } catch (e) { /* skip thumb */ }
+  const handleUpload = useCallback(
+    async (files) => {
+      if (!files?.length) {
+        toastError('No files selected');
+        return;
       }
+      if (!artistId) {
+        toastError('No artist selected');
+        return;
+      }
+      setIsUploading(true);
+      setUploadProgress({ current: 0, total: files.length });
 
-      const mediaType = isAudio ? MEDIA_TYPES.AUDIO : isVideo ? MEDIA_TYPES.VIDEO : MEDIA_TYPES.IMAGE;
-      const item = {
-        type: mediaType,
-        name: file.name,
-        url,
-        thumbnailUrl,
-        storagePath: path,
-        collectionIds: targetCollectionId ? [targetCollectionId] : [],
-        metadata: { fileSize: file.size, mimeType: file.type },
+      const targetCollectionId =
+        selectedAlbum !== 'all' && selectedAlbum !== 'unassigned' ? selectedAlbum : null;
+
+      const processOne = async (rawFile) => {
+        let file = rawFile;
+        if (rawFile.type?.startsWith('image')) file = await convertImageIfNeeded(rawFile);
+        else if (rawFile.type?.startsWith('audio')) file = await convertAudioIfNeeded(rawFile);
+
+        const isAudio = file.type?.startsWith('audio');
+        const isVideo = file.type?.startsWith('video');
+        const folder = isAudio ? 'audio' : isVideo ? 'videos' : 'images';
+        const { url, path } = await uploadFile(file, folder);
+
+        // Thumbnail generation — 50% resolution for grid display
+        let thumbnailUrl = null;
+        if (!isAudio && !isVideo) {
+          // Image thumbnail: 50% of original dimensions
+          try {
+            const img = new Image();
+            img.src = URL.createObjectURL(file);
+            await new Promise((r) => {
+              img.onload = r;
+            });
+            const scale = 0.5;
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(img.naturalWidth * scale);
+            canvas.height = Math.round(img.naturalHeight * scale);
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+            const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.7));
+            if (blob) {
+              const tf = new File([blob], `thumb_${file.name}`, { type: 'image/jpeg' });
+              const tr = await uploadFile(tf, 'thumbnails');
+              thumbnailUrl = tr.url;
+            }
+            URL.revokeObjectURL(img.src);
+          } catch (e) {
+            /* skip thumb */
+          }
+        } else if (isVideo) {
+          // Video thumbnail: capture frame at 1s, scale to 50%
+          try {
+            const dataUrl = await generateThumbnail(url, 1);
+            if (dataUrl) {
+              const res = await fetch(dataUrl);
+              const blob = await res.blob();
+              const tf = new File([blob], `thumb_${file.name}.jpg`, { type: 'image/jpeg' });
+              const tr = await uploadFile(tf, 'thumbnails');
+              thumbnailUrl = tr.url;
+            }
+          } catch (e) {
+            /* skip thumb */
+          }
+        }
+
+        const mediaType = isAudio
+          ? MEDIA_TYPES.AUDIO
+          : isVideo
+            ? MEDIA_TYPES.VIDEO
+            : MEDIA_TYPES.IMAGE;
+        const item = {
+          type: mediaType,
+          name: file.name,
+          url,
+          thumbnailUrl,
+          storagePath: path,
+          collectionIds: targetCollectionId ? [targetCollectionId] : [],
+          metadata: { fileSize: file.size, mimeType: file.type },
+        };
+
+        const savedItem = await addToLibraryAsync(db, artistId, item);
+        if (targetCollectionId) {
+          await addToCollectionAsync(db, artistId, targetCollectionId, savedItem.id);
+        }
+        return savedItem;
       };
 
-      const savedItem = await addToLibraryAsync(db, artistId, item);
-      if (targetCollectionId) {
-        await addToCollectionAsync(db, artistId, targetCollectionId, savedItem.id);
-      }
-      return savedItem;
-    };
-
-    try {
-      const { results, errors } = await runPool(Array.from(files), processOne, {
-        concurrency: 5,
-        onProgress: (done, total) => setUploadProgress({ current: done, total }),
-      });
-      const uploadedItems = results.filter(Boolean);
-      if (uploadedItems.length > 0) {
-        setLibrary(prev => {
-          const existingIds = new Set(prev.map(i => i.id));
-          const newItems = uploadedItems.filter(i => !existingIds.has(i.id));
-          return newItems.length > 0 ? [...prev, ...newItems] : prev;
+      try {
+        const { results, errors } = await runPool(Array.from(files), processOne, {
+          concurrency: 5,
+          onProgress: (done, total) => setUploadProgress({ current: done, total }),
         });
-        setCollections(getCollections(artistId));
-        toastSuccess(`${uploadedItems.length} item${uploadedItems.length > 1 ? 's' : ''} uploaded`);
-      } else if (errors.length > 0) {
-        toastError(`Upload failed: ${errors[0].error?.message || 'unknown error'}`);
+        const uploadedItems = results.filter(Boolean);
+        if (uploadedItems.length > 0) {
+          setLibrary((prev) => {
+            const existingIds = new Set(prev.map((i) => i.id));
+            const newItems = uploadedItems.filter((i) => !existingIds.has(i.id));
+            return newItems.length > 0 ? [...prev, ...newItems] : prev;
+          });
+          setCollections(getCollections(artistId));
+          toastSuccess(
+            `${uploadedItems.length} item${uploadedItems.length > 1 ? 's' : ''} uploaded`,
+          );
+        } else if (errors.length > 0) {
+          toastError(`Upload failed: ${errors[0].error?.message || 'unknown error'}`);
+        }
+      } catch (err) {
+        toastError(`Upload error: ${err.message}`);
       }
-    } catch (err) {
-      toastError(`Upload error: ${err.message}`);
-    }
-    setIsUploading(false);
-    setUploadProgress(null);
-  }, [artistId, db, selectedAlbum, toastSuccess, toastError]);
+      setIsUploading(false);
+      setUploadProgress(null);
+    },
+    [artistId, db, selectedAlbum, toastSuccess, toastError],
+  );
 
   handleUploadRef.current = handleUpload;
 
@@ -507,7 +568,7 @@ const StudioLibrary = ({ db, artistId }) => {
   ];
 
   // Sort label for dropdown trigger
-  const sortLabel = SORT_OPTIONS.find(o => o.value === sortBy)?.label || 'Sort by Date';
+  const sortLabel = SORT_OPTIONS.find((o) => o.value === sortBy)?.label || 'Sort by Date';
 
   return (
     <div className="flex h-full w-full flex-col items-start bg-black overflow-auto">
@@ -539,7 +600,7 @@ const StudioLibrary = ({ db, artistId }) => {
         {/* Pipeline pills or dropdown */}
         {pipelines.length > 0 && pipelines.length <= 5 ? (
           // Show as pills when ≤5 pipelines
-          pipelines.map(pipeline => {
+          pipelines.map((pipeline) => {
             const isSelected = selectedAlbum === pipeline.id;
             return (
               <button
@@ -578,7 +639,7 @@ const StudioLibrary = ({ db, artistId }) => {
             <SubframeCore.DropdownMenu.Portal>
               <SubframeCore.DropdownMenu.Content side="bottom" align="start" sideOffset={4} asChild>
                 <DropdownMenu>
-                  {pipelines.map(pipeline => (
+                  {pipelines.map((pipeline) => (
                     <DropdownMenu.DropdownItem
                       key={pipeline.id}
                       icon={null}
@@ -633,9 +694,7 @@ const StudioLibrary = ({ db, artistId }) => {
           disabled={isUploading}
           onClick={() => fileInputRef.current?.click()}
         >
-          {isUploading
-            ? `${uploadProgress?.current || 0}/${uploadProgress?.total || 0}`
-            : 'Upload'}
+          {isUploading ? `${uploadProgress?.current || 0}/${uploadProgress?.total || 0}` : 'Upload'}
         </Button>
 
         {/* Cloud Import */}
@@ -644,7 +703,7 @@ const StudioLibrary = ({ db, artistId }) => {
           db={db}
           mediaType="all"
           onImportMedia={(files) => {
-            const realFiles = files.map(f => f.file).filter(Boolean);
+            const realFiles = files.map((f) => f.file).filter(Boolean);
             if (realFiles.length > 0) handleUpload(realFiles);
           }}
         />
@@ -657,19 +716,29 @@ const StudioLibrary = ({ db, artistId }) => {
           <div className="flex w-full items-center justify-between">
             <div className="flex items-center gap-3">
               <span className="text-heading-1 font-heading-1 text-[#ffffffff]">{albumTitle}</span>
-              <Badge variant="neutral">{itemCount} item{itemCount !== 1 ? 's' : ''}</Badge>
+              <Badge variant="neutral">
+                {itemCount} item{itemCount !== 1 ? 's' : ''}
+              </Badge>
             </div>
             <SubframeCore.DropdownMenu.Root>
               <SubframeCore.DropdownMenu.Trigger asChild>
-                <Button variant="neutral-secondary" icon={<FeatherArrowDownUp />} iconRight={<FeatherChevronDown />}>
+                <Button
+                  variant="neutral-secondary"
+                  icon={<FeatherArrowDownUp />}
+                  iconRight={<FeatherChevronDown />}
+                >
                   {sortLabel}
                 </Button>
               </SubframeCore.DropdownMenu.Trigger>
               <SubframeCore.DropdownMenu.Portal>
                 <SubframeCore.DropdownMenu.Content side="bottom" align="end" sideOffset={4} asChild>
                   <DropdownMenu>
-                    {SORT_OPTIONS.map(opt => (
-                      <DropdownMenu.DropdownItem key={opt.value} icon={null} onClick={() => setSortBy(opt.value)}>
+                    {SORT_OPTIONS.map((opt) => (
+                      <DropdownMenu.DropdownItem
+                        key={opt.value}
+                        icon={null}
+                        onClick={() => setSortBy(opt.value)}
+                      >
                         {opt.label}
                       </DropdownMenu.DropdownItem>
                     ))}
@@ -682,7 +751,7 @@ const StudioLibrary = ({ db, artistId }) => {
           {/* Type filter tabs */}
           <div className="flex w-full items-end border-b border-solid border-neutral-200">
             <div className="flex items-start">
-              {typeTabs.map(tab => {
+              {typeTabs.map((tab) => {
                 const isActive = !showDrafts && activeTypeTab === tab.value;
                 return (
                   <button
@@ -692,9 +761,14 @@ const StudioLibrary = ({ db, artistId }) => {
                         ? 'border-brand-600 text-brand-700'
                         : 'border-transparent text-neutral-400 hover:text-white'
                     }`}
-                    onClick={() => { setShowDrafts(false); setActiveTypeTab(tab.value); }}
+                    onClick={() => {
+                      setShowDrafts(false);
+                      setActiveTypeTab(tab.value);
+                    }}
                   >
-                    <span className="text-body-bold font-body-bold whitespace-nowrap">{tab.label}</span>
+                    <span className="text-body-bold font-body-bold whitespace-nowrap">
+                      {tab.label}
+                    </span>
                   </button>
                 );
               })}
@@ -721,26 +795,31 @@ const StudioLibrary = ({ db, artistId }) => {
           {showDrafts ? (
             pipelineDrafts.length > 0 ? (
               <div className={`grid w-full gap-4 ${isMobile ? 'grid-cols-2' : 'grid-cols-4'}`}>
-                {pipelineDrafts.map(draft => (
+                {pipelineDrafts.map((draft) => (
                   <DraftCard key={draft.id} draft={draft} type={draft._draftType} />
                 ))}
               </div>
             ) : (
               <div className="flex w-full flex-col items-center justify-center gap-3 py-16">
-                <FeatherFilm className="text-[48px] text-neutral-600" style={{ width: 48, height: 48 }} />
-                <span className="text-body font-body text-neutral-400">No drafts in this pipeline</span>
+                <FeatherFilm
+                  className="text-[48px] text-neutral-600"
+                  style={{ width: 48, height: 48 }}
+                />
+                <span className="text-body font-body text-neutral-400">
+                  No drafts in this pipeline
+                </span>
               </div>
             )
           ) : filteredMedia.length > 0 ? (
             (() => {
-              const audioItems = filteredMedia.filter(i => i.type === MEDIA_TYPES.AUDIO);
-              const visualItems = filteredMedia.filter(i => i.type !== MEDIA_TYPES.AUDIO);
+              const audioItems = filteredMedia.filter((i) => i.type === MEDIA_TYPES.AUDIO);
+              const visualItems = filteredMedia.filter((i) => i.type !== MEDIA_TYPES.AUDIO);
               return (
                 <div className="flex w-full flex-col gap-4">
                   {/* Audio — thin horizontal rows */}
                   {audioItems.length > 0 && (
                     <div className="flex w-full flex-col gap-1">
-                      {audioItems.map(item => (
+                      {audioItems.map((item) => (
                         <MediaCard
                           key={item.id}
                           item={item}
@@ -756,8 +835,10 @@ const StudioLibrary = ({ db, artistId }) => {
                   )}
                   {/* Image/video grid */}
                   {visualItems.length > 0 && (
-                    <div className={`grid w-full gap-3 ${isMobile ? 'grid-cols-2' : 'grid-cols-4'}`}>
-                      {visualItems.map(item => (
+                    <div
+                      className={`grid w-full gap-3 ${isMobile ? 'grid-cols-2' : 'grid-cols-4'}`}
+                    >
+                      {visualItems.map((item) => (
                         <MediaCard
                           key={item.id}
                           item={item}
@@ -800,12 +881,36 @@ const StudioLibrary = ({ db, artistId }) => {
         >
           <div
             className="absolute top-6 right-6 flex items-center justify-center rounded-full cursor-pointer transition-colors"
-            style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#171717', border: '1px solid #404040' }}
-            onClick={(e) => { e.stopPropagation(); setLightboxImage(null); }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#262626'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#171717'; }}
+            style={{
+              width: 40,
+              height: 40,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#171717',
+              border: '1px solid #404040',
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightboxImage(null);
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#262626';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#171717';
+            }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#ffffff"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>

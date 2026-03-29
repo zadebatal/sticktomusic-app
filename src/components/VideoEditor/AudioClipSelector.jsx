@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { trimAudioToFile } from '../../utils/audioTrimmer';
 import log from '../../utils/logger';
 import useIsMobile from '../../hooks/useIsMobile';
@@ -33,12 +33,12 @@ const AudioClipSelector = ({
   db = null,
   artistId = null,
   onSuccess = null,
-  onError = null
+  onError = null,
 }) => {
   // Mobile responsive detection
   const { isMobile } = useIsMobile();
   const { theme } = useTheme();
-  const styles = getStyles(theme);
+  const styles = useMemo(() => getStyles(theme), [theme]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [duration, setDuration] = useState(0);
@@ -118,14 +118,22 @@ const AudioClipSelector = ({
       }
 
       const maxVal = Math.max(...filteredData);
-      const normalizedData = filteredData.map(n => n / maxVal);
+      const normalizedData = filteredData.map((n) => n / maxVal);
       setWaveformData(normalizedData);
 
       audioContext.close();
     } catch (err) {
       log.error('Waveform generation failed:', err);
-      try { audioContext.close(); } catch (e) { /* H-06: ensure cleanup even on error */ }
-      setWaveformData(Array(300).fill(0).map(() => Math.random() * 0.5 + 0.2));
+      try {
+        audioContext.close();
+      } catch (e) {
+        /* H-06: ensure cleanup even on error */
+      }
+      setWaveformData(
+        Array(300)
+          .fill(0)
+          .map(() => Math.random() * 0.5 + 0.2),
+      );
     }
   };
 
@@ -236,35 +244,40 @@ const AudioClipSelector = ({
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 11px sans-serif';
     ctx.fillText('O', outX - 11, 16);
-
   }, [waveformData, inPoint, outPoint, playheadTime, duration]);
 
   // Get time from X position
-  const getTimeFromX = useCallback((clientX) => {
-    if (!containerRef.current || duration === 0) return 0;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = clientX - rect.left;
-    return Math.max(0, Math.min(duration, (x / rect.width) * duration));
-  }, [duration]);
+  const getTimeFromX = useCallback(
+    (clientX) => {
+      if (!containerRef.current || duration === 0) return 0;
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = clientX - rect.left;
+      return Math.max(0, Math.min(duration, (x / rect.width) * duration));
+    },
+    [duration],
+  );
 
   // Determine what was clicked
-  const getClickTarget = useCallback((clientX) => {
-    if (!containerRef.current || duration === 0) return 'none';
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const inX = (inPoint / duration) * rect.width;
-    const outX = (outPoint / duration) * rect.width;
+  const getClickTarget = useCallback(
+    (clientX) => {
+      if (!containerRef.current || duration === 0) return 'none';
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const inX = (inPoint / duration) * rect.width;
+      const outX = (outPoint / duration) * rect.width;
 
-    // Larger hit zone on mobile for 44px touch targets
-    const hitZone = isMobile ? 22 : 15;
-    // Check if near IN handle
-    if (Math.abs(x - inX) < hitZone) return 'in';
-    // Check if near OUT handle
-    if (Math.abs(x - outX) < hitZone) return 'out';
-    // Check if inside region
-    if (x > inX && x < outX) return 'region';
-    return 'none';
-  }, [inPoint, outPoint, duration, isMobile]);
+      // Larger hit zone on mobile for 44px touch targets
+      const hitZone = isMobile ? 22 : 15;
+      // Check if near IN handle
+      if (Math.abs(x - inX) < hitZone) return 'in';
+      // Check if near OUT handle
+      if (Math.abs(x - outX) < hitZone) return 'out';
+      // Check if inside region
+      if (x > inX && x < outX) return 'region';
+      return 'none';
+    },
+    [inPoint, outPoint, duration, isMobile],
+  );
 
   // Track if pointer actually moved during a pointerdown (to distinguish click from drag)
   const didDragRef = useRef(false);
@@ -283,67 +296,77 @@ const AudioClipSelector = ({
 
   // Pointer drag handler for waveform (replaces mouse events - works with touch + mouse)
   const { getPointerProps: getWaveformPointerProps } = usePointerDrag({
-    onDragStart: useCallback((e) => {
-      const target = getClickTarget(e.clientX);
-      const time = getTimeFromX(e.clientX);
-      didDragRef.current = false;
-      pointerDownTimeRef.current = time;
+    onDragStart: useCallback(
+      (e) => {
+        const target = getClickTarget(e.clientX);
+        const time = getTimeFromX(e.clientX);
+        didDragRef.current = false;
+        pointerDownTimeRef.current = time;
 
-      if (target === 'in' || target === 'out') {
-        dragTargetRef.current = target;
-        setDragging(target);
-      } else if (target === 'region') {
-        dragTargetRef.current = 'region';
-        setDragging('region');
-        dragStartXRef.current = e.clientX;
-        dragStartInRef.current = inPointRef.current;
-        dragStartOutRef.current = outPointRef.current;
-      } else {
-        dragTargetRef.current = null;
-        // Click outside region - move scrub playhead
-        setPlayheadTime(time);
-        if (audioRef.current) {
-          audioRef.current.currentTime = time;
+        if (target === 'in' || target === 'out') {
+          dragTargetRef.current = target;
+          setDragging(target);
+        } else if (target === 'region') {
+          dragTargetRef.current = 'region';
+          setDragging('region');
+          dragStartXRef.current = e.clientX;
+          dragStartInRef.current = inPointRef.current;
+          dragStartOutRef.current = outPointRef.current;
+        } else {
+          dragTargetRef.current = null;
+          // Click outside region - move scrub playhead
+          setPlayheadTime(time);
+          if (audioRef.current) {
+            audioRef.current.currentTime = time;
+          }
         }
-      }
-    }, [getClickTarget, getTimeFromX]),
-    onDragMove: useCallback((e) => {
-      const target = dragTargetRef.current;
-      if (!target) return;
-      didDragRef.current = true;
-      const time = getTimeFromX(e.clientX);
+      },
+      [getClickTarget, getTimeFromX],
+    ),
+    onDragMove: useCallback(
+      (e) => {
+        const target = dragTargetRef.current;
+        if (!target) return;
+        didDragRef.current = true;
+        const time = getTimeFromX(e.clientX);
 
-      if (target === 'in') {
-        setInPoint(Math.max(0, Math.min(time, outPointRef.current - 0.5)));
-      } else if (target === 'out') {
-        setOutPoint(Math.min(durationRef.current, Math.max(time, inPointRef.current + 0.5)));
-      } else if (target === 'region') {
-        const deltaX = e.clientX - dragStartXRef.current;
-        const rect = containerRef.current?.getBoundingClientRect();
-        if (!rect) return;
-        const deltaTime = (deltaX / rect.width) * durationRef.current;
-        const regionDuration = dragStartOutRef.current - dragStartInRef.current;
+        if (target === 'in') {
+          setInPoint(Math.max(0, Math.min(time, outPointRef.current - 0.5)));
+        } else if (target === 'out') {
+          setOutPoint(Math.min(durationRef.current, Math.max(time, inPointRef.current + 0.5)));
+        } else if (target === 'region') {
+          const deltaX = e.clientX - dragStartXRef.current;
+          const rect = containerRef.current?.getBoundingClientRect();
+          if (!rect) return;
+          const deltaTime = (deltaX / rect.width) * durationRef.current;
+          const regionDuration = dragStartOutRef.current - dragStartInRef.current;
 
-        let newIn = dragStartInRef.current + deltaTime;
-        let newOut = dragStartOutRef.current + deltaTime;
+          let newIn = dragStartInRef.current + deltaTime;
+          let newOut = dragStartOutRef.current + deltaTime;
 
-        // Clamp to bounds
-        if (newIn < 0) {
-          newIn = 0;
-          newOut = regionDuration;
+          // Clamp to bounds
+          if (newIn < 0) {
+            newIn = 0;
+            newOut = regionDuration;
+          }
+          if (newOut > durationRef.current) {
+            newOut = durationRef.current;
+            newIn = durationRef.current - regionDuration;
+          }
+
+          setInPoint(newIn);
+          setOutPoint(newOut);
         }
-        if (newOut > durationRef.current) {
-          newOut = durationRef.current;
-          newIn = durationRef.current - regionDuration;
-        }
-
-        setInPoint(newIn);
-        setOutPoint(newOut);
-      }
-    }, [getTimeFromX]),
+      },
+      [getTimeFromX],
+    ),
     onDragEnd: useCallback(() => {
       // If user clicked inside the region without dragging, seek the playhead there
-      if (dragTargetRef.current === 'region' && !didDragRef.current && pointerDownTimeRef.current != null) {
+      if (
+        dragTargetRef.current === 'region' &&
+        !didDragRef.current &&
+        pointerDownTimeRef.current != null
+      ) {
         const time = pointerDownTimeRef.current;
         setPlayheadTime(time);
         if (audioRef.current) {
@@ -352,7 +375,7 @@ const AudioClipSelector = ({
       }
       dragTargetRef.current = null;
       setDragging(null);
-    }, [])
+    }, []),
   });
 
   // Keyboard shortcuts
@@ -361,7 +384,8 @@ const AudioClipSelector = ({
       if (editingTime) return; // Don't capture when editing time
       // Don't capture when any text input is focused (rename, search, etc.)
       const tag = document.activeElement?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable)
+        return;
 
       switch (e.key.toLowerCase()) {
         case 'i':
@@ -409,33 +433,36 @@ const AudioClipSelector = ({
     } else {
       // Start from current playhead if within the selected region, otherwise from IN
       const currentPos = audio.currentTime;
-      const startFrom = (currentPos >= inPoint && currentPos < outPoint) ? currentPos : inPoint;
+      const startFrom = currentPos >= inPoint && currentPos < outPoint ? currentPos : inPoint;
       audio.currentTime = startFrom;
       setPlayheadTime(startFrom);
 
-      audio.play().then(() => {
-        setIsPlaying(true);
+      audio
+        .play()
+        .then(() => {
+          setIsPlaying(true);
 
-        const updateLoop = () => {
-          if (!audioRef.current) return;
-          const time = audioRef.current.currentTime;
-          setPlayheadTime(time);
+          const updateLoop = () => {
+            if (!audioRef.current) return;
+            const time = audioRef.current.currentTime;
+            setPlayheadTime(time);
 
-          if (time >= outPoint) {
-            audioRef.current.pause();
-            audioRef.current.currentTime = inPoint;
-            setPlayheadTime(inPoint);
-            setIsPlaying(false);
-            return;
-          }
+            if (time >= outPoint) {
+              audioRef.current.pause();
+              audioRef.current.currentTime = inPoint;
+              setPlayheadTime(inPoint);
+              setIsPlaying(false);
+              return;
+            }
 
+            animationRef.current = requestAnimationFrame(updateLoop);
+          };
           animationRef.current = requestAnimationFrame(updateLoop);
-        };
-        animationRef.current = requestAnimationFrame(updateLoop);
-      }).catch(err => {
-        log.error('Playback failed:', err);
-        setIsPlaying(false);
-      });
+        })
+        .catch((err) => {
+          log.error('Playback failed:', err);
+          setIsPlaying(false);
+        });
     }
   }, [isPlaying, inPoint, outPoint]);
 
@@ -492,188 +519,253 @@ const AudioClipSelector = ({
     }
   };
 
+  // Dynamic presets based on audio duration
+  const quickPresets = useMemo(() => {
+    if (!duration || duration <= 0) return [];
+    const candidates = [3, 5, 10, 15, 30, 60, 120];
+    // Only show presets shorter than the total duration
+    return candidates.filter((s) => s < duration);
+  }, [duration]);
+
   const selectedDuration = outPoint - inPoint;
 
   // Actually trim the audio to a new file and pass to parent
-  const handleTrimAndUse = useCallback(async (name) => {
-    setIsTrimming(true);
-    setTrimProgress('Preparing trim...');
-    try {
-      // Determine audio source (prefer file, then localUrl/url)
-      const source = audioFile || audioUrl;
-      if (!source) throw new Error('No audio source available');
+  const handleTrimAndUse = useCallback(
+    async (name) => {
+      setIsTrimming(true);
+      setTrimProgress('Preparing trim...');
+      try {
+        // Determine audio source (prefer file, then localUrl/url)
+        const source = audioFile || audioUrl;
+        if (!source) throw new Error('No audio source available');
 
-      const trimmedFile = await trimAudioToFile(
-        source,
-        inPoint,
-        outPoint,
-        name || 'Trimmed Audio',
-        (msg) => setTrimProgress(msg)
-      );
+        const trimmedFile = await trimAudioToFile(
+          source,
+          inPoint,
+          outPoint,
+          name || 'Trimmed Audio',
+          (msg) => setTrimProgress(msg),
+        );
 
-      log('[AudioClipSelector] Trimmed audio:', {
-        name: trimmedFile.name,
-        size: `${(trimmedFile.size / 1024).toFixed(0)}KB`,
-        duration: `${selectedDuration.toFixed(1)}s`
-      });
+        log('[AudioClipSelector] Trimmed audio:', {
+          name: trimmedFile.name,
+          size: `${(trimmedFile.size / 1024).toFixed(0)}KB`,
+          duration: `${selectedDuration.toFixed(1)}s`,
+        });
 
-      // Pass the trimmed file to parent — starts at 0, no trim metadata needed
-      onSave({
-        startTime: 0,
-        endTime: selectedDuration,
-        duration: selectedDuration,
-        trimmedFile: trimmedFile,
-        trimmedName: name || trimmedFile.name
-      });
-    } catch (error) {
-      log.error('[AudioClipSelector] Trim failed:', error);
-      setTrimProgress('');
-      // Fall back to metadata-only approach
-      onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
-    } finally {
-      setIsTrimming(false);
-      setTrimProgress('');
-    }
-  }, [audioFile, audioUrl, inPoint, outPoint, selectedDuration, onSave]);
+        // Pass the trimmed file to parent — starts at 0, no trim metadata needed
+        onSave({
+          startTime: 0,
+          endTime: selectedDuration,
+          duration: selectedDuration,
+          trimmedFile: trimmedFile,
+          trimmedName: name || trimmedFile.name,
+        });
+      } catch (error) {
+        log.error('[AudioClipSelector] Trim failed:', error);
+        setTrimProgress('');
+        // Fall back to metadata-only approach
+        onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
+      } finally {
+        setIsTrimming(false);
+        setTrimProgress('');
+      }
+    },
+    [audioFile, audioUrl, inPoint, outPoint, selectedDuration, onSave],
+  );
 
   // Save trimmed audio to library permanently
-  const handleSaveToLibrary = useCallback(async (name) => {
-    if (!db || !artistId) {
-      onError?.('Cannot save to library: missing database or artist ID');
-      return;
-    }
+  const handleSaveToLibrary = useCallback(
+    async (name) => {
+      if (!db || !artistId) {
+        onError?.('Cannot save to library: missing database or artist ID');
+        return;
+      }
 
-    setIsTrimming(true);
-    setTrimProgress('Trimming audio...');
-    try {
-      // Determine audio source (prefer file, then localUrl/url)
-      const source = audioFile || audioUrl;
-      if (!source) throw new Error('No audio source available');
+      setIsTrimming(true);
+      setTrimProgress('Trimming audio...');
+      try {
+        // Determine audio source (prefer file, then localUrl/url)
+        const source = audioFile || audioUrl;
+        if (!source) throw new Error('No audio source available');
 
-      // Trim the audio to a new file
-      const trimmedFile = await trimAudioToFile(
-        source,
-        inPoint,
-        outPoint,
-        name || 'Trimmed Audio',
-        (msg) => setTrimProgress(msg)
-      );
+        // Trim the audio to a new file
+        const trimmedFile = await trimAudioToFile(
+          source,
+          inPoint,
+          outPoint,
+          name || 'Trimmed Audio',
+          (msg) => setTrimProgress(msg),
+        );
 
-      setTrimProgress('Uploading to cloud storage...');
+        setTrimProgress('Uploading to cloud storage...');
 
-      // Import services
-      const { addToLibraryAsync } = await import('../../services/libraryService');
-      const { uploadFile } = await import('../../services/firebaseStorage');
+        // Import services
+        const { addToLibraryAsync } = await import('../../services/libraryService');
+        const { uploadFile } = await import('../../services/firebaseStorage');
 
-      // Upload to Firebase Storage for persistence
-      const { url: storageUrl } = await uploadFile(trimmedFile, 'audio', (progress) => {
-        setTrimProgress(`Uploading... ${Math.round(progress)}%`);
-      });
+        // Upload to Firebase Storage for persistence
+        const { url: storageUrl } = await uploadFile(trimmedFile, 'audio', (progress) => {
+          setTrimProgress(`Uploading... ${Math.round(progress)}%`);
+        });
 
-      setTrimProgress('Saving to library...');
+        setTrimProgress('Saving to library...');
 
-      // Create media item for library with persistent URL
-      const mediaItem = {
-        type: 'audio',
-        name: trimmedFile.name,
-        url: storageUrl,
-        localUrl: storageUrl,
-        duration: selectedDuration,
-        isTrimmed: true,
-        originalName: audioName,
-        createdAt: new Date().toISOString()
-      };
+        // Create media item for library with persistent URL
+        const mediaItem = {
+          type: 'audio',
+          name: trimmedFile.name,
+          url: storageUrl,
+          localUrl: storageUrl,
+          duration: selectedDuration,
+          isTrimmed: true,
+          originalName: audioName,
+          createdAt: new Date().toISOString(),
+        };
 
-      // Save to library (localStorage + Firestore)
-      await addToLibraryAsync(db, artistId, mediaItem);
+        // Save to library (localStorage + Firestore)
+        await addToLibraryAsync(db, artistId, mediaItem);
 
-      onSuccess?.(`Saved "${trimmedFile.name}" to library`);
-      log('[AudioClipSelector] Saved trimmed audio to library:', trimmedFile.name);
+        onSuccess?.(`Saved "${trimmedFile.name}" to library`);
+        log('[AudioClipSelector] Saved trimmed audio to library:', trimmedFile.name);
 
-      // Don't close the modal - user can still use the clip for current slideshow
-    } catch (error) {
-      log.error('[AudioClipSelector] Save to library failed:', error);
-      onError?.(`Failed to save: ${error.message}`);
-    } finally {
-      setIsTrimming(false);
-      setTrimProgress('');
-    }
-  }, [audioFile, audioUrl, inPoint, outPoint, selectedDuration, audioName, db, artistId, onSuccess, onError]);
+        // Don't close the modal - user can still use the clip for current slideshow
+      } catch (error) {
+        log.error('[AudioClipSelector] Save to library failed:', error);
+        onError?.(`Failed to save: ${error.message}`);
+      } finally {
+        setIsTrimming(false);
+        setTrimProgress('');
+      }
+    },
+    [
+      audioFile,
+      audioUrl,
+      inPoint,
+      outPoint,
+      selectedDuration,
+      audioName,
+      db,
+      artistId,
+      onSuccess,
+      onError,
+    ],
+  );
 
   return (
-    <div style={{
-      ...styles.overlay,
-      ...(isMobile ? { padding: 0 } : {})
-    }}>
-      <div style={{
-        ...styles.modal,
-        ...(isMobile ? {
-          maxWidth: '100%',
-          height: '100vh',
-          maxHeight: '100vh',
-          borderRadius: 0,
-          display: 'flex',
-          flexDirection: 'column'
-        } : {})
-      }}>
+    <div
+      style={{
+        ...styles.overlay,
+        ...(isMobile ? { padding: 0 } : {}),
+      }}
+    >
+      <div
+        style={{
+          ...styles.modal,
+          ...(isMobile
+            ? {
+                maxWidth: '100%',
+                height: '100vh',
+                maxHeight: '100vh',
+                borderRadius: 0,
+                display: 'flex',
+                flexDirection: 'column',
+              }
+            : {}),
+        }}
+      >
         {/* Header */}
-        <div style={{
-          ...styles.header,
-          ...(isMobile ? { padding: '16px' } : {})
-        }}>
+        <div
+          style={{
+            ...styles.header,
+            ...(isMobile ? { padding: '16px' } : {}),
+          }}
+        >
           <div style={styles.headerLeft}>
-            <span style={{
-              ...styles.headerIcon,
-              ...(isMobile ? { fontSize: '24px' } : {})
-            }}>🎵</span>
+            <span
+              style={{
+                ...styles.headerIcon,
+                ...(isMobile ? { fontSize: '24px' } : {}),
+              }}
+            >
+              🎵
+            </span>
             <div>
-              <h2 style={{
-                ...styles.title,
-                ...(isMobile ? { fontSize: '16px' } : {})
-              }}>Select Audio Region</h2>
-              {!isMobile && <p style={styles.subtitle}>Drag the green (IN) and orange (OUT) markers, or press I/O keys</p>}
+              <h2
+                style={{
+                  ...styles.title,
+                  ...(isMobile ? { fontSize: '16px' } : {}),
+                }}
+              >
+                Select Audio Region
+              </h2>
+              {!isMobile && (
+                <p style={styles.subtitle}>
+                  Drag the green (IN) and orange (OUT) markers, or press I/O keys
+                </p>
+              )}
             </div>
           </div>
-          <IconButton size={isMobile ? "medium" : "small"} icon={<FeatherX />} onClick={onCancel} aria-label="Close" />
+          <IconButton
+            size={isMobile ? 'medium' : 'small'}
+            icon={<FeatherX />}
+            onClick={onCancel}
+            aria-label="Close"
+          />
         </div>
 
         {/* Quick Presets */}
-        <div style={{
-          ...styles.presets,
-          ...(isMobile ? {
-            padding: '10px 16px',
-            flexWrap: 'wrap',
-            gap: '6px'
-          } : {})
-        }}>
+        <div
+          style={{
+            ...styles.presets,
+            ...(isMobile
+              ? {
+                  padding: '10px 16px',
+                  flexWrap: 'wrap',
+                  gap: '6px',
+                }
+              : {}),
+          }}
+        >
           {!isMobile && <span style={styles.presetLabel}>Quick select from playhead:</span>}
-          <button style={{
-            ...styles.preset,
-            ...(isMobile ? { padding: '10px 16px', fontSize: '14px' } : {})
-          }} onClick={() => applyPreset('15')}>15s</button>
-          <button style={{
-            ...styles.preset,
-            ...(isMobile ? { padding: '10px 16px', fontSize: '14px' } : {})
-          }} onClick={() => applyPreset('30')}>30s</button>
-          <button style={{
-            ...styles.preset,
-            ...(isMobile ? { padding: '10px 16px', fontSize: '14px' } : {})
-          }} onClick={() => applyPreset('60')}>60s</button>
-          <button style={{
-            ...styles.presetFull,
-            ...(isMobile ? { padding: '10px 16px', fontSize: '14px', marginLeft: 0, flex: 1 } : {})
-          }} onClick={() => applyPreset('full')}>Full</button>
+          {quickPresets.map((s) => (
+            <button
+              key={s}
+              style={{
+                ...styles.preset,
+                ...(isMobile ? { padding: '10px 16px', fontSize: '14px' } : {}),
+              }}
+              onClick={() => applyPreset(String(s))}
+            >
+              {s}s
+            </button>
+          ))}
+          <button
+            style={{
+              ...styles.presetFull,
+              ...(isMobile
+                ? { padding: '10px 16px', fontSize: '14px', marginLeft: 0, flex: 1 }
+                : {}),
+            }}
+            onClick={() => applyPreset('full')}
+          >
+            Full
+          </button>
         </div>
 
         {/* Waveform */}
-        <div style={{
-          ...styles.waveformSection,
-          ...(isMobile ? {
-            padding: '16px',
-            flex: 1,
-            overflow: 'hidden'
-          } : {})
-        }}>
+        <div
+          style={{
+            ...styles.waveformSection,
+            ...(isMobile
+              ? {
+                  padding: '16px',
+                  flex: 1,
+                  overflow: 'hidden',
+                }
+              : {}),
+          }}
+        >
           {isLoading ? (
             <div style={styles.loading}>
               <Loader size="medium" />
@@ -683,7 +775,7 @@ const AudioClipSelector = ({
             <div
               ref={containerRef}
               style={{
-                ...styles.canvasContainer
+                ...styles.canvasContainer,
               }}
               {...getWaveformPointerProps()}
             >
@@ -698,23 +790,31 @@ const AudioClipSelector = ({
         </div>
 
         {/* Time Display */}
-        <div style={{
-          ...styles.timeRow,
-          ...(isMobile ? {
-            flexDirection: 'row',
-            gap: '8px',
-            padding: '12px 16px'
-          } : {})
-        }}>
+        <div
+          style={{
+            ...styles.timeRow,
+            ...(isMobile
+              ? {
+                  flexDirection: 'row',
+                  gap: '8px',
+                  padding: '12px 16px',
+                }
+              : {}),
+          }}
+        >
           {/* IN Point */}
-          <div style={{
-            ...styles.timeBlock,
-            ...(isMobile ? { flex: 1, padding: '8px' } : {})
-          }}>
-            <div style={{
-              ...styles.timeLabel,
-              ...(isMobile ? { fontSize: '10px' } : {})
-            }}>
+          <div
+            style={{
+              ...styles.timeBlock,
+              ...(isMobile ? { flex: 1, padding: '8px' } : {}),
+            }}
+          >
+            <div
+              style={{
+                ...styles.timeLabel,
+                ...(isMobile ? { fontSize: '10px' } : {}),
+              }}
+            >
               <span style={styles.inDot} />
               IN
             </div>
@@ -727,15 +827,18 @@ const AudioClipSelector = ({
                 onKeyDown={(e) => e.key === 'Enter' && handleTimeInputConfirm()}
                 style={{
                   ...styles.timeInput,
-                  ...(isMobile ? { fontSize: '16px', padding: '8px' } : {})
+                  ...(isMobile ? { fontSize: '16px', padding: '8px' } : {}),
                 }}
                 autoFocus={!isMobile}
               />
             ) : (
-              <button style={{
-                ...styles.timeValue,
-                ...(isMobile ? { fontSize: '18px', padding: '8px' } : {})
-              }} onClick={() => handleTimeEdit('in')}>
+              <button
+                style={{
+                  ...styles.timeValue,
+                  ...(isMobile ? { fontSize: '18px', padding: '8px' } : {}),
+                }}
+                onClick={() => handleTimeEdit('in')}
+              >
                 {formatTime(inPoint)}
               </button>
             )}
@@ -743,30 +846,46 @@ const AudioClipSelector = ({
           </div>
 
           {/* Duration */}
-          <div style={{
-            ...styles.durationBlock,
-            ...(isMobile ? { flex: 1, padding: '8px' } : {})
-          }}>
-            <div style={{
-              ...styles.durationLabel,
-              ...(isMobile ? { fontSize: '10px' } : {})
-            }}>DURATION</div>
-            <div style={{
-              ...styles.durationValue,
-              ...(isMobile ? { fontSize: '18px' } : {})
-            }}>{formatTime(selectedDuration)}</div>
-            {!isMobile && <div style={styles.durationSub}>{selectedDuration.toFixed(1)} seconds</div>}
+          <div
+            style={{
+              ...styles.durationBlock,
+              ...(isMobile ? { flex: 1, padding: '8px' } : {}),
+            }}
+          >
+            <div
+              style={{
+                ...styles.durationLabel,
+                ...(isMobile ? { fontSize: '10px' } : {}),
+              }}
+            >
+              DURATION
+            </div>
+            <div
+              style={{
+                ...styles.durationValue,
+                ...(isMobile ? { fontSize: '18px' } : {}),
+              }}
+            >
+              {formatTime(selectedDuration)}
+            </div>
+            {!isMobile && (
+              <div style={styles.durationSub}>{selectedDuration.toFixed(1)} seconds</div>
+            )}
           </div>
 
           {/* OUT Point */}
-          <div style={{
-            ...styles.timeBlock,
-            ...(isMobile ? { flex: 1, padding: '8px' } : {})
-          }}>
-            <div style={{
-              ...styles.timeLabel,
-              ...(isMobile ? { fontSize: '10px' } : {})
-            }}>
+          <div
+            style={{
+              ...styles.timeBlock,
+              ...(isMobile ? { flex: 1, padding: '8px' } : {}),
+            }}
+          >
+            <div
+              style={{
+                ...styles.timeLabel,
+                ...(isMobile ? { fontSize: '10px' } : {}),
+              }}
+            >
               <span style={styles.outDot} />
               OUT
             </div>
@@ -779,15 +898,18 @@ const AudioClipSelector = ({
                 onKeyDown={(e) => e.key === 'Enter' && handleTimeInputConfirm()}
                 style={{
                   ...styles.timeInput,
-                  ...(isMobile ? { fontSize: '16px', padding: '8px' } : {})
+                  ...(isMobile ? { fontSize: '16px', padding: '8px' } : {}),
                 }}
                 autoFocus={!isMobile}
               />
             ) : (
-              <button style={{
-                ...styles.timeValue,
-                ...(isMobile ? { fontSize: '18px', padding: '8px' } : {})
-              }} onClick={() => handleTimeEdit('out')}>
+              <button
+                style={{
+                  ...styles.timeValue,
+                  ...(isMobile ? { fontSize: '18px', padding: '8px' } : {}),
+                }}
+                onClick={() => handleTimeEdit('out')}
+              >
                 {formatTime(outPoint)}
               </button>
             )}
@@ -796,63 +918,106 @@ const AudioClipSelector = ({
         </div>
 
         {/* Playback Controls */}
-        <div style={{
-          ...styles.playbackRow,
-          ...(isMobile ? { padding: '12px 16px', gap: '12px' } : {})
-        }}>
-          <button style={{
-            ...styles.playButton,
-            ...(isMobile ? { width: '52px', height: '52px' } : {})
-          }} onClick={togglePlayback}>
+        <div
+          style={{
+            ...styles.playbackRow,
+            ...(isMobile ? { padding: '12px 16px', gap: '12px' } : {}),
+          }}
+        >
+          <button
+            style={{
+              ...styles.playButton,
+              ...(isMobile ? { width: '52px', height: '52px' } : {}),
+            }}
+            onClick={togglePlayback}
+          >
             {isPlaying ? (
-              <svg width={isMobile ? 28 : 24} height={isMobile ? 28 : 24} viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="4" width="4" height="16" rx="1"/>
-                <rect x="14" y="4" width="4" height="16" rx="1"/>
+              <svg
+                width={isMobile ? 28 : 24}
+                height={isMobile ? 28 : 24}
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <rect x="6" y="4" width="4" height="16" rx="1" />
+                <rect x="14" y="4" width="4" height="16" rx="1" />
               </svg>
             ) : (
-              <svg width={isMobile ? 28 : 24} height={isMobile ? 28 : 24} viewBox="0 0 24 24" fill="currentColor">
-                <polygon points="5,3 19,12 5,21"/>
+              <svg
+                width={isMobile ? 28 : 24}
+                height={isMobile ? 28 : 24}
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <polygon points="5,3 19,12 5,21" />
               </svg>
             )}
           </button>
           <div style={styles.playbackInfo}>
-            <span style={{
-              ...styles.playbackTime,
-              ...(isMobile ? { fontSize: '18px' } : {})
-            }}>{formatTime(playheadTime)}</span>
+            <span
+              style={{
+                ...styles.playbackTime,
+                ...(isMobile ? { fontSize: '18px' } : {}),
+              }}
+            >
+              {formatTime(playheadTime)}
+            </span>
             <span style={styles.playbackSep}>/</span>
-            <span style={{
-              ...styles.playbackDuration,
-              ...(isMobile ? { fontSize: '14px' } : {})
-            }}>{formatTime(duration)}</span>
+            <span
+              style={{
+                ...styles.playbackDuration,
+                ...(isMobile ? { fontSize: '14px' } : {}),
+              }}
+            >
+              {formatTime(duration)}
+            </span>
           </div>
           {!isMobile && (
             <div style={styles.shortcuts}>
-              <span style={styles.shortcut}><kbd>Space</kbd> Play</span>
-              <span style={styles.shortcut}><kbd>I</kbd> Set IN</span>
-              <span style={styles.shortcut}><kbd>O</kbd> Set OUT</span>
-              <span style={styles.shortcut}><kbd>←→</kbd> Scrub</span>
+              <span style={styles.shortcut}>
+                <kbd>Space</kbd> Play
+              </span>
+              <span style={styles.shortcut}>
+                <kbd>I</kbd> Set IN
+              </span>
+              <span style={styles.shortcut}>
+                <kbd>O</kbd> Set OUT
+              </span>
+              <span style={styles.shortcut}>
+                <kbd>←→</kbd> Scrub
+              </span>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div style={{
-          ...styles.footer,
-          ...(isMobile ? {
-            flexDirection: 'column',
-            gap: '12px',
-            padding: '16px'
-          } : {})
-        }}>
-          <div style={{
-            ...styles.footerInfo,
-            ...(isMobile ? { textAlign: 'center' } : {})
-          }}>
+        <div
+          style={{
+            ...styles.footer,
+            ...(isMobile
+              ? {
+                  flexDirection: 'column',
+                  gap: '12px',
+                  padding: '16px',
+                }
+              : {}),
+          }}
+        >
+          <div
+            style={{
+              ...styles.footerInfo,
+              ...(isMobile ? { textAlign: 'center' } : {}),
+            }}
+          >
             Selected: <strong>{formatTime(selectedDuration)}</strong> of {formatTime(duration)}
           </div>
           <div className={`flex gap-2 ${isMobile ? 'w-full flex-col' : ''}`}>
-            <Button variant="neutral-secondary" className={isMobile ? 'w-full' : ''} onClick={onCancel}>Cancel</Button>
+            <Button
+              variant="neutral-secondary"
+              className={isMobile ? 'w-full' : ''}
+              onClick={onCancel}
+            >
+              Cancel
+            </Button>
             {onSaveClip && !isMobile && (
               <Button
                 variant="brand-primary"
@@ -874,13 +1039,14 @@ const AudioClipSelector = ({
               disabled={isTrimming}
               onClick={() => {
                 // Check if audio was trimmed (not using full track)
-                const isTrimmed = inPoint > 0.1 || (duration > 0 && Math.abs(outPoint - duration) > 0.1);
+                const isTrimmed =
+                  inPoint > 0.1 || (duration > 0 && Math.abs(outPoint - duration) > 0.1);
                 log('[AudioClipSelector] Use This Clip clicked:', {
                   inPoint,
                   outPoint,
                   selectedDuration,
                   fullDuration: duration,
-                  isTrimmed
+                  isTrimmed,
                 });
                 if (isTrimmed) {
                   // Show prompt to name the trimmed version
@@ -903,7 +1069,7 @@ const AudioClipSelector = ({
         {/* Save Clip Modal */}
         {showSaveClipModal && (
           <div style={styles.saveClipOverlay} onClick={() => setShowSaveClipModal(false)}>
-            <div style={styles.saveClipModal} onClick={e => e.stopPropagation()}>
+            <div style={styles.saveClipModal} onClick={(e) => e.stopPropagation()}>
               <h3 style={styles.saveClipTitle}>💾 Save Audio Clip</h3>
               <p style={styles.saveClipDesc}>
                 Save this {formatTime(selectedDuration)} selection for quick reuse
@@ -911,17 +1077,17 @@ const AudioClipSelector = ({
               <input
                 type="text"
                 value={clipName}
-                onChange={e => setClipName(e.target.value)}
+                onChange={(e) => setClipName(e.target.value)}
                 placeholder="Clip name..."
                 style={styles.saveClipInput}
                 autoFocus
-                onKeyDown={e => {
+                onKeyDown={(e) => {
                   if (e.key === 'Enter' && clipName.trim()) {
                     const clipData = {
                       name: clipName.trim(),
                       startTime: inPoint,
                       endTime: outPoint,
-                      clipDuration: selectedDuration
+                      clipDuration: selectedDuration,
                     };
                     onSaveClip(clipData);
                     setSavedClipData(clipData);
@@ -931,7 +1097,11 @@ const AudioClipSelector = ({
                 }}
               />
               <div className="flex justify-end gap-2">
-                <Button variant="neutral-secondary" size="small" onClick={() => setShowSaveClipModal(false)}>
+                <Button
+                  variant="neutral-secondary"
+                  size="small"
+                  onClick={() => setShowSaveClipModal(false)}
+                >
                   Cancel
                 </Button>
                 <Button
@@ -944,7 +1114,7 @@ const AudioClipSelector = ({
                         name: clipName.trim(),
                         startTime: inPoint,
                         endTime: outPoint,
-                        clipDuration: selectedDuration
+                        clipDuration: selectedDuration,
                       };
                       onSaveClip(clipData);
                       setSavedClipData(clipData);
@@ -964,15 +1134,13 @@ const AudioClipSelector = ({
         {/* Use Clip Now Prompt */}
         {showUseClipPrompt && savedClipData && (
           <div style={styles.saveClipOverlay} onClick={() => setShowUseClipPrompt(false)}>
-            <div style={styles.useClipModal} onClick={e => e.stopPropagation()}>
+            <div style={styles.useClipModal} onClick={(e) => e.stopPropagation()}>
               <div style={styles.useClipIcon}>✅</div>
               <h3 style={styles.useClipTitle}>Clip Saved!</h3>
               <p style={styles.useClipDesc}>
                 "{savedClipData.name}" has been saved to your library.
               </p>
-              <p style={styles.useClipQuestion}>
-                Would you like to use this clip now?
-              </p>
+              <p style={styles.useClipQuestion}>Would you like to use this clip now?</p>
               <div className="flex gap-3 justify-center">
                 <Button
                   variant="neutral-secondary"
@@ -991,7 +1159,7 @@ const AudioClipSelector = ({
                     onSave({
                       startTime: savedClipData.startTime,
                       endTime: savedClipData.endTime,
-                      duration: savedClipData.clipDuration
+                      duration: savedClipData.clipDuration,
                     });
                     setShowUseClipPrompt(false);
                     setSavedClipData(null);
@@ -1006,11 +1174,17 @@ const AudioClipSelector = ({
 
         {/* Save Trimmed Clip Prompt - Shows when user clicks "Use This Clip" on trimmed audio */}
         {showSaveTrimmedPrompt && (
-          <div style={styles.saveClipOverlay} onClick={() => !isTrimming && setShowSaveTrimmedPrompt(false)}>
-            <div style={{
-              ...styles.saveTrimmedModal,
-              ...(isMobile ? { width: '90%', maxWidth: '90%', padding: '20px' } : {})
-            }} onClick={e => e.stopPropagation()}>
+          <div
+            style={styles.saveClipOverlay}
+            onClick={() => !isTrimming && setShowSaveTrimmedPrompt(false)}
+          >
+            <div
+              style={{
+                ...styles.saveTrimmedModal,
+                ...(isMobile ? { width: '90%', maxWidth: '90%', padding: '20px' } : {}),
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
               <h3 style={styles.saveTrimmedTitle}>✂️ Name Your Clip</h3>
               <p style={styles.saveTrimmedDesc}>
                 Saving a <strong>{formatTime(selectedDuration)}</strong> clip from your audio.
@@ -1019,16 +1193,16 @@ const AudioClipSelector = ({
               <input
                 type="text"
                 value={trimmedClipName}
-                onChange={e => setTrimmedClipName(e.target.value)}
+                onChange={(e) => setTrimmedClipName(e.target.value)}
                 placeholder="Name your trimmed clip..."
                 disabled={isTrimming}
                 style={{
                   ...styles.saveClipInput,
                   ...(isMobile ? { fontSize: '16px', padding: '14px' } : {}),
-                  ...(isTrimming ? { opacity: 0.5 } : {})
+                  ...(isTrimming ? { opacity: 0.5 } : {}),
                 }}
                 autoFocus={!isMobile}
-                onKeyDown={e => {
+                onKeyDown={(e) => {
                   if (e.key === 'Enter' && trimmedClipName.trim() && !isTrimming) {
                     handleTrimAndUse(trimmedClipName.trim());
                     setShowSaveTrimmedPrompt(false);
@@ -1036,7 +1210,14 @@ const AudioClipSelector = ({
                 }}
               />
               {isTrimming && (
-                <p style={{ color: theme.accent.hover, fontSize: '13px', margin: '8px 0 0', textAlign: 'center' }}>
+                <p
+                  style={{
+                    color: theme.accent.hover,
+                    fontSize: '13px',
+                    margin: '8px 0 0',
+                    textAlign: 'center',
+                  }}
+                >
                   {trimProgress || 'Trimming...'}
                 </p>
               )}
@@ -1099,7 +1280,7 @@ const getStyles = (theme) => ({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2000,
-    padding: '20px'
+    padding: '20px',
   },
   modal: {
     width: '100%',
@@ -1107,33 +1288,33 @@ const getStyles = (theme) => ({
     backgroundColor: theme.bg.input,
     borderRadius: '16px',
     overflow: 'hidden',
-    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '20px 24px',
-    borderBottom: `1px solid ${theme.bg.surface}`
+    borderBottom: `1px solid ${theme.bg.surface}`,
   },
   headerLeft: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px'
+    gap: '12px',
   },
   headerIcon: {
-    fontSize: '28px'
+    fontSize: '28px',
   },
   title: {
     fontSize: '18px',
     fontWeight: '600',
     color: theme.text.primary,
-    margin: 0
+    margin: 0,
   },
   subtitle: {
     fontSize: '13px',
     color: theme.text.secondary,
-    margin: '4px 0 0 0'
+    margin: '4px 0 0 0',
   },
   presets: {
     display: 'flex',
@@ -1141,12 +1322,12 @@ const getStyles = (theme) => ({
     gap: '8px',
     padding: '12px 24px',
     backgroundColor: theme.bg.page,
-    borderBottom: `1px solid ${theme.bg.surface}`
+    borderBottom: `1px solid ${theme.bg.surface}`,
   },
   presetLabel: {
     fontSize: '13px',
     color: theme.text.muted,
-    marginRight: '8px'
+    marginRight: '8px',
   },
   preset: {
     padding: '6px 14px',
@@ -1155,7 +1336,7 @@ const getStyles = (theme) => ({
     borderRadius: '6px',
     color: theme.text.primary,
     fontSize: '13px',
-    cursor: 'pointer'
+    cursor: 'pointer',
   },
   presetFull: {
     padding: '6px 14px',
@@ -1165,10 +1346,10 @@ const getStyles = (theme) => ({
     color: '#fff',
     fontSize: '13px',
     cursor: 'pointer',
-    marginLeft: 'auto'
+    marginLeft: 'auto',
   },
   waveformSection: {
-    padding: '24px'
+    padding: '24px',
   },
   loading: {
     display: 'flex',
@@ -1177,23 +1358,23 @@ const getStyles = (theme) => ({
     justifyContent: 'center',
     gap: '12px',
     padding: '60px',
-    color: theme.text.secondary
+    color: theme.text.secondary,
   },
   canvasContainer: {
     cursor: 'crosshair',
     borderRadius: '8px',
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   canvas: {
     display: 'block',
     width: '100%',
-    height: '140px'
+    height: '140px',
   },
   timeRow: {
     display: 'flex',
     alignItems: 'stretch',
     padding: '0 24px 24px',
-    gap: '16px'
+    gap: '16px',
   },
   timeBlock: {
     flex: 1,
@@ -1202,7 +1383,7 @@ const getStyles = (theme) => ({
     alignItems: 'center',
     padding: '16px',
     backgroundColor: theme.bg.page,
-    borderRadius: '12px'
+    borderRadius: '12px',
   },
   timeLabel: {
     display: 'flex',
@@ -1213,19 +1394,19 @@ const getStyles = (theme) => ({
     color: theme.text.muted,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
-    marginBottom: '8px'
+    marginBottom: '8px',
   },
   inDot: {
     width: '8px',
     height: '8px',
     borderRadius: '50%',
-    backgroundColor: '#22c55e'
+    backgroundColor: '#22c55e',
   },
   outDot: {
     width: '8px',
     height: '8px',
     borderRadius: '50%',
-    backgroundColor: '#f97316'
+    backgroundColor: '#f97316',
   },
   timeValue: {
     fontSize: '24px',
@@ -1236,7 +1417,7 @@ const getStyles = (theme) => ({
     border: 'none',
     cursor: 'pointer',
     padding: '4px 8px',
-    borderRadius: '4px'
+    borderRadius: '4px',
   },
   timeInput: {
     fontSize: '24px',
@@ -1249,12 +1430,12 @@ const getStyles = (theme) => ({
     padding: '4px 8px',
     textAlign: 'center',
     width: '140px',
-    outline: 'none'
+    outline: 'none',
   },
   timeHint: {
     fontSize: '11px',
     color: theme.text.muted,
-    marginTop: '6px'
+    marginTop: '6px',
   },
   durationBlock: {
     flex: 1.2,
@@ -1264,7 +1445,7 @@ const getStyles = (theme) => ({
     justifyContent: 'center',
     padding: '16px',
     backgroundColor: theme.accent.primary,
-    borderRadius: '12px'
+    borderRadius: '12px',
   },
   durationLabel: {
     fontSize: '11px',
@@ -1272,18 +1453,18 @@ const getStyles = (theme) => ({
     color: theme.text.secondary,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
-    marginBottom: '4px'
+    marginBottom: '4px',
   },
   durationValue: {
     fontSize: '32px',
     fontWeight: '700',
     color: '#fff',
-    fontFamily: 'monospace'
+    fontFamily: 'monospace',
   },
   durationSub: {
     fontSize: '12px',
     color: theme.text.secondary,
-    marginTop: '4px'
+    marginTop: '4px',
   },
   playbackRow: {
     display: 'flex',
@@ -1291,7 +1472,7 @@ const getStyles = (theme) => ({
     gap: '16px',
     padding: '16px 24px',
     backgroundColor: theme.bg.page,
-    borderTop: `1px solid ${theme.bg.surface}`
+    borderTop: `1px solid ${theme.bg.surface}`,
   },
   playButton: {
     width: '48px',
@@ -1303,46 +1484,46 @@ const getStyles = (theme) => ({
     border: 'none',
     borderRadius: '50%',
     color: '#fff',
-    cursor: 'pointer'
+    cursor: 'pointer',
   },
   playbackInfo: {
     display: 'flex',
     alignItems: 'baseline',
-    gap: '4px'
+    gap: '4px',
   },
   playbackTime: {
     fontSize: '18px',
     fontWeight: '600',
     color: theme.text.primary,
-    fontFamily: 'monospace'
+    fontFamily: 'monospace',
   },
   playbackSep: {
-    color: theme.text.muted
+    color: theme.text.muted,
   },
   playbackDuration: {
     fontSize: '14px',
     color: theme.text.muted,
-    fontFamily: 'monospace'
+    fontFamily: 'monospace',
   },
   shortcuts: {
     display: 'flex',
     gap: '16px',
-    marginLeft: 'auto'
+    marginLeft: 'auto',
   },
   shortcut: {
     fontSize: '11px',
-    color: theme.text.muted
+    color: theme.text.muted,
   },
   footer: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '16px 24px',
-    borderTop: `1px solid ${theme.bg.surface}`
+    borderTop: `1px solid ${theme.bg.surface}`,
   },
   footerInfo: {
     fontSize: '13px',
-    color: theme.text.secondary
+    color: theme.text.secondary,
   },
   saveClipOverlay: {
     position: 'absolute',
@@ -1351,25 +1532,25 @@ const getStyles = (theme) => ({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10
+    zIndex: 10,
   },
   saveClipModal: {
     backgroundColor: theme.bg.input,
     borderRadius: '12px',
     padding: '24px',
     width: '100%',
-    maxWidth: '400px'
+    maxWidth: '400px',
   },
   saveClipTitle: {
     fontSize: '18px',
     fontWeight: '600',
     color: theme.text.primary,
-    margin: '0 0 8px 0'
+    margin: '0 0 8px 0',
   },
   saveClipDesc: {
     fontSize: '13px',
     color: theme.text.secondary,
-    margin: '0 0 16px 0'
+    margin: '0 0 16px 0',
   },
   saveClipInput: {
     width: '100%',
@@ -1381,7 +1562,7 @@ const getStyles = (theme) => ({
     fontSize: '14px',
     marginBottom: '16px',
     outline: 'none',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
   },
   // Use Clip Now Modal styles
   useClipModal: {
@@ -1389,28 +1570,28 @@ const getStyles = (theme) => ({
     borderRadius: '16px',
     padding: '24px',
     textAlign: 'center',
-    maxWidth: '360px'
+    maxWidth: '360px',
   },
   useClipIcon: {
     fontSize: '48px',
-    marginBottom: '12px'
+    marginBottom: '12px',
   },
   useClipTitle: {
     fontSize: '20px',
     fontWeight: '600',
     color: theme.text.primary,
-    margin: '0 0 8px 0'
+    margin: '0 0 8px 0',
   },
   useClipDesc: {
     fontSize: '14px',
     color: '#10b981',
     margin: '0 0 4px 0',
-    fontWeight: '500'
+    fontWeight: '500',
   },
   useClipQuestion: {
     fontSize: '14px',
     color: theme.text.secondary,
-    margin: '0 0 20px 0'
+    margin: '0 0 20px 0',
   },
   // Save Trimmed Modal styles
   saveTrimmedModal: {
@@ -1419,25 +1600,25 @@ const getStyles = (theme) => ({
     padding: '28px',
     width: '100%',
     maxWidth: '440px',
-    border: '1px solid rgba(139, 92, 246, 0.3)'
+    border: '1px solid rgba(139, 92, 246, 0.3)',
   },
   saveTrimmedTitle: {
     fontSize: '20px',
     fontWeight: '600',
     color: theme.text.primary,
-    margin: '0 0 12px 0'
+    margin: '0 0 12px 0',
   },
   saveTrimmedDesc: {
     fontSize: '14px',
     color: theme.text.primary,
     margin: '0 0 8px 0',
-    lineHeight: '1.5'
+    lineHeight: '1.5',
   },
   saveTrimmedNote: {
     fontSize: '12px',
     color: theme.text.muted,
     margin: '0 0 20px 0',
-    fontStyle: 'italic'
+    fontStyle: 'italic',
   },
 });
 

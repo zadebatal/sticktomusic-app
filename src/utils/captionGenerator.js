@@ -18,53 +18,159 @@ export const CONTENT_BANKS = Object.freeze({
   Fashion: {
     hashtags: {
       always: ['#fashion', '#style', '#aesthetic'],
-      pool: ['#ootd', '#archive', '#vibes', '#mood', '#runway', '#designer', '#vintage', '#y2k', '#grunge', '#minimalist', '#streetwear', '#haute']
+      pool: [
+        '#ootd',
+        '#archive',
+        '#vibes',
+        '#mood',
+        '#runway',
+        '#designer',
+        '#vintage',
+        '#y2k',
+        '#grunge',
+        '#minimalist',
+        '#streetwear',
+        '#haute',
+      ],
     },
     captions: {
       always: [],
-      pool: ['mood', 'vibe', 'forever', 'dreaming', '✨', 'archive', 'aesthetic', 'core', 'obsessed', 'iconic', 'serving', 'the blueprint']
-    }
+      pool: [
+        'mood',
+        'vibe',
+        'forever',
+        'dreaming',
+        '✨',
+        'archive',
+        'aesthetic',
+        'core',
+        'obsessed',
+        'iconic',
+        'serving',
+        'the blueprint',
+      ],
+    },
   },
   EDM: {
     hashtags: {
       always: ['#edm', '#music', '#electronic'],
-      pool: ['#rave', '#bass', '#dubstep', '#house', '#techno', '#festival', '#dj', '#beats', '#wub', '#plur', '#underground']
+      pool: [
+        '#rave',
+        '#bass',
+        '#dubstep',
+        '#house',
+        '#techno',
+        '#festival',
+        '#dj',
+        '#beats',
+        '#wub',
+        '#plur',
+        '#underground',
+      ],
     },
     captions: {
       always: [],
-      pool: ['wub', 'wub wub', '<3', 'dancedancedance', 'bass drop', 'feel it', '🖤', 'lost in sound', 'the drop', 'vibrations']
-    }
+      pool: [
+        'wub',
+        'wub wub',
+        '<3',
+        'dancedancedance',
+        'bass drop',
+        'feel it',
+        '🖤',
+        'lost in sound',
+        'the drop',
+        'vibrations',
+      ],
+    },
   },
   Runway: {
     hashtags: {
       always: ['#runway', '#fashion', '#couture'],
-      pool: ['#model', '#catwalk', '#highfashion', '#designer', '#fashionweek', '#paris', '#milan', '#vogue', '#editorial']
+      pool: [
+        '#model',
+        '#catwalk',
+        '#highfashion',
+        '#designer',
+        '#fashionweek',
+        '#paris',
+        '#milan',
+        '#vogue',
+        '#editorial',
+      ],
     },
     captions: {
       always: [],
-      pool: ['walk', 'serve', 'the moment', 'iconic', 'haute', 'chic', 'elegance', 'fierce', 'statement']
-    }
+      pool: [
+        'walk',
+        'serve',
+        'the moment',
+        'iconic',
+        'haute',
+        'chic',
+        'elegance',
+        'fierce',
+        'statement',
+      ],
+    },
   },
   'Romantic/Soft': {
     hashtags: {
       always: ['#romantic', '#soft', '#aesthetic'],
-      pool: ['#love', '#dreamy', '#ethereal', '#gentle', '#tender', '#pink', '#pastels', '#cottagecore', '#fairytale']
+      pool: [
+        '#love',
+        '#dreamy',
+        '#ethereal',
+        '#gentle',
+        '#tender',
+        '#pink',
+        '#pastels',
+        '#cottagecore',
+        '#fairytale',
+      ],
     },
     captions: {
       always: [],
-      pool: ['dreaming', 'soft', 'tender', '💕', 'gentle', 'delicate', 'sweet', 'in love', 'fairy tale']
-    }
+      pool: [
+        'dreaming',
+        'soft',
+        'tender',
+        '💕',
+        'gentle',
+        'delicate',
+        'sweet',
+        'in love',
+        'fairy tale',
+      ],
+    },
   },
   'Ethereal/Dreamy': {
     hashtags: {
       always: ['#ethereal', '#dreamy', '#aesthetic'],
-      pool: ['#mystical', '#otherworldly', '#fantasy', '#magical', '#celestial', '#surreal', '#fairycore', '#angelic']
+      pool: [
+        '#mystical',
+        '#otherworldly',
+        '#fantasy',
+        '#magical',
+        '#celestial',
+        '#surreal',
+        '#fairycore',
+        '#angelic',
+      ],
     },
     captions: {
       always: [],
-      pool: ['floating', 'between worlds', '✨', 'celestial', 'transcendent', 'otherworldly', 'lost in dreams']
-    }
-  }
+      pool: [
+        'floating',
+        'between worlds',
+        '✨',
+        'celestial',
+        'transcendent',
+        'otherworldly',
+        'lost in dreams',
+      ],
+    },
+  },
 });
 
 /**
@@ -177,7 +283,7 @@ export function generatePostContent(bankName, options = {}) {
     caption,
     hashtags,
     hashtagString,
-    fullText: `${caption}\n\n${hashtagString}`.trim()
+    fullText: `${caption}\n\n${hashtagString}`.trim(),
   };
 }
 
@@ -238,7 +344,7 @@ export function generateFromCollectionBanks(captionBank, hashtagBank, options = 
     caption,
     hashtags,
     hashtagString,
-    fullText: `${caption}\n\n${hashtagString}`.trim()
+    fullText: `${caption}\n\n${hashtagString}`.trim(),
   };
 }
 
@@ -276,5 +382,5 @@ export default {
   generateBatchPostContent,
   generateFromCollectionBanks,
   isValidBankName,
-  assertValidBank
+  assertValidBank,
 };

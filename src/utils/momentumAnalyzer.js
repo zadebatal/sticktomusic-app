@@ -24,7 +24,7 @@ import log from './logger';
  */
 export function computeEnergyCurve(channelData, sampleRate) {
   const windowSize = Math.floor(sampleRate * 0.02); // 20ms
-  const hopSize = Math.floor(sampleRate * 0.01);    // 10ms
+  const hopSize = Math.floor(sampleRate * 0.01); // 10ms
   const frames = [];
 
   for (let i = 0; i + windowSize <= channelData.length; i += hopSize) {
@@ -68,7 +68,7 @@ export function detectSegments(energyCurve) {
     const hi = Math.min(energyCurve.length, i + Math.ceil(smoothWindow / 2));
     let sum = 0;
     for (let j = lo; j < hi; j++) sum += energyCurve[j].energy;
-    smoothed.push(sum / (hi - lo));
+    smoothed.push(hi - lo > 0 ? sum / (hi - lo) : 0);
   }
 
   // Threshold at median
@@ -111,7 +111,7 @@ export function detectSegments(energyCurve) {
   // Merge tiny segments (<0.3s) into neighbors
   const merged = [];
   for (const seg of segments) {
-    if (merged.length > 0 && (seg.end - seg.start) < 0.3) {
+    if (merged.length > 0 && seg.end - seg.start < 0.3) {
       merged[merged.length - 1].end = seg.end;
     } else {
       merged.push({ ...seg });
@@ -148,7 +148,7 @@ export function detectOnsets(energyCurve) {
     const hi = Math.min(diff.length, i + threshWindow);
     let sum = 0;
     for (let j = lo; j < hi; j++) sum += diff[j];
-    const localMean = sum / (hi - lo);
+    const localMean = hi - lo > 0 ? sum / (hi - lo) : 0;
     const threshold = localMean * 1.5 + 0.01; // +0.01 for silence rejection
 
     // Peak picking: local maximum above threshold
@@ -209,7 +209,9 @@ function generateHypeCuts(onsets, segments, duration) {
   // In high-energy segments, fill gaps >0.5s
   for (const seg of segments) {
     if (!seg.isHigh) continue;
-    const segPoints = [...points].filter(t => t >= seg.start && t <= seg.end).sort((a, b) => a - b);
+    const segPoints = [...points]
+      .filter((t) => t >= seg.start && t <= seg.end)
+      .sort((a, b) => a - b);
     let prev = seg.start;
     for (const t of segPoints) {
       if (t - prev > 0.5) {
@@ -346,9 +348,7 @@ function getSegmentInterval(time, segments) {
 
 /** Deduplicate, enforce minimum interval, clamp to [0, duration], sort */
 function dedupeAndSort(pointsSet, minInterval, duration) {
-  let arr = [...pointsSet]
-    .filter(t => t >= 0 && t <= duration)
-    .sort((a, b) => a - b);
+  let arr = [...pointsSet].filter((t) => t >= 0 && t <= duration).sort((a, b) => a - b);
 
   // Enforce minimum interval
   const filtered = [];
@@ -379,6 +379,30 @@ function dedupeAndSort(pointsSet, minInterval, duration) {
   return filtered;
 }
 
+// ─── Auto Preset Selection ──────────────────────────────────────────────────
+
+/**
+ * Automatically select the best cut preset based on the energy profile.
+ * High energy → hype, low energy → chill, mixed → story.
+ *
+ * @param {Array<{ time: number, energy: number }>} energyCurve — from computeEnergyCurve()
+ * @returns {'hype' | 'chill' | 'story'}
+ */
+export function autoSelectCutPreset(energyCurve) {
+  if (!energyCurve || energyCurve.length === 0) return 'story';
+
+  const avgEnergy = energyCurve.reduce((sum, p) => sum + p.energy, 0) / energyCurve.length;
+  const highCount = energyCurve.filter((p) => p.energy > 0.6).length;
+  const highRatio = highCount / energyCurve.length;
+
+  // Mostly high energy → hype
+  if (avgEnergy > 0.5 && highRatio > 0.4) return 'hype';
+  // Mostly low energy → chill
+  if (avgEnergy < 0.25 && highRatio < 0.15) return 'chill';
+  // Mixed → story (segment-aware cuts)
+  return 'story';
+}
+
 // ─── Convenience Wrapper ─────────────────────────────────────────────────────
 
 /**
@@ -388,7 +412,11 @@ function dedupeAndSort(pointsSet, minInterval, duration) {
  * @param {{ trimStart?: number, trimEnd?: number }} options
  * @returns {Promise<{ cutPoints: number[], energyCurve: object[], segments: object[], onsets: object[], duration: number }>}
  */
-export async function analyzeMomentum(audioSource, preset = 'story', { trimStart = 0, trimEnd } = {}) {
+export async function analyzeMomentum(
+  audioSource,
+  preset = 'story',
+  { trimStart = 0, trimEnd } = {},
+) {
   if (!audioSource) throw new Error('No audio source provided');
   if (typeof audioSource === 'string' && audioSource.startsWith('blob:')) {
     throw new Error('Blob URLs not supported — use a persistent URL');
@@ -429,7 +457,9 @@ export async function analyzeMomentum(audioSource, preset = 'story', { trimStart
   // Stage 4: generate cuts for the requested preset
   const cutPoints = generateCutPoints(energyCurve, onsets, segments, preset, duration);
 
-  log.info(`[Momentum] ${cutPoints.length} cut points generated (${segments.length} segments, ${onsets.length} onsets)`);
+  log.info(
+    `[Momentum] ${cutPoints.length} cut points generated (${segments.length} segments, ${onsets.length} onsets)`,
+  );
 
   return { cutPoints, energyCurve, segments, onsets, duration };
 }

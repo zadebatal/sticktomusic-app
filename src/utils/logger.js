@@ -19,7 +19,7 @@ const noop = () => {};
 const log = isDev ? console.log.bind(console) : noop;
 log.info = isDev ? console.log.bind(console) : noop;
 log.debug = isDev ? console.debug.bind(console) : noop;
-log.warn = console.warn.bind(console);   // always show warnings
+log.warn = console.warn.bind(console); // always show warnings
 log.error = console.error.bind(console); // always show errors
 
 export default log;

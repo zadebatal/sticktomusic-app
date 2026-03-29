@@ -23,15 +23,18 @@ const OnboardingWizard = ({ user, socialSetsAllowed = 0, onComplete }) => {
       },
       {
         title: 'Your Dashboard',
-        description: 'Your dashboard shows connected accounts, upcoming posts, and plan usage at a glance. Check the Schedule tab to see your posting calendar.',
+        description:
+          'Your dashboard shows connected accounts, upcoming posts, and plan usage at a glance. Check the Schedule tab to see your posting calendar.',
       },
       {
         title: 'Connect Your Accounts',
-        description: 'Head to your dashboard to link your first Social Set — connect Facebook, TikTok, Twitter, and Instagram accounts to start posting.',
+        description:
+          'Head to your dashboard to link your first Social Set — connect Facebook, TikTok, Twitter, and Instagram accounts to start posting.',
       },
       {
         title: "You're all set!",
-        description: 'Explore your dashboard, check your schedule, and track performance in analytics. Your operator will handle content creation and scheduling.',
+        description:
+          'Explore your dashboard, check your schedule, and track performance in analytics. Your operator will handle content creation and scheduling.',
       },
     ],
     operator: [
@@ -41,15 +44,18 @@ const OnboardingWizard = ({ user, socialSetsAllowed = 0, onComplete }) => {
       },
       {
         title: 'Add Your First Artist',
-        description: 'Go to the Artists tab to add an artist. You can set their name, allocate Social Sets, and optionally invite them via email.',
+        description:
+          'Go to the Artists tab to add an artist. You can set their name, allocate Social Sets, and optionally invite them via email.',
       },
       {
         title: 'Studio & Scheduler',
-        description: 'Use the Studio to batch-create content, then schedule across platforms in the Schedule tab. Pages shows all connected accounts.',
+        description:
+          'Use the Studio to batch-create content, then schedule across platforms in the Schedule tab. Pages shows all connected accounts.',
       },
       {
         title: 'Ready to go!',
-        description: 'Start by adding an artist in the Artists tab. Create content, schedule posts, and track everything from your dashboard.',
+        description:
+          'Start by adding an artist in the Artists tab. Create content, schedule posts, and track everything from your dashboard.',
       },
     ],
     collaborator: [
@@ -59,11 +65,13 @@ const OnboardingWizard = ({ user, socialSetsAllowed = 0, onComplete }) => {
       },
       {
         title: "Here's what you can see",
-        description: 'Your Dashboard shows stats and upcoming posts. The Schedule tab shows the posting calendar. Analytics tracks performance.',
+        description:
+          'Your Dashboard shows stats and upcoming posts. The Schedule tab shows the posting calendar. Analytics tracks performance.',
       },
       {
         title: "You're ready!",
-        description: 'Explore the dashboard to see how things are going. Everything is view-only — your artist or operator manages content and scheduling.',
+        description:
+          'Explore the dashboard to see how things are going. Everything is view-only — your artist or operator manages content and scheduling.',
       },
     ],
     conductor: [
@@ -83,8 +91,10 @@ const OnboardingWizard = ({ user, socialSetsAllowed = 0, onComplete }) => {
       className="fixed inset-0 z-[200] flex items-center justify-center"
       style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
     >
-      <div className={`w-full max-w-md mx-4 p-8 rounded-2xl border ${t.cardBorder}`}
-        style={{ backgroundColor: theme.bg.surface }}>
+      <div
+        className={`w-full max-w-md mx-4 p-8 rounded-2xl border ${t.cardBorder}`}
+        style={{ backgroundColor: theme.bg.surface }}
+      >
         <div className="text-center mb-6">
           <h2 className={`text-xl font-bold ${t.textPrimary} mb-2`}>{currentStep.title}</h2>
           <p className={`${t.textSecondary} text-sm leading-relaxed`}>{currentStep.description}</p>
@@ -104,11 +114,17 @@ const OnboardingWizard = ({ user, socialSetsAllowed = 0, onComplete }) => {
         </div>
 
         <div className="flex items-center justify-between">
-          <Button variant="neutral-tertiary" onClick={onComplete}>Skip</Button>
+          <Button variant="neutral-tertiary" onClick={onComplete}>
+            Skip
+          </Button>
           {isLast ? (
-            <Button variant="brand-primary" onClick={onComplete}>Get Started</Button>
+            <Button variant="brand-primary" onClick={onComplete}>
+              Get Started
+            </Button>
           ) : (
-            <Button variant="brand-primary" onClick={() => setStep(s => s + 1)}>Next</Button>
+            <Button variant="brand-primary" onClick={() => setStep((s) => s + 1)}>
+              Next
+            </Button>
           )}
         </div>
       </div>

@@ -17,7 +17,7 @@ import {
   calculateConfidenceScore,
   getConfidenceLabel,
   getCandidatePosts,
-  calculatePostAttribution
+  calculatePostAttribution,
 } from '../spotifyAttributionService';
 import { PLATFORM_WEIGHTS, ATTRIBUTION_CONFIG } from '../spotifyService';
 
@@ -35,7 +35,7 @@ const createMockPost = (overrides = {}) => ({
   comments: 50,
   shares: 100,
   engagementRate: 6.5,
-  ...overrides
+  ...overrides,
 });
 
 // Mock growth event
@@ -48,13 +48,19 @@ const createMockGrowthEvent = (overrides = {}) => ({
   observedDelta: 500,
   expectedDelta: 200,
   liftDelta: 300,
-  ...overrides
+  ...overrides,
 });
 
 describe('spotifyAttributionService', () => {
   describe('calculateEngagementQuality', () => {
     test('returns 0 for post with no engagement', () => {
-      const post = createMockPost({ views: 0, likes: 0, comments: 0, shares: 0, engagementRate: 0 });
+      const post = createMockPost({
+        views: 0,
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        engagementRate: 0,
+      });
       const allPosts = [post];
       const quality = calculateEngagementQuality(post, allPosts);
       // With only one post at 0, normalization gives 0.5 or 0
@@ -63,8 +69,20 @@ describe('spotifyAttributionService', () => {
     });
 
     test('returns higher score for high-engagement post', () => {
-      const lowPost = createMockPost({ views: 1000, likes: 50, comments: 5, shares: 10, engagementRate: 2.0 });
-      const highPost = createMockPost({ views: 100000, likes: 5000, comments: 500, shares: 1000, engagementRate: 12.0 });
+      const lowPost = createMockPost({
+        views: 1000,
+        likes: 50,
+        comments: 5,
+        shares: 10,
+        engagementRate: 2.0,
+      });
+      const highPost = createMockPost({
+        views: 100000,
+        likes: 5000,
+        comments: 500,
+        shares: 1000,
+        engagementRate: 12.0,
+      });
       const allPosts = [lowPost, highPost];
 
       const lowQuality = calculateEngagementQuality(lowPost, allPosts);
@@ -74,8 +92,20 @@ describe('spotifyAttributionService', () => {
     });
 
     test('correctly weights views at 40%', () => {
-      const post1 = createMockPost({ views: 100000, likes: 0, comments: 0, shares: 0, engagementRate: 0 });
-      const post2 = createMockPost({ views: 0, likes: 0, comments: 0, shares: 0, engagementRate: 0 });
+      const post1 = createMockPost({
+        views: 100000,
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        engagementRate: 0,
+      });
+      const post2 = createMockPost({
+        views: 0,
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        engagementRate: 0,
+      });
       const allPosts = [post1, post2];
 
       const quality = calculateEngagementQuality(post1, allPosts);
@@ -125,7 +155,7 @@ describe('spotifyAttributionService', () => {
     test('returns 1.0 for exact track match', () => {
       const post = createMockPost({ audioId: 'audio_1' });
       const event = createMockGrowthEvent({ trackId: 'spotify_track_1' });
-      const trackMapping = { 'audio_1': 'spotify_track_1' };
+      const trackMapping = { audio_1: 'spotify_track_1' };
 
       const match = calculateSongMatch(post, event, trackMapping);
       expect(match).toBe(1.0);
@@ -134,7 +164,7 @@ describe('spotifyAttributionService', () => {
     test('returns 0.65 for same artist different track', () => {
       const post = createMockPost({ audioId: 'audio_2' });
       const event = createMockGrowthEvent({ trackId: 'spotify_track_1' });
-      const trackMapping = { 'audio_1': 'spotify_track_1', 'audio_2': 'spotify_track_2' };
+      const trackMapping = { audio_1: 'spotify_track_1', audio_2: 'spotify_track_2' };
 
       const match = calculateSongMatch(post, event, trackMapping);
       expect(match).toBe(0.65);
@@ -161,11 +191,11 @@ describe('spotifyAttributionService', () => {
 
   describe('getPlatformWeight', () => {
     test('returns correct weights for known platforms', () => {
-      expect(getPlatformWeight('tiktok')).toBe(1.00);
-      expect(getPlatformWeight('TikTok')).toBe(1.00);
+      expect(getPlatformWeight('tiktok')).toBe(1.0);
+      expect(getPlatformWeight('TikTok')).toBe(1.0);
       expect(getPlatformWeight('instagram')).toBe(0.85);
-      expect(getPlatformWeight('youtube')).toBe(0.80);
-      expect(getPlatformWeight('twitter')).toBe(0.70);
+      expect(getPlatformWeight('youtube')).toBe(0.8);
+      expect(getPlatformWeight('twitter')).toBe(0.7);
     });
 
     test('returns default weight for unknown platforms', () => {
@@ -199,7 +229,9 @@ describe('spotifyAttributionService', () => {
 
     test('applies paid campaign penalty', () => {
       const scoreNoPenalty = calculateConfidenceScore(50, 0.7, 0.8, 1.0, 2, {});
-      const scoreWithPenalty = calculateConfidenceScore(50, 0.7, 0.8, 1.0, 2, { paidCampaign: true });
+      const scoreWithPenalty = calculateConfidenceScore(50, 0.7, 0.8, 1.0, 2, {
+        paidCampaign: true,
+      });
 
       expect(scoreWithPenalty).toBeLessThan(scoreNoPenalty);
     });
@@ -238,10 +270,10 @@ describe('spotifyAttributionService', () => {
       const candidates = getCandidatePosts(posts, event);
 
       expect(candidates).toHaveLength(2);
-      expect(candidates.map(c => c.videoId)).toContain('v1');
-      expect(candidates.map(c => c.videoId)).toContain('v2');
-      expect(candidates.map(c => c.videoId)).not.toContain('v3');
-      expect(candidates.map(c => c.videoId)).not.toContain('v4');
+      expect(candidates.map((c) => c.videoId)).toContain('v1');
+      expect(candidates.map((c) => c.videoId)).toContain('v2');
+      expect(candidates.map((c) => c.videoId)).not.toContain('v3');
+      expect(candidates.map((c) => c.videoId)).not.toContain('v4');
     });
 
     test('returns empty array when no posts in window', () => {
@@ -268,7 +300,7 @@ describe('spotifyAttributionService', () => {
     test('contribution percentages sum to 100%', () => {
       const event = createMockGrowthEvent({
         eventTime: '2026-02-02T12:00:00Z',
-        liftDelta: 300
+        liftDelta: 300,
       });
       const posts = [
         createMockPost({ videoId: 'v1', postedAt: '2026-02-01T12:00:00Z', views: 50000 }),
@@ -287,7 +319,7 @@ describe('spotifyAttributionService', () => {
       const liftDelta = 300;
       const event = createMockGrowthEvent({
         eventTime: '2026-02-02T12:00:00Z',
-        liftDelta
+        liftDelta,
       });
       const posts = [
         createMockPost({ videoId: 'v1', postedAt: '2026-02-01T12:00:00Z', views: 50000 }),
@@ -311,17 +343,15 @@ describe('spotifyAttributionService', () => {
 
       const attributions = calculatePostAttribution(event, posts, trackMapping);
 
-      const oldPostAttr = attributions.find(a => a.postId === 'v1');
-      const newPostAttr = attributions.find(a => a.postId === 'v2');
+      const oldPostAttr = attributions.find((a) => a.postId === 'v1');
+      const newPostAttr = attributions.find((a) => a.postId === 'v2');
 
       expect(newPostAttr.contributionPct).toBeGreaterThan(oldPostAttr.contributionPct);
     });
 
     test('includes confidence score and label', () => {
       const event = createMockGrowthEvent({ eventTime: '2026-02-02T12:00:00Z' });
-      const posts = [
-        createMockPost({ videoId: 'v1', postedAt: '2026-02-01T12:00:00Z' }),
-      ];
+      const posts = [createMockPost({ videoId: 'v1', postedAt: '2026-02-01T12:00:00Z' })];
       const trackMapping = {};
 
       const attributions = calculatePostAttribution(event, posts, trackMapping);
@@ -357,8 +387,16 @@ describe('spotifyAttributionService', () => {
 
     test('TikTok posts have higher relevance than other platforms (all else equal)', () => {
       const event = createMockGrowthEvent({ eventTime: '2026-02-02T12:00:00Z' });
-      const tiktokPost = createMockPost({ videoId: 'v1', platform: 'tiktok', postedAt: '2026-02-01T12:00:00Z' });
-      const fbPost = createMockPost({ videoId: 'v2', platform: 'facebook', postedAt: '2026-02-01T12:00:00Z' });
+      const tiktokPost = createMockPost({
+        videoId: 'v1',
+        platform: 'tiktok',
+        postedAt: '2026-02-01T12:00:00Z',
+      });
+      const fbPost = createMockPost({
+        videoId: 'v2',
+        platform: 'facebook',
+        postedAt: '2026-02-01T12:00:00Z',
+      });
       const allPosts = [tiktokPost, fbPost];
       const trackMapping = {};
 

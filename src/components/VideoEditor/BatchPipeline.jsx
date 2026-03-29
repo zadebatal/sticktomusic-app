@@ -1,7 +1,11 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { renderPreview } from '../../services/videoExportService';
 import { useBeatDetection } from '../../hooks/useBeatDetection';
-import { isValidBankName, generateBatchPostContent, getBankNames } from '../../utils/captionGenerator';
+import {
+  isValidBankName,
+  generateBatchPostContent,
+  getBankNames,
+} from '../../utils/captionGenerator';
 import { VIDEO_STATUS } from '../../utils/status';
 import PreviewPlayer from './PreviewPlayer';
 import useIsMobile from '../../hooks/useIsMobile';
@@ -25,7 +29,7 @@ const STAGES = {
   OPTIONS: 'options',
   PREVIEW: 'preview',
   GENERATING: 'generating',
-  VIDEO_BANK: 'video_bank'  // View/edit videos then save as drafts
+  VIDEO_BANK: 'video_bank', // View/edit videos then save as drafts
 };
 
 // Beat cut patterns - mirrors the singular editor's beat selector
@@ -33,9 +37,27 @@ const BEAT_PATTERNS = [
   { id: 'every', label: 'Every beat', description: 'Cut on every beat (fast)', beats: [1] },
   { id: '2-4', label: '2 and 4', description: 'Cut on beats 2 and 4 (groovy)', beats: [2, 4] },
   { id: '1-3', label: '1 and 3', description: 'Cut on beats 1 and 3', beats: [1, 3] },
-  { id: 'every-2', label: 'Every 2 beats', description: 'Cut every other beat', beats: [1], interval: 2 },
-  { id: 'every-4', label: 'Every 4 beats', description: 'Cut every measure (slower)', beats: [1], interval: 4 },
-  { id: 'every-8', label: 'Every 8 beats', description: 'Cut every 2 measures (slowest)', beats: [1], interval: 8 }
+  {
+    id: 'every-2',
+    label: 'Every 2 beats',
+    description: 'Cut every other beat',
+    beats: [1],
+    interval: 2,
+  },
+  {
+    id: 'every-4',
+    label: 'Every 4 beats',
+    description: 'Cut every measure (slower)',
+    beats: [1],
+    interval: 4,
+  },
+  {
+    id: 'every-8',
+    label: 'Every 8 beats',
+    description: 'Cut every 2 measures (slowest)',
+    beats: [1],
+    interval: 8,
+  },
 ];
 
 /**
@@ -50,7 +72,7 @@ const ClipThumbnail = ({ clip, style }) => {
   // Only use localUrl if it's NOT a blob URL
   const localUrl = clip.localUrl;
   const isBlobUrl = localUrl && localUrl.startsWith('blob:');
-  const videoUrl = isBlobUrl ? clip.url : (localUrl || clip.url);
+  const videoUrl = isBlobUrl ? clip.url : localUrl || clip.url;
 
   // Force first frame render when video loads
   useEffect(() => {
@@ -107,15 +129,17 @@ const ClipThumbnail = ({ clip, style }) => {
 
   // No media fallback
   return (
-    <div style={{
-      ...style,
-      background: `linear-gradient(135deg, ${theme.bg.elevated} 0%, ${theme.bg.surface} 100%)`,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: theme.text.muted,
-      fontSize: '24px'
-    }}>
+    <div
+      style={{
+        ...style,
+        background: `linear-gradient(135deg, ${theme.bg.elevated} 0%, ${theme.bg.surface} 100%)`,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: theme.text.muted,
+        fontSize: '24px',
+      }}
+    >
       🎬
     </div>
   );
@@ -128,10 +152,10 @@ const BatchPipeline = ({
   onClose,
   onVideosCreated,
   onSaveLyrics,
-  onEditVideo,           // Open video in full editor
-  onNavigateToLibrary,   // Navigate to content library
-  initialWords = null,   // Word timings from editor (applies to all batch videos)
-  initialTextStyle = null // Text style from editor (applies to all batch videos)
+  onEditVideo, // Open video in full editor
+  onNavigateToLibrary, // Navigate to content library
+  initialWords = null, // Word timings from editor (applies to all batch videos)
+  initialTextStyle = null, // Text style from editor (applies to all batch videos)
 }) => {
   // Mobile responsive detection
   const { isMobile } = useIsMobile();
@@ -159,7 +183,11 @@ const BatchPipeline = ({
   const { beats, bpm, isAnalyzing, analyzeAudio } = useBeatDetection();
 
   // Generation progress
-  const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0, status: '' });
+  const [generationProgress, setGenerationProgress] = useState({
+    current: 0,
+    total: 0,
+    status: '',
+  });
 
   // Preview state
   const [previewBlob, setPreviewBlob] = useState(null);
@@ -175,7 +203,7 @@ const BatchPipeline = ({
 
   // Generated videos
   const [generatedVideos, setGeneratedVideos] = useState([]);
-  const [playingVideoId, setPlayingVideoId] = useState(null);  // Track which video is playing
+  const [playingVideoId, setPlayingVideoId] = useState(null); // Track which video is playing
 
   // Captions for generated videos
   const [captions, setCaptions] = useState([]);
@@ -233,7 +261,7 @@ const BatchPipeline = ({
       }
 
       if (audioSource) {
-        analyzeAudio(audioSource).catch(err => {
+        analyzeAudio(audioSource).catch((err) => {
           log.warn('Beat analysis failed:', err);
         });
       } else {
@@ -246,7 +274,7 @@ const BatchPipeline = ({
   const handleSelectAll = useCallback(() => {
     log('[BatchPipeline] Select All clicked:', {
       currentSelected: selectedClips.length,
-      available: availableClips.length
+      available: availableClips.length,
     });
     if (selectedClips.length === availableClips.length) {
       setSelectedClips([]);
@@ -257,135 +285,145 @@ const BatchPipeline = ({
 
   // Toggle clip selection
   const toggleClip = useCallback((clip) => {
-    setSelectedClips(prev => {
-      const exists = prev.find(c => c.id === clip.id);
+    setSelectedClips((prev) => {
+      const exists = prev.find((c) => c.id === clip.id);
       if (exists) {
-        return prev.filter(c => c.id !== clip.id);
+        return prev.filter((c) => c.id !== clip.id);
       }
       return [...prev, clip];
     });
   }, []);
 
   // Generate clip sequence based on strategy and beat pattern
-  const generateClipSequence = useCallback((audioDuration, clipPool, strategy) => {
-    const clips = [];
-    let currentTime = 0;
+  const generateClipSequence = useCallback(
+    (audioDuration, clipPool, strategy) => {
+      const clips = [];
+      let currentTime = 0;
 
-    if (strategy === 'beat' && beats.length > 0) {
-      const audioStart = selectedAudio?.startTime || 0;
-      const audioEnd = selectedAudio?.endTime || audioDuration + audioStart;
+      if (strategy === 'beat' && beats.length > 0) {
+        const audioStart = selectedAudio?.startTime || 0;
+        const audioEnd = selectedAudio?.endTime || audioDuration + audioStart;
 
-      // Filter beats to trimmed range and normalize to local time
-      const trimmedBeats = beats
-        .filter(b => b >= audioStart && b <= audioEnd)
-        .map(b => b - audioStart);
+        // Filter beats to trimmed range and normalize to local time
+        const trimmedBeats = beats
+          .filter((b) => b >= audioStart && b <= audioEnd)
+          .map((b) => b - audioStart);
 
-      if (trimmedBeats.length === 0) {
-        // No beats, fall back to even distribution
-        const numClips = Math.min(clipPool.length, 8);
-        const clipDuration = audioDuration / numClips;
-        for (let i = 0; i < numClips; i++) {
-          clips.push({
-            id: `clip_${Date.now()}_${i}`,
-            sourceId: clipPool[i % clipPool.length].id,
-            url: clipPool[i % clipPool.length].url,
-            localUrl: clipPool[i % clipPool.length].localUrl,
-            thumbnail: clipPool[i % clipPool.length].thumbnail,
-            startTime: i * clipDuration,
-            duration: clipDuration,
-            locked: false
-          });
+        if (trimmedBeats.length === 0) {
+          // No beats, fall back to even distribution
+          const numClips = Math.min(clipPool.length, 8);
+          const clipDuration = audioDuration / numClips;
+          for (let i = 0; i < numClips; i++) {
+            clips.push({
+              id: `clip_${Date.now()}_${i}`,
+              sourceId: clipPool[i % clipPool.length].id,
+              url: clipPool[i % clipPool.length].url,
+              localUrl: clipPool[i % clipPool.length].localUrl,
+              thumbnail: clipPool[i % clipPool.length].thumbnail,
+              startTime: i * clipDuration,
+              duration: clipDuration,
+              locked: false,
+            });
+          }
+          return clips;
         }
-        return clips;
-      }
 
-      // Get the selected beat pattern
-      const pattern = BEAT_PATTERNS.find(p => p.id === beatPattern) || BEAT_PATTERNS[0];
+        // Get the selected beat pattern
+        const pattern = BEAT_PATTERNS.find((p) => p.id === beatPattern) || BEAT_PATTERNS[0];
 
-      // Calculate cut points based on pattern
-      const cutPoints = [0]; // Always start at 0
+        // Calculate cut points based on pattern
+        const cutPoints = [0]; // Always start at 0
 
-      if (pattern.interval) {
-        // Every N beats pattern
-        for (let i = pattern.interval; i < trimmedBeats.length; i += pattern.interval) {
-          cutPoints.push(trimmedBeats[i]);
-        }
-      } else {
-        // Specific beat pattern (e.g., 2 and 4)
-        // Assuming 4/4 time signature, group beats into measures
-        const beatsPerMeasure = 4;
-        for (let measureStart = 0; measureStart < trimmedBeats.length; measureStart += beatsPerMeasure) {
-          for (const beatNum of pattern.beats) {
-            const beatIndex = measureStart + beatNum - 1;
-            if (beatIndex < trimmedBeats.length && trimmedBeats[beatIndex] > cutPoints[cutPoints.length - 1]) {
-              cutPoints.push(trimmedBeats[beatIndex]);
+        if (pattern.interval) {
+          // Every N beats pattern
+          for (let i = pattern.interval; i < trimmedBeats.length; i += pattern.interval) {
+            cutPoints.push(trimmedBeats[i]);
+          }
+        } else {
+          // Specific beat pattern (e.g., 2 and 4)
+          // Assuming 4/4 time signature, group beats into measures
+          const beatsPerMeasure = 4;
+          for (
+            let measureStart = 0;
+            measureStart < trimmedBeats.length;
+            measureStart += beatsPerMeasure
+          ) {
+            for (const beatNum of pattern.beats) {
+              const beatIndex = measureStart + beatNum - 1;
+              if (
+                beatIndex < trimmedBeats.length &&
+                trimmedBeats[beatIndex] > cutPoints[cutPoints.length - 1]
+              ) {
+                cutPoints.push(trimmedBeats[beatIndex]);
+              }
             }
           }
         }
+
+        // Add end point
+        cutPoints.push(audioDuration);
+
+        // Create clips from cut points
+        for (let i = 0; i < cutPoints.length - 1; i++) {
+          const clipStartTime = cutPoints[i];
+          const clipEndTime = cutPoints[i + 1];
+          const clipDuration = clipEndTime - clipStartTime;
+
+          if (clipDuration < 0.1) continue; // Skip very short clips
+
+          const sourceClip = clipPool[clips.length % clipPool.length];
+          clips.push({
+            id: `clip_${Date.now()}_${clips.length}`,
+            sourceId: sourceClip.id,
+            url: sourceClip.url,
+            localUrl: sourceClip.localUrl,
+            thumbnail: sourceClip.thumbnail,
+            startTime: clipStartTime,
+            duration: clipDuration,
+            locked: false,
+          });
+        }
+      } else if (strategy === 'random') {
+        const shuffled = [...clipPool].sort(() => Math.random() - 0.5);
+        const numClips = Math.min(shuffled.length, 8);
+        const clipDuration = audioDuration / numClips;
+
+        for (let i = 0; i < numClips; i++) {
+          clips.push({
+            id: `clip_${Date.now()}_${i}`,
+            sourceId: shuffled[i].id,
+            url: shuffled[i].url,
+            localUrl: shuffled[i].localUrl,
+            thumbnail: shuffled[i].thumbnail,
+            startTime: i * clipDuration,
+            duration: clipDuration,
+            locked: false,
+          });
+        }
+      } else {
+        // Sequential
+        const numClips = Math.min(clipPool.length, 8);
+        const clipDuration = audioDuration / numClips;
+
+        for (let i = 0; i < numClips; i++) {
+          const sourceClip = clipPool[i % clipPool.length];
+          clips.push({
+            id: `clip_${Date.now()}_${i}`,
+            sourceId: sourceClip.id,
+            url: sourceClip.url,
+            localUrl: sourceClip.localUrl,
+            thumbnail: sourceClip.thumbnail,
+            startTime: i * clipDuration,
+            duration: clipDuration,
+            locked: false,
+          });
+        }
       }
 
-      // Add end point
-      cutPoints.push(audioDuration);
-
-      // Create clips from cut points
-      for (let i = 0; i < cutPoints.length - 1; i++) {
-        const clipStartTime = cutPoints[i];
-        const clipEndTime = cutPoints[i + 1];
-        const clipDuration = clipEndTime - clipStartTime;
-
-        if (clipDuration < 0.1) continue; // Skip very short clips
-
-        const sourceClip = clipPool[clips.length % clipPool.length];
-        clips.push({
-          id: `clip_${Date.now()}_${clips.length}`,
-          sourceId: sourceClip.id,
-          url: sourceClip.url,
-          localUrl: sourceClip.localUrl,
-          thumbnail: sourceClip.thumbnail,
-          startTime: clipStartTime,
-          duration: clipDuration,
-          locked: false
-        });
-      }
-    } else if (strategy === 'random') {
-      const shuffled = [...clipPool].sort(() => Math.random() - 0.5);
-      const numClips = Math.min(shuffled.length, 8);
-      const clipDuration = audioDuration / numClips;
-
-      for (let i = 0; i < numClips; i++) {
-        clips.push({
-          id: `clip_${Date.now()}_${i}`,
-          sourceId: shuffled[i].id,
-          url: shuffled[i].url,
-          localUrl: shuffled[i].localUrl,
-          thumbnail: shuffled[i].thumbnail,
-          startTime: i * clipDuration,
-          duration: clipDuration,
-          locked: false
-        });
-      }
-    } else {
-      // Sequential
-      const numClips = Math.min(clipPool.length, 8);
-      const clipDuration = audioDuration / numClips;
-
-      for (let i = 0; i < numClips; i++) {
-        const sourceClip = clipPool[i % clipPool.length];
-        clips.push({
-          id: `clip_${Date.now()}_${i}`,
-          sourceId: sourceClip.id,
-          url: sourceClip.url,
-          localUrl: sourceClip.localUrl,
-          thumbnail: sourceClip.thumbnail,
-          startTime: i * clipDuration,
-          duration: clipDuration,
-          locked: false
-        });
-      }
-    }
-
-    return clips;
-  }, [beats, beatPattern, selectedAudio]);
+      return clips;
+    },
+    [beats, beatPattern, selectedAudio],
+  );
 
   // Generate preview
   const handleGeneratePreview = useCallback(async () => {
@@ -409,22 +447,23 @@ const BatchPipeline = ({
 
       // Determine words: prioritize initialWords from editor, then selected lyrics, then empty
       const wordsToUse = useTextOverlay
-        ? (usingInitialSettings && initialWords?.length > 0
-            ? initialWords
-            : (selectedLyrics?.words || []))
+        ? usingInitialSettings && initialWords?.length > 0
+          ? initialWords
+          : selectedLyrics?.words || []
         : [];
 
       // Determine textStyle: prioritize initialTextStyle from editor, then category default
-      const textStyleToUse = (usingInitialSettings && initialTextStyle)
-        ? initialTextStyle
-        : (category?.defaultPreset?.textStyle || {
-            fontSize: 48,
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: '600',
-            color: '#ffffff',
-            outline: true,
-            outlineColor: '#000000'
-          });
+      const textStyleToUse =
+        usingInitialSettings && initialTextStyle
+          ? initialTextStyle
+          : category?.defaultPreset?.textStyle || {
+              fontSize: 48,
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: '600',
+              color: '#ffffff',
+              outline: true,
+              outlineColor: '#000000',
+            };
 
       const videoData = {
         id: `preview_${Date.now()}`,
@@ -434,7 +473,7 @@ const BatchPipeline = ({
         words: wordsToUse,
         textStyle: textStyleToUse,
         cropMode: '9:16',
-        duration: Math.min(audioDuration, 10)
+        duration: Math.min(audioDuration, 10),
       };
 
       log('[BatchPipeline] Rendering preview...');
@@ -447,14 +486,25 @@ const BatchPipeline = ({
       setPreviewBlob(blob);
       setPreviewUrl(url);
       setStage(STAGES.PREVIEW);
-
     } catch (err) {
       log.error('[BatchPipeline] Preview generation failed:', err);
       setError(`Preview failed: ${err.message}`);
     } finally {
       setIsGeneratingPreview(false);
     }
-  }, [selectedAudio, selectedClips, clipStrategy, generateClipSequence, useTextOverlay, selectedLyrics, category, previewUrl, usingInitialSettings, initialWords, initialTextStyle]);
+  }, [
+    selectedAudio,
+    selectedClips,
+    clipStrategy,
+    generateClipSequence,
+    useTextOverlay,
+    selectedLyrics,
+    category,
+    previewUrl,
+    usingInitialSettings,
+    initialWords,
+    initialTextStyle,
+  ]);
 
   // Generate all video RECIPES (instant - no rendering!)
   const handleGenerate = useCallback(async () => {
@@ -511,22 +561,23 @@ const BatchPipeline = ({
 
       // Determine words: prioritize initialWords from editor, then selected lyrics
       const wordsForVideo = useTextOverlay
-        ? (usingInitialSettings && initialWords?.length > 0
-            ? initialWords
-            : (selectedLyrics?.words || []))
+        ? usingInitialSettings && initialWords?.length > 0
+          ? initialWords
+          : selectedLyrics?.words || []
         : [];
 
       // Determine textStyle: prioritize initialTextStyle from editor, then category default
-      const textStyleForVideo = (usingInitialSettings && initialTextStyle)
-        ? initialTextStyle
-        : (category?.defaultPreset?.textStyle || {
-            fontSize: 48,
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: '600',
-            color: '#ffffff',
-            outline: true,
-            outlineColor: '#000000'
-          });
+      const textStyleForVideo =
+        usingInitialSettings && initialTextStyle
+          ? initialTextStyle
+          : category?.defaultPreset?.textStyle || {
+              fontSize: 48,
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: '600',
+              color: '#ffffff',
+              outline: true,
+              outlineColor: '#000000',
+            };
 
       // Create video RECIPE (not rendered yet!)
       const videoRecipe = {
@@ -542,10 +593,10 @@ const BatchPipeline = ({
         hashtags,
         // Mark as draft - not rendered yet
         status: VIDEO_STATUS.DRAFT,
-        isRendered: false,  // Flag to indicate this needs rendering
-        cloudUrl: null,     // Will be set after rendering
+        isRendered: false, // Flag to indicate this needs rendering
+        cloudUrl: null, // Will be set after rendering
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       videos.push(videoRecipe);
@@ -553,9 +604,24 @@ const BatchPipeline = ({
 
     log(`[BatchPipeline] Created ${videos.length} video recipes instantly!`);
     setGeneratedVideos(videos);
-    setCaptions(videos.map(v => v.caption));
-    setStage(STAGES.VIDEO_BANK);  // Go to video bank to preview
-  }, [selectedAudio, selectedClips, quantity, clipStrategy, generateClipSequence, useTextOverlay, selectedLyrics, category, captionTemplate, defaultHashtags, hasCaptionBank, usingInitialSettings, initialWords, initialTextStyle]);
+    setCaptions(videos.map((v) => v.caption));
+    setStage(STAGES.VIDEO_BANK); // Go to video bank to preview
+  }, [
+    selectedAudio,
+    selectedClips,
+    quantity,
+    clipStrategy,
+    generateClipSequence,
+    useTextOverlay,
+    selectedLyrics,
+    category,
+    captionTemplate,
+    defaultHashtags,
+    hasCaptionBank,
+    usingInitialSettings,
+    initialWords,
+    initialTextStyle,
+  ]);
 
   // Save videos as drafts to library
   const handleSaveAsDrafts = useCallback(() => {
@@ -565,7 +631,7 @@ const BatchPipeline = ({
     const videosWithCaptions = generatedVideos.map((video, idx) => ({
       ...video,
       caption: captions[idx] || video.caption,
-      status: VIDEO_STATUS.DRAFT
+      status: VIDEO_STATUS.DRAFT,
     }));
 
     // Save to category's createdVideos
@@ -582,22 +648,25 @@ const BatchPipeline = ({
   }, [generatedVideos, captions, onVideosCreated, onNavigateToLibrary, onClose]);
 
   // Handle click on video to edit
-  const handleEditVideoClick = useCallback((video, index) => {
-    // Update video with current caption before editing
-    const videoToEdit = {
-      ...video,
-      caption: captions[index] || video.caption
-    };
+  const handleEditVideoClick = useCallback(
+    (video, index) => {
+      // Update video with current caption before editing
+      const videoToEdit = {
+        ...video,
+        caption: captions[index] || video.caption,
+      };
 
-    if (onEditVideo) {
-      onEditVideo(videoToEdit);
-      onClose();
-    }
-  }, [captions, onEditVideo, onClose]);
+      if (onEditVideo) {
+        onEditVideo(videoToEdit);
+        onClose();
+      }
+    },
+    [captions, onEditVideo, onClose],
+  );
 
   // Update caption
   const updateCaption = useCallback((index, value) => {
-    setCaptions(prev => {
+    setCaptions((prev) => {
       const updated = [...prev];
       updated[index] = value;
       return updated;
@@ -621,7 +690,7 @@ const BatchPipeline = ({
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 2000,
-      padding: isMobile ? 0 : '20px'
+      padding: isMobile ? 0 : '20px',
     },
     modal: {
       background: theme.bg.surface,
@@ -632,20 +701,20 @@ const BatchPipeline = ({
       height: isMobile ? '100vh' : 'auto',
       overflow: 'hidden',
       display: 'flex',
-      flexDirection: 'column'
+      flexDirection: 'column',
     },
     header: {
       padding: isMobile ? '16px' : '20px 24px',
       borderBottom: `1px solid ${theme.bg.elevated}`,
       display: 'flex',
       justifyContent: 'space-between',
-      alignItems: 'center'
+      alignItems: 'center',
     },
     title: {
       margin: 0,
       fontSize: isMobile ? '18px' : '20px',
       fontWeight: '600',
-      color: theme.text.primary
+      color: theme.text.primary,
     },
     closeBtn: {
       background: 'none',
@@ -653,34 +722,36 @@ const BatchPipeline = ({
       color: theme.text.muted,
       fontSize: isMobile ? '28px' : '24px',
       cursor: 'pointer',
-      padding: isMobile ? '8px' : 0
+      padding: isMobile ? '8px' : 0,
     },
     content: {
       padding: isMobile ? '16px' : '24px',
       overflowY: 'auto',
       flex: 1,
-      WebkitOverflowScrolling: 'touch'
+      WebkitOverflowScrolling: 'touch',
     },
     section: {
-      marginBottom: '24px'
+      marginBottom: '24px',
     },
     sectionHeader: {
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: '12px'
+      marginBottom: '12px',
     },
     sectionTitle: {
       fontSize: '14px',
       fontWeight: '600',
       color: theme.text.secondary,
       textTransform: 'uppercase',
-      letterSpacing: '0.05em'
+      letterSpacing: '0.05em',
     },
     grid: {
       display: 'grid',
-      gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(70px, 1fr))' : 'repeat(auto-fill, minmax(80px, 1fr))',
-      gap: isMobile ? '6px' : '8px'
+      gridTemplateColumns: isMobile
+        ? 'repeat(auto-fill, minmax(70px, 1fr))'
+        : 'repeat(auto-fill, minmax(80px, 1fr))',
+      gap: isMobile ? '6px' : '8px',
     },
     clipCard: (selected) => ({
       position: 'relative',
@@ -690,13 +761,13 @@ const BatchPipeline = ({
       cursor: 'pointer',
       border: selected ? `3px solid ${theme.accent.primary}` : `2px solid ${theme.border.subtle}`,
       opacity: selected ? 1 : 0.7,
-      transition: 'all 0.15s'
+      transition: 'all 0.15s',
     }),
     clipThumb: {
       width: '100%',
       height: '100%',
       objectFit: 'cover',
-      display: 'block'
+      display: 'block',
     },
     clipCheck: {
       position: 'absolute',
@@ -710,7 +781,7 @@ const BatchPipeline = ({
       alignItems: 'center',
       justifyContent: 'center',
       color: 'white',
-      fontSize: '12px'
+      fontSize: '12px',
     },
     audioCard: (selected) => ({
       padding: '12px',
@@ -718,7 +789,7 @@ const BatchPipeline = ({
       borderRadius: '8px',
       cursor: 'pointer',
       marginBottom: '8px',
-      transition: 'all 0.15s'
+      transition: 'all 0.15s',
     }),
     input: {
       width: '100%',
@@ -728,7 +799,7 @@ const BatchPipeline = ({
       borderRadius: '8px',
       color: theme.text.primary,
       fontSize: '14px',
-      boxSizing: 'border-box'
+      boxSizing: 'border-box',
     },
     select: {
       padding: '10px 12px',
@@ -738,23 +809,23 @@ const BatchPipeline = ({
       color: theme.text.primary,
       fontSize: '14px',
       cursor: 'pointer',
-      minWidth: '150px'
+      minWidth: '150px',
     },
     row: {
       display: 'flex',
       gap: '16px',
       marginBottom: '16px',
-      flexWrap: 'wrap'
+      flexWrap: 'wrap',
     },
     col: {
       flex: 1,
-      minWidth: '150px'
+      minWidth: '150px',
     },
     label: {
       display: 'block',
       fontSize: '13px',
       color: theme.text.secondary,
-      marginBottom: '6px'
+      marginBottom: '6px',
     },
     footer: {
       padding: isMobile ? '16px' : '16px 24px',
@@ -763,18 +834,18 @@ const BatchPipeline = ({
       flexDirection: isMobile ? 'column' : 'row',
       gap: isMobile ? '12px' : 0,
       justifyContent: 'space-between',
-      alignItems: isMobile ? 'stretch' : 'center'
+      alignItems: isMobile ? 'stretch' : 'center',
     },
     error: {
       background: '#7f1d1d',
       color: '#fca5a5',
       padding: '12px 16px',
       borderRadius: '8px',
-      marginBottom: '16px'
+      marginBottom: '16px',
     },
     progress: {
       textAlign: 'center',
-      padding: '40px'
+      padding: '40px',
     },
     progressBar: {
       width: '100%',
@@ -782,13 +853,13 @@ const BatchPipeline = ({
       background: theme.bg.elevated,
       borderRadius: '4px',
       overflow: 'hidden',
-      marginTop: '16px'
+      marginTop: '16px',
     },
     progressFill: (percent) => ({
       width: `${percent}%`,
       height: '100%',
       background: theme.accent.primary,
-      transition: 'width 0.3s'
+      transition: 'width 0.3s',
     }),
     accountBadge: {
       display: 'inline-flex',
@@ -797,7 +868,7 @@ const BatchPipeline = ({
       padding: '8px 16px',
       background: theme.bg.elevated,
       borderRadius: '8px',
-      marginBottom: '16px'
+      marginBottom: '16px',
     },
     checkbox: {
       display: 'flex',
@@ -806,13 +877,13 @@ const BatchPipeline = ({
       cursor: 'pointer',
       padding: '8px 12px',
       background: theme.bg.elevated,
-      borderRadius: '6px'
+      borderRadius: '6px',
     },
     beatPatternGrid: {
       display: 'grid',
       gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
       gap: '8px',
-      marginTop: '8px'
+      marginTop: '8px',
     },
     beatPatternBtn: (selected) => ({
       padding: isMobile ? '12px' : '10px 12px',
@@ -820,23 +891,23 @@ const BatchPipeline = ({
       border: selected ? `2px solid ${theme.accent.hover}` : `1px solid ${theme.border.subtle}`,
       borderRadius: '8px',
       cursor: 'pointer',
-      textAlign: 'left'
+      textAlign: 'left',
     }),
     beatPatternLabel: {
       color: theme.text.primary,
       fontSize: '13px',
       fontWeight: '500',
-      display: 'block'
+      display: 'block',
     },
     beatPatternDesc: {
       color: theme.text.muted,
       fontSize: '11px',
-      marginTop: '2px'
+      marginTop: '2px',
     },
     videoList: {
       display: 'flex',
       flexDirection: 'column',
-      gap: isMobile ? '8px' : '12px'
+      gap: isMobile ? '8px' : '12px',
     },
     videoRow: {
       display: 'flex',
@@ -845,31 +916,31 @@ const BatchPipeline = ({
       padding: isMobile ? '10px' : '12px',
       background: theme.bg.elevated,
       borderRadius: '8px',
-      alignItems: isMobile ? 'stretch' : 'center'
+      alignItems: isMobile ? 'stretch' : 'center',
     },
     videoThumb: {
       width: '60px',
       height: '80px',
       borderRadius: '4px',
       background: theme.border.subtle,
-      overflow: 'hidden'
+      overflow: 'hidden',
     },
     videoInfo: {
-      flex: 1
+      flex: 1,
     },
     previewVideo: {
       width: '100%',
       maxHeight: '400px',
       borderRadius: '8px',
-      background: '#000'
+      background: '#000',
     },
     success: {
       textAlign: 'center',
-      padding: '60px 40px'
+      padding: '60px 40px',
     },
     successIcon: {
       fontSize: '64px',
-      marginBottom: '16px'
+      marginBottom: '16px',
     },
     bpmBadge: {
       display: 'inline-flex',
@@ -880,8 +951,8 @@ const BatchPipeline = ({
       borderRadius: '4px',
       fontSize: '11px',
       color: 'white',
-      marginLeft: '8px'
-    }
+      marginLeft: '8px',
+    },
   };
 
   // OPTIONS STAGE
@@ -893,7 +964,9 @@ const BatchPipeline = ({
         <div style={styles.modal}>
           <div style={styles.header}>
             <h2 style={styles.title}>Batch Create for {category?.name}</h2>
-            <button style={styles.closeBtn} onClick={onClose}>×</button>
+            <button style={styles.closeBtn} onClick={onClose}>
+              ×
+            </button>
           </div>
 
           <div style={styles.content}>
@@ -919,7 +992,7 @@ const BatchPipeline = ({
               {availableAudio.length === 0 ? (
                 <p style={{ color: theme.text.muted }}>No audio uploaded. Upload audio first.</p>
               ) : (
-                availableAudio.map(audio => (
+                availableAudio.map((audio) => (
                   <div
                     key={audio.id}
                     style={styles.audioCard(selectedAudio?.id === audio.id)}
@@ -929,16 +1002,33 @@ const BatchPipeline = ({
                       setSelectedAudio(selectedAudio?.id === audio.id ? null : audio); // Toggle: click again to deselect
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
                       <div>
                         <div style={{ color: 'white', fontWeight: '500' }}>{audio.name}</div>
-                        <div style={{ color: selectedAudio?.id === audio.id ? theme.text.secondary : theme.text.muted, fontSize: '12px' }}>
+                        <div
+                          style={{
+                            color:
+                              selectedAudio?.id === audio.id
+                                ? theme.text.secondary
+                                : theme.text.muted,
+                            fontSize: '12px',
+                          }}
+                        >
                           {audio.duration ? `${Math.round(audio.duration)}s` : 'Unknown duration'}
-                          {audio.savedLyrics?.length > 0 && ` • ${audio.savedLyrics.length} lyrics saved`}
+                          {audio.savedLyrics?.length > 0 &&
+                            ` • ${audio.savedLyrics.length} lyrics saved`}
                         </div>
                       </div>
                       {isAnalyzing && selectedAudio?.id === audio.id && (
-                        <span style={{ color: theme.text.secondary, fontSize: '12px' }}>Analyzing beats...</span>
+                        <span style={{ color: theme.text.secondary, fontSize: '12px' }}>
+                          Analyzing beats...
+                        </span>
                       )}
                       {!isAnalyzing && selectedAudio?.id === audio.id && bpm > 0 && (
                         <span style={styles.bpmBadge}>🎵 {Math.round(bpm)} BPM</span>
@@ -965,8 +1055,8 @@ const BatchPipeline = ({
                 <p style={{ color: theme.text.muted }}>No clips uploaded. Upload videos first.</p>
               ) : (
                 <div style={styles.grid}>
-                  {availableClips.map(clip => {
-                    const isSelected = selectedClips.some(c => c.id === clip.id);
+                  {availableClips.map((clip) => {
+                    const isSelected = selectedClips.some((c) => c.id === clip.id);
                     return (
                       <div
                         key={clip.id}
@@ -974,9 +1064,7 @@ const BatchPipeline = ({
                         onClick={() => toggleClip(clip)}
                       >
                         <ClipThumbnail clip={clip} style={styles.clipThumb} />
-                        {isSelected && (
-                          <div style={styles.clipCheck}>✓</div>
-                        )}
+                        {isSelected && <div style={styles.clipCheck}>✓</div>}
                       </div>
                     );
                   })}
@@ -993,10 +1081,12 @@ const BatchPipeline = ({
                   <select
                     style={styles.select}
                     value={quantity}
-                    onChange={e => setQuantity(Number(e.target.value))}
+                    onChange={(e) => setQuantity(Number(e.target.value))}
                   >
-                    {[1, 2, 3, 5, 7, 10].map(n => (
-                      <option key={n} value={n}>{n} video{n > 1 ? 's' : ''}</option>
+                    {[1, 2, 3, 5, 7, 10].map((n) => (
+                      <option key={n} value={n}>
+                        {n} video{n > 1 ? 's' : ''}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -1005,9 +1095,11 @@ const BatchPipeline = ({
                   <select
                     style={styles.select}
                     value={clipStrategy}
-                    onChange={e => setClipStrategy(e.target.value)}
+                    onChange={(e) => setClipStrategy(e.target.value)}
                   >
-                    <option value="beat">Beat-synced {bpm > 0 ? `(${Math.round(bpm)} BPM)` : ''}</option>
+                    <option value="beat">
+                      Beat-synced {bpm > 0 ? `(${Math.round(bpm)} BPM)` : ''}
+                    </option>
                     <option value="random">Random shuffle</option>
                     <option value="sequential">Sequential rotation</option>
                   </select>
@@ -1019,7 +1111,7 @@ const BatchPipeline = ({
                 <div style={{ marginBottom: '16px' }}>
                   <label style={styles.label}>Beat Pattern (when to cut)</label>
                   <div style={styles.beatPatternGrid}>
-                    {BEAT_PATTERNS.map(pattern => (
+                    {BEAT_PATTERNS.map((pattern) => (
                       <button
                         key={pattern.id}
                         style={styles.beatPatternBtn(beatPattern === pattern.id)}
@@ -1039,7 +1131,7 @@ const BatchPipeline = ({
                   <input
                     type="checkbox"
                     checked={useTextOverlay}
-                    onChange={e => {
+                    onChange={(e) => {
                       setUseTextOverlay(e.target.checked);
                       // If disabling, also clear initial settings usage
                       if (!e.target.checked) {
@@ -1053,25 +1145,53 @@ const BatchPipeline = ({
 
               {/* Show indicator when using initial settings from editor */}
               {useTextOverlay && usingInitialSettings && initialWords?.length > 0 && (
-                <div style={{
-                  ...styles.row,
-                  backgroundColor: 'rgba(139, 92, 246, 0.15)',
-                  border: '1px solid rgba(139, 92, 246, 0.3)',
-                  borderRadius: '8px',
-                  padding: '12px',
-                  marginTop: '8px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <div
+                  style={{
+                    ...styles.row,
+                    backgroundColor: 'rgba(139, 92, 246, 0.15)',
+                    border: '1px solid rgba(139, 92, 246, 0.3)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    marginTop: '8px',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      width: '100%',
+                    }}
+                  >
                     <div>
-                      <div style={{ color: theme.accent.hover, fontSize: '13px', fontWeight: '500', marginBottom: '4px' }}>
+                      <div
+                        style={{
+                          color: theme.accent.hover,
+                          fontSize: '13px',
+                          fontWeight: '500',
+                          marginBottom: '4px',
+                        }}
+                      >
                         ✨ Using lyrics from editor
                       </div>
                       <div style={{ color: theme.text.secondary, fontSize: '12px' }}>
-                        {initialWords.length} words with timing • {initialTextStyle?.outline ? 'Outline' : 'No outline'}
-                        {initialTextStyle?.textCase && initialTextStyle.textCase !== 'default' ? ` • ${initialTextStyle.textCase.toUpperCase()}` : ''}
+                        {initialWords.length} words with timing •{' '}
+                        {initialTextStyle?.outline ? 'Outline' : 'No outline'}
+                        {initialTextStyle?.textCase && initialTextStyle.textCase !== 'default'
+                          ? ` • ${initialTextStyle.textCase.toUpperCase()}`
+                          : ''}
                       </div>
                     </div>
-                    <Button variant="neutral-secondary" size="small" onClick={() => { setUsingInitialSettings(false); setSelectedLyrics(null); }}>Use different lyrics</Button>
+                    <Button
+                      variant="neutral-secondary"
+                      size="small"
+                      onClick={() => {
+                        setUsingInitialSettings(false);
+                        setSelectedLyrics(null);
+                      }}
+                    >
+                      Use different lyrics
+                    </Button>
                   </div>
                 </div>
               )}
@@ -1084,14 +1204,16 @@ const BatchPipeline = ({
                     <select
                       style={styles.select}
                       value={selectedLyrics?.id || ''}
-                      onChange={e => {
-                        const lyrics = savedLyricsForAudio.find(l => l.id === e.target.value);
+                      onChange={(e) => {
+                        const lyrics = savedLyricsForAudio.find((l) => l.id === e.target.value);
                         setSelectedLyrics(lyrics || null);
                       }}
                     >
                       <option value="">No lyrics</option>
-                      {savedLyricsForAudio.map(lyrics => (
-                        <option key={lyrics.id} value={lyrics.id}>{lyrics.name}</option>
+                      {savedLyricsForAudio.map((lyrics) => (
+                        <option key={lyrics.id} value={lyrics.id}>
+                          {lyrics.name}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -1101,12 +1223,23 @@ const BatchPipeline = ({
           </div>
 
           <div style={styles.footer}>
-            <Button variant="neutral-secondary" onClick={onClose}>Cancel</Button>
+            <Button variant="neutral-secondary" onClick={onClose}>
+              Cancel
+            </Button>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <Button variant="neutral-secondary" onClick={handleGeneratePreview} disabled={!selectedAudio || selectedClips.length < 2 || isGeneratingPreview} loading={isGeneratingPreview}>
+              <Button
+                variant="neutral-secondary"
+                onClick={handleGeneratePreview}
+                disabled={!selectedAudio || selectedClips.length < 2 || isGeneratingPreview}
+                loading={isGeneratingPreview}
+              >
                 {isGeneratingPreview ? 'Generating...' : 'Preview First'}
               </Button>
-              <Button variant="brand-primary" onClick={handleGenerate} disabled={!selectedAudio || selectedClips.length < 2}>
+              <Button
+                variant="brand-primary"
+                onClick={handleGenerate}
+                disabled={!selectedAudio || selectedClips.length < 2}
+              >
                 Generate {quantity} Video{quantity > 1 ? 's' : ''}
               </Button>
             </div>
@@ -1123,25 +1256,26 @@ const BatchPipeline = ({
         <div style={styles.modal}>
           <div style={styles.header}>
             <h2 style={styles.title}>Preview - First Video</h2>
-            <button style={styles.closeBtn} onClick={onClose}>×</button>
+            <button style={styles.closeBtn} onClick={onClose}>
+              ×
+            </button>
           </div>
           <div style={styles.content}>
             {previewUrl && (
-              <video
-                src={previewUrl}
-                controls
-                autoPlay
-                loop
-                style={styles.previewVideo}
-              />
+              <video src={previewUrl} controls autoPlay loop style={styles.previewVideo} />
             )}
             <p style={{ color: theme.text.secondary, textAlign: 'center', marginTop: '16px' }}>
-              This is a preview of how your videos will look. The full batch will render at higher quality.
+              This is a preview of how your videos will look. The full batch will render at higher
+              quality.
             </p>
           </div>
           <div style={styles.footer}>
-            <Button variant="neutral-secondary" onClick={() => setStage(STAGES.OPTIONS)}>Back to Options</Button>
-            <Button variant="brand-primary" onClick={handleGenerate}>Looks Good - Generate {quantity} Videos</Button>
+            <Button variant="neutral-secondary" onClick={() => setStage(STAGES.OPTIONS)}>
+              Back to Options
+            </Button>
+            <Button variant="brand-primary" onClick={handleGenerate}>
+              Looks Good - Generate {quantity} Videos
+            </Button>
           </div>
         </div>
       </div>
@@ -1150,9 +1284,10 @@ const BatchPipeline = ({
 
   // GENERATING STAGE
   if (stage === STAGES.GENERATING) {
-    const percent = generationProgress.total > 0
-      ? Math.round((generationProgress.current / generationProgress.total) * 100)
-      : 0;
+    const percent =
+      generationProgress.total > 0
+        ? Math.round((generationProgress.current / generationProgress.total) * 100)
+        : 0;
 
     return (
       <div style={styles.overlay}>
@@ -1184,7 +1319,9 @@ const BatchPipeline = ({
         <div style={{ ...styles.modal, maxWidth: '1100px' }}>
           <div style={styles.header}>
             <h2 style={styles.title}>Video Bank - {generatedVideos.length} Videos Created</h2>
-            <button style={styles.closeBtn} onClick={onClose}>×</button>
+            <button style={styles.closeBtn} onClick={onClose}>
+              ×
+            </button>
           </div>
 
           <div style={styles.content}>
@@ -1192,61 +1329,69 @@ const BatchPipeline = ({
 
             {/* Caption Bank Warning */}
             {!hasCaptionBank && (
-              <div style={{
-                background: '#78350f',
-                border: '1px solid #fbbf24',
-                borderRadius: '8px',
-                padding: '12px 16px',
-                marginBottom: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px'
-              }}>
+              <div
+                style={{
+                  background: '#78350f',
+                  border: '1px solid #fbbf24',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                }}
+              >
                 <span style={{ fontSize: '20px' }}>⚠️</span>
                 <div>
                   <div style={{ color: '#fef3c7', fontWeight: '500', marginBottom: '2px' }}>
                     No Caption Bank for "{category?.name}"
                   </div>
                   <div style={{ color: '#fde68a', fontSize: '13px' }}>
-                    Create a bank named "{category?.name}" to auto-generate captions.
-                    Available banks: {getBankNames().join(', ')}
+                    Create a bank named "{category?.name}" to auto-generate captions. Available
+                    banks: {getBankNames().join(', ')}
                   </div>
                 </div>
               </div>
             )}
 
             {/* Instant generation notice */}
-            <div style={{
-              background: '#065f46',
-              border: '1px solid #10b981',
-              borderRadius: '8px',
-              padding: '12px 16px',
-              marginBottom: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
-            }}>
+            <div
+              style={{
+                background: '#065f46',
+                border: '1px solid #10b981',
+                borderRadius: '8px',
+                padding: '12px 16px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+              }}
+            >
               <span style={{ fontSize: '20px' }}>⚡</span>
               <div>
                 <div style={{ color: '#d1fae5', fontWeight: '500', marginBottom: '2px' }}>
                   Instant Preview Mode
                 </div>
                 <div style={{ color: '#a7f3d0', fontSize: '13px' }}>
-                  Videos are previews only - they'll be rendered when you export/finalize from the library.
+                  Videos are previews only - they'll be rendered when you export/finalize from the
+                  library.
                 </div>
               </div>
             </div>
 
             <p style={{ color: theme.text.secondary, marginBottom: '20px' }}>
-              Preview your video recipes below. Click "Edit" to open in full editor, or save as drafts to render later.
+              Preview your video recipes below. Click "Edit" to open in full editor, or save as
+              drafts to render later.
             </p>
 
             {/* Video Grid */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-              gap: '16px'
-            }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                gap: '16px',
+              }}
+            >
               {generatedVideos.map((video, idx) => (
                 <div
                   key={video.id}
@@ -1254,7 +1399,10 @@ const BatchPipeline = ({
                     background: theme.bg.elevated,
                     borderRadius: '12px',
                     overflow: 'hidden',
-                    border: playingVideoId === video.id ? `2px solid ${theme.accent.primary}` : '2px solid transparent'
+                    border:
+                      playingVideoId === video.id
+                        ? `2px solid ${theme.accent.primary}`
+                        : '2px solid transparent',
                   }}
                 >
                   {/* Video Preview using PreviewPlayer */}
@@ -1266,34 +1414,38 @@ const BatchPipeline = ({
                       showControls={true}
                     />
                     {/* Video number badge */}
-                    <div style={{
-                      position: 'absolute',
-                      top: '8px',
-                      left: '8px',
-                      background: theme.accent.primary,
-                      color: 'white',
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      fontSize: '12px',
-                      fontWeight: '600',
-                      zIndex: 10
-                    }}>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '8px',
+                        left: '8px',
+                        background: theme.accent.primary,
+                        color: 'white',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        zIndex: 10,
+                      }}
+                    >
                       #{idx + 1}
                     </div>
                     {/* "Not Rendered" badge */}
                     {!video.isRendered && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '8px',
-                        right: '8px',
-                        background: theme.overlay.heavy,
-                        color: '#fbbf24',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        fontSize: '10px',
-                        fontWeight: '500',
-                        zIndex: 10
-                      }}>
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '8px',
+                          right: '8px',
+                          background: theme.overlay.heavy,
+                          color: '#fbbf24',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '10px',
+                          fontWeight: '500',
+                          zIndex: 10,
+                        }}
+                      >
                         ⚡ Preview
                       </div>
                     )}
@@ -1301,7 +1453,9 @@ const BatchPipeline = ({
 
                   {/* Video Info */}
                   <div style={{ padding: '12px' }}>
-                    <div style={{ color: theme.text.primary, fontWeight: '500', marginBottom: '4px' }}>
+                    <div
+                      style={{ color: theme.text.primary, fontWeight: '500', marginBottom: '4px' }}
+                    >
                       {video.title}
                     </div>
                     <div style={{ color: theme.text.muted, fontSize: '12px', marginBottom: '8px' }}>
@@ -1314,15 +1468,32 @@ const BatchPipeline = ({
                       placeholder="Add caption..."
                       style={{ ...styles.input, padding: '8px 10px', fontSize: '12px' }}
                       value={captions[idx] || ''}
-                      onChange={e => updateCaption(idx, e.target.value)}
+                      onChange={(e) => updateCaption(idx, e.target.value)}
                     />
 
                     {/* Actions */}
                     <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
                       {onEditVideo && (
-                        <Button variant="brand-primary" size="small" onClick={() => handleEditVideoClick(video, idx)} style={{ flex: 1 }}>Edit</Button>
+                        <Button
+                          variant="brand-primary"
+                          size="small"
+                          onClick={() => handleEditVideoClick(video, idx)}
+                          style={{ flex: 1 }}
+                        >
+                          Edit
+                        </Button>
                       )}
-                      <Button variant="neutral-secondary" size="small" onClick={() => { setGeneratedVideos(prev => prev.filter(v => v.id !== video.id)); setCaptions(prev => prev.filter((_, i) => i !== idx)); }} style={{ flex: 1 }}>Remove</Button>
+                      <Button
+                        variant="neutral-secondary"
+                        size="small"
+                        onClick={() => {
+                          setGeneratedVideos((prev) => prev.filter((v) => v.id !== video.id));
+                          setCaptions((prev) => prev.filter((_, i) => i !== idx));
+                        }}
+                        style={{ flex: 1 }}
+                      >
+                        Remove
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -1337,8 +1508,14 @@ const BatchPipeline = ({
           </div>
 
           <div style={styles.footer}>
-            <Button variant="neutral-secondary" onClick={() => setStage(STAGES.OPTIONS)}>Generate More</Button>
-            <Button variant="brand-primary" onClick={handleSaveAsDrafts} disabled={generatedVideos.length === 0}>
+            <Button variant="neutral-secondary" onClick={() => setStage(STAGES.OPTIONS)}>
+              Generate More
+            </Button>
+            <Button
+              variant="brand-primary"
+              onClick={handleSaveAsDrafts}
+              disabled={generatedVideos.length === 0}
+            >
               Save as Drafts ({generatedVideos.length})
             </Button>
           </div>

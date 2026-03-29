@@ -38,10 +38,26 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
 
   const getExtensionFilter = () => {
     switch (mediaType) {
-      case 'video': return ['.mp4', '.mov', '.avi', '.webm', '.mkv'];
-      case 'audio': return ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'];
-      case 'image': return ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.heic', '.heif', '.tif', '.tiff'];
-      default: return null; // all files
+      case 'video':
+        return ['.mp4', '.mov', '.avi', '.webm', '.mkv'];
+      case 'audio':
+        return ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'];
+      case 'image':
+        return [
+          '.jpg',
+          '.jpeg',
+          '.png',
+          '.gif',
+          '.webp',
+          '.bmp',
+          '.svg',
+          '.heic',
+          '.heif',
+          '.tif',
+          '.tiff',
+        ];
+      default:
+        return null; // all files
     }
   };
 
@@ -49,7 +65,7 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
     const exts = getExtensionFilter();
     if (!exts) return true;
     const lower = fileName.toLowerCase();
-    return exts.some(ext => lower.endsWith(ext));
+    return exts.some((ext) => lower.endsWith(ext));
   };
 
   // ── Google Drive Import ──
@@ -65,14 +81,16 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
         await googleDriveService.authenticate();
       }
     } catch (err) {
-      toast.error('Google Drive authentication failed: ' + (err?.message || err?.error || String(err)));
+      toast.error(
+        'Google Drive authentication failed: ' + (err?.message || err?.error || String(err)),
+      );
       return;
     }
     setImporting(true);
     setProgress({ current: 0, total: 0, source: 'Drive' });
     try {
       const files = await googleDriveService.listFiles();
-      const filtered = files.filter(f => matchesFilter(f.name));
+      const filtered = files.filter((f) => matchesFilter(f.name));
       if (filtered.length === 0) {
         toast.info('No matching files found in Google Drive');
         setImporting(false);
@@ -91,7 +109,7 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
             url: localUrl,
             localUrl,
             type: mediaType === 'all' ? detectType(filtered[i].name) : mediaType,
-            source: 'google_drive'
+            source: 'google_drive',
           });
         } catch (err) {
           log.warn(`Failed to download ${filtered[i].name}:`, err.message);
@@ -99,7 +117,9 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
       }
       if (imported.length > 0) {
         onImportMedia?.(imported);
-        toast.success(`Imported ${imported.length} file${imported.length > 1 ? 's' : ''} from Drive`);
+        toast.success(
+          `Imported ${imported.length} file${imported.length > 1 ? 's' : ''} from Drive`,
+        );
       }
     } catch (err) {
       log.error('Drive import error:', err);
@@ -128,8 +148,8 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
     setProgress({ current: 0, total: 0, source: 'Dropbox' });
     try {
       const result = await dropboxService.listFiles('');
-      const files = (result.entries || result || []).filter(f =>
-        f['.tag'] === 'file' && matchesFilter(f.name)
+      const files = (result.entries || result || []).filter(
+        (f) => f['.tag'] === 'file' && matchesFilter(f.name),
       );
       if (files.length === 0) {
         toast.info('No matching files found in Dropbox');
@@ -141,7 +161,9 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
       for (let i = 0; i < files.length; i++) {
         setProgress({ current: i + 1, total: files.length, source: 'Dropbox' });
         try {
-          const blob = await dropboxService.downloadFile(files[i].path_lower || files[i].path_display);
+          const blob = await dropboxService.downloadFile(
+            files[i].path_lower || files[i].path_display,
+          );
           const localUrl = URL.createObjectURL(blob);
           imported.push({
             name: files[i].name,
@@ -149,7 +171,7 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
             url: localUrl,
             localUrl,
             type: mediaType === 'all' ? detectType(files[i].name) : mediaType,
-            source: 'dropbox'
+            source: 'dropbox',
           });
         } catch (err) {
           log.warn(`Failed to download ${files[i].name}:`, err.message);
@@ -157,7 +179,9 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
       }
       if (imported.length > 0) {
         onImportMedia?.(imported);
-        toast.success(`Imported ${imported.length} file${imported.length > 1 ? 's' : ''} from Dropbox`);
+        toast.success(
+          `Imported ${imported.length} file${imported.length > 1 ? 's' : ''} from Dropbox`,
+        );
       }
     } catch (err) {
       log.error('Dropbox import error:', err);
@@ -168,9 +192,25 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
 
   const detectType = (name) => {
     const lower = name.toLowerCase();
-    if (['.mp4', '.mov', '.avi', '.webm', '.mkv'].some(e => lower.endsWith(e))) return 'video';
-    if (['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'].some(e => lower.endsWith(e))) return 'audio';
-    if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.heic', '.heif', '.tif', '.tiff'].some(e => lower.endsWith(e))) return 'image';
+    if (['.mp4', '.mov', '.avi', '.webm', '.mkv'].some((e) => lower.endsWith(e))) return 'video';
+    if (['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'].some((e) => lower.endsWith(e)))
+      return 'audio';
+    if (
+      [
+        '.jpg',
+        '.jpeg',
+        '.png',
+        '.gif',
+        '.webp',
+        '.bmp',
+        '.svg',
+        '.heic',
+        '.heif',
+        '.tif',
+        '.tiff',
+      ].some((e) => lower.endsWith(e))
+    )
+      return 'image';
     return 'other';
   };
 
@@ -196,7 +236,7 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
           fontSize: compact ? '11px' : '12px',
           display: 'flex',
           alignItems: 'center',
-          gap: '4px'
+          gap: '4px',
         }}
         title="Import from cloud"
       >
@@ -204,31 +244,50 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
         {!compact && <span>Cloud</span>}
       </button>
       {showMenu && (
-        <div style={{
-          position: 'absolute', top: '100%', right: 0, marginTop: '4px',
-          backgroundColor: theme.bg.input, border: `1px solid ${theme.border.subtle}`,
-          borderRadius: '8px', boxShadow: theme.shadow,
-          zIndex: 1000, minWidth: '180px', overflow: 'hidden'
-        }}>
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            right: 0,
+            marginTop: '4px',
+            backgroundColor: theme.bg.input,
+            border: `1px solid ${theme.border.subtle}`,
+            borderRadius: '8px',
+            boxShadow: theme.shadow,
+            zIndex: 1000,
+            minWidth: '180px',
+            overflow: 'hidden',
+          }}
+        >
           <div
             onClick={handleDriveImport}
             style={{
-              padding: '10px 12px', cursor: 'pointer', fontSize: '13px',
-              color: theme.text.primary, display: 'flex', alignItems: 'center', gap: '8px'
+              padding: '10px 12px',
+              cursor: 'pointer',
+              fontSize: '13px',
+              color: theme.text.primary,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
             }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.hover.bg}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = theme.hover.bg)}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             <span style={{ fontSize: '16px' }}>📁</span> Import from Drive
           </div>
           <div
             onClick={handleDropboxImport}
             style={{
-              padding: '10px 12px', cursor: 'pointer', fontSize: '13px',
-              color: theme.text.primary, display: 'flex', alignItems: 'center', gap: '8px'
+              padding: '10px 12px',
+              cursor: 'pointer',
+              fontSize: '13px',
+              color: theme.text.primary,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
             }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.hover.bg}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = theme.hover.bg)}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             <span style={{ fontSize: '16px' }}>📦</span> Import from Dropbox
           </div>

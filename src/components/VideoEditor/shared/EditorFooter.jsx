@@ -11,7 +11,7 @@ const EditorFooter = ({
   onSaveAll,
   isSavingAll = false,
   saveAllCount = 0,
-  saveLabel
+  saveLabel,
 }) => (
   <div className="flex items-center justify-between px-6 py-3 border-t border-neutral-200">
     <div className="flex items-center gap-3">
@@ -22,14 +22,16 @@ const EditorFooter = ({
       )}
     </div>
     <div className="flex items-center gap-3">
-      <Button variant="neutral-secondary" size="medium" onClick={onCancel}>Cancel</Button>
+      <Button variant="neutral-secondary" size="medium" onClick={onCancel}>
+        Cancel
+      </Button>
       {saveAllCount > 1 ? (
         <Button variant="brand-primary" size="medium" onClick={onSaveAll} disabled={isSavingAll}>
           {isSavingAll ? 'Saving...' : `Save All (${saveAllCount})`}
         </Button>
       ) : (
         <Button variant="brand-primary" size="medium" onClick={onSaveAll} disabled={isSavingAll}>
-          {isSavingAll ? 'Saving...' : (saveLabel || 'Save')}
+          {isSavingAll ? 'Saving...' : saveLabel || 'Save'}
         </Button>
       )}
     </div>

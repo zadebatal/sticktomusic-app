@@ -1,0 +1,9 @@
+{
+  "session_id": "9742a499-fb04-4454-87cc-1e9eefdffd80",
+  "transcript_path": "/Users/zadebatal/.claude/projects/-Users-zadebatal-Desktop-sticktomusic-app/9742a499-fb04-4454-87cc-1e9eefdffd80.jsonl",
+  "cwd": "/Users/zadebatal/Desktop/sticktomusic-app",
+  "permission_mode": "acceptEdits",
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "VoiceMode is fully set up. Here's what's running:\n\n- **Whisper** (local STT) — port 2022, Metal GPU accelerated, ~0.3s latency\n- **Kokoro** (local TTS) — port 8880, starting up\n- **MCP server** — registered with Claude Code\n\n**You'll need to restart this Claude Code session** for the MCP server to connect. After restart, just type `converse` or say \"Hey\" and VoiceMode handles everything — wake word detection, echo cancellation, TTS that doesn't feed back into the mic. All local, no OpenAI API calls needed for STT/TTS.\n\nWant me to also disable the old tts-hook.sh from settings so it doesn't conflict with VoiceMode?"
+}

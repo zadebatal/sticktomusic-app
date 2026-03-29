@@ -11,7 +11,7 @@
  */
 export function computeSocialSetsUsed(latePages) {
   if (!Array.isArray(latePages) || latePages.length === 0) return 0;
-  const handles = new Set(latePages.map(p => p.handle).filter(Boolean));
+  const handles = new Set(latePages.map((p) => p.handle).filter(Boolean));
   return handles.size;
 }
 

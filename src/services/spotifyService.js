@@ -18,12 +18,12 @@ const getAttributionKey = (artistId) => `stm_spotify_attribution_${artistId}`;
 
 // Platform weights for attribution
 export const PLATFORM_WEIGHTS = {
-  tiktok: 1.00,
+  tiktok: 1.0,
   instagram: 0.85,
-  youtube: 0.80,
-  twitter: 0.70,
-  facebook: 0.70,
-  other: 0.65
+  youtube: 0.8,
+  twitter: 0.7,
+  facebook: 0.7,
+  other: 0.65,
 };
 
 // Attribution configuration
@@ -34,10 +34,10 @@ export const ATTRIBUTION_CONFIG = {
   minConfidenceForMedium: 45,
   multiPostPenalty: 0.85,
   releaseDayPenalty: 0.85,
-  paidCampaignPenalty: 0.90,
+  paidCampaignPenalty: 0.9,
   outlierZThreshold: 2.5,
   baselineDays: 14,
-  baselineExcludeDays: 2
+  baselineExcludeDays: 2,
 };
 
 /**
@@ -58,15 +58,15 @@ const proxyRequest = async (action, artistId, params = {}) => {
   const queryParams = new URLSearchParams({
     action,
     artistId,
-    ...params
+    ...params,
   });
 
   const response = await fetch(`/api/spotify?${queryParams}`, {
     method: 'GET',
     headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
   });
 
   if (!response.ok) {
@@ -87,11 +87,13 @@ const proxyRequest = async (action, artistId, params = {}) => {
 export const getStoredSpotifyData = (artistId) => {
   try {
     const data = localStorage.getItem(getStorageKey(artistId));
-    return data ? JSON.parse(data) : {
-      artist: null,
-      tracks: {},
-      lastUpdated: null
-    };
+    return data
+      ? JSON.parse(data)
+      : {
+          artist: null,
+          tracks: {},
+          lastUpdated: null,
+        };
   } catch (error) {
     log.error('Error reading Spotify data:', error);
     return { artist: null, tracks: {}, lastUpdated: null };
@@ -103,10 +105,13 @@ export const getStoredSpotifyData = (artistId) => {
  */
 export const saveSpotifyData = (artistId, data) => {
   try {
-    localStorage.setItem(getStorageKey(artistId), JSON.stringify({
-      ...data,
-      lastUpdated: new Date().toISOString()
-    }));
+    localStorage.setItem(
+      getStorageKey(artistId),
+      JSON.stringify({
+        ...data,
+        lastUpdated: new Date().toISOString(),
+      }),
+    );
   } catch (error) {
     log.error('Error saving Spotify data:', error);
   }
@@ -118,11 +123,13 @@ export const saveSpotifyData = (artistId, data) => {
 export const getStoredSnapshots = (artistId) => {
   try {
     const data = localStorage.getItem(getSnapshotsKey(artistId));
-    return data ? JSON.parse(data) : {
-      artistSnapshots: [],
-      trackSnapshots: {},
-      lastUpdated: null
-    };
+    return data
+      ? JSON.parse(data)
+      : {
+          artistSnapshots: [],
+          trackSnapshots: {},
+          lastUpdated: null,
+        };
   } catch (error) {
     log.error('Error reading snapshots:', error);
     return { artistSnapshots: [], trackSnapshots: {}, lastUpdated: null };
@@ -134,10 +141,13 @@ export const getStoredSnapshots = (artistId) => {
  */
 export const saveSnapshots = (artistId, data) => {
   try {
-    localStorage.setItem(getSnapshotsKey(artistId), JSON.stringify({
-      ...data,
-      lastUpdated: new Date().toISOString()
-    }));
+    localStorage.setItem(
+      getSnapshotsKey(artistId),
+      JSON.stringify({
+        ...data,
+        lastUpdated: new Date().toISOString(),
+      }),
+    );
   } catch (error) {
     log.error('Error saving snapshots:', error);
   }
@@ -149,11 +159,13 @@ export const saveSnapshots = (artistId, data) => {
 export const getStoredAttribution = (artistId) => {
   try {
     const data = localStorage.getItem(getAttributionKey(artistId));
-    return data ? JSON.parse(data) : {
-      growthEvents: [],
-      postAttributions: [],
-      lastComputed: null
-    };
+    return data
+      ? JSON.parse(data)
+      : {
+          growthEvents: [],
+          postAttributions: [],
+          lastComputed: null,
+        };
   } catch (error) {
     log.error('Error reading attribution:', error);
     return { growthEvents: [], postAttributions: [], lastComputed: null };
@@ -165,10 +177,13 @@ export const getStoredAttribution = (artistId) => {
  */
 export const saveAttribution = (artistId, data) => {
   try {
-    localStorage.setItem(getAttributionKey(artistId), JSON.stringify({
-      ...data,
-      lastComputed: new Date().toISOString()
-    }));
+    localStorage.setItem(
+      getAttributionKey(artistId),
+      JSON.stringify({
+        ...data,
+        lastComputed: new Date().toISOString(),
+      }),
+    );
   } catch (error) {
     log.error('Error saving attribution:', error);
   }
@@ -197,7 +212,7 @@ export const fetchSpotifyTrack = async (artistId, spotifyTrackId) => {
  */
 export const fetchTracksByISRC = async (artistId, isrcCodes) => {
   return proxyRequest('getTracksByISRC', artistId, {
-    isrcCodes: isrcCodes.join(',')
+    isrcCodes: isrcCodes.join(','),
   });
 };
 
@@ -223,7 +238,7 @@ export const syncSpotifyData = async (artistId, spotifyConfig) => {
     capturedAt: now,
     followers: artistData.followers?.total || 0,
     popularity: artistData.popularity || 0,
-    monthlyListeners: artistData.monthlyListeners || null // May not be available
+    monthlyListeners: artistData.monthlyListeners || null, // May not be available
   };
 
   snapshots.artistSnapshots.push(artistSnapshot);
@@ -264,7 +279,7 @@ export const syncSpotifyData = async (artistId, spotifyConfig) => {
         stored.tracks[track.spotifyTrackId] = {
           ...track,
           ...trackData,
-          lastUpdated: now
+          lastUpdated: now,
         };
       } catch (error) {
         log.error(`Error syncing track ${track.spotifyTrackId}:`, error);
@@ -277,7 +292,7 @@ export const syncSpotifyData = async (artistId, spotifyConfig) => {
     ...stored.artist,
     ...artistData,
     spotifyArtistId: spotifyConfig.spotifyArtistId,
-    lastUpdated: now
+    lastUpdated: now,
   };
 
   saveSpotifyData(artistId, stored);
@@ -297,12 +312,10 @@ export const calculateDelta = (snapshots, metric, hoursBack = 24) => {
   if (!snapshots || snapshots.length < 2) return null;
 
   const now = new Date();
-  const cutoff = new Date(now.getTime() - (hoursBack * 60 * 60 * 1000));
+  const cutoff = new Date(now.getTime() - hoursBack * 60 * 60 * 1000);
 
   // Sort by capture time
-  const sorted = [...snapshots].sort((a, b) =>
-    new Date(a.capturedAt) - new Date(b.capturedAt)
-  );
+  const sorted = [...snapshots].sort((a, b) => new Date(a.capturedAt) - new Date(b.capturedAt));
 
   // Find snapshot closest to cutoff time
   const pastSnapshot = sorted.reduce((closest, s) => {
@@ -320,7 +333,7 @@ export const calculateDelta = (snapshots, metric, hoursBack = 24) => {
   const currentValue = currentSnapshot[metric] || 0;
   const pastValue = pastSnapshot[metric] || 0;
   const delta = currentValue - pastValue;
-  const percentChange = pastValue > 0 ? ((delta / pastValue) * 100) : 0;
+  const percentChange = pastValue > 0 ? (delta / pastValue) * 100 : 0;
 
   return {
     current: currentValue,
@@ -329,7 +342,7 @@ export const calculateDelta = (snapshots, metric, hoursBack = 24) => {
     percentChange,
     hoursBack,
     fromTime: pastSnapshot.capturedAt,
-    toTime: currentSnapshot.capturedAt
+    toTime: currentSnapshot.capturedAt,
   };
 };
 
@@ -345,14 +358,12 @@ export const calculateBaselineDelta = (snapshots, metric) => {
   }
 
   const now = new Date();
-  const excludeCutoff = new Date(now.getTime() - (config.baselineExcludeDays * 24 * 60 * 60 * 1000));
-  const baselineCutoff = new Date(now.getTime() - (config.baselineDays * 24 * 60 * 60 * 1000));
+  const excludeCutoff = new Date(now.getTime() - config.baselineExcludeDays * 24 * 60 * 60 * 1000);
+  const baselineCutoff = new Date(now.getTime() - config.baselineDays * 24 * 60 * 60 * 1000);
 
   // Get daily deltas, excluding recent data
   const dailyDeltas = [];
-  const sorted = [...snapshots].sort((a, b) =>
-    new Date(a.capturedAt) - new Date(b.capturedAt)
-  );
+  const sorted = [...snapshots].sort((a, b) => new Date(a.capturedAt) - new Date(b.capturedAt));
 
   for (let i = 1; i < sorted.length; i++) {
     const snapTime = new Date(sorted[i].capturedAt);
@@ -376,29 +387,33 @@ export const calculateBaselineDelta = (snapshots, metric) => {
 
   // Calculate mean and std dev
   const mean = dailyDeltas.reduce((a, b) => a + b, 0) / dailyDeltas.length;
-  const variance = dailyDeltas.reduce((sum, d) => sum + Math.pow(d - mean, 2), 0) / dailyDeltas.length;
+  const variance =
+    dailyDeltas.reduce((sum, d) => sum + Math.pow(d - mean, 2), 0) / dailyDeltas.length;
   const stdDev = Math.sqrt(variance);
 
   // Remove outliers (z > 2.5)
-  const filteredDeltas = dailyDeltas.filter(d => {
+  const filteredDeltas = dailyDeltas.filter((d) => {
     const z = stdDev > 0 ? Math.abs((d - mean) / stdDev) : 0;
     return z <= config.outlierZThreshold;
   });
 
   // Recalculate without outliers
-  const filteredMean = filteredDeltas.length > 0
-    ? filteredDeltas.reduce((a, b) => a + b, 0) / filteredDeltas.length
-    : mean;
-  const filteredVariance = filteredDeltas.length > 1
-    ? filteredDeltas.reduce((sum, d) => sum + Math.pow(d - filteredMean, 2), 0) / filteredDeltas.length
-    : variance;
+  const filteredMean =
+    filteredDeltas.length > 0
+      ? filteredDeltas.reduce((a, b) => a + b, 0) / filteredDeltas.length
+      : mean;
+  const filteredVariance =
+    filteredDeltas.length > 1
+      ? filteredDeltas.reduce((sum, d) => sum + Math.pow(d - filteredMean, 2), 0) /
+        filteredDeltas.length
+      : variance;
   const filteredStdDev = Math.sqrt(filteredVariance);
 
   return {
     expected: filteredMean,
     stdDev: filteredStdDev,
     hasBaseline: true,
-    sampleSize: filteredDeltas.length
+    sampleSize: filteredDeltas.length,
   };
 };
 
@@ -429,7 +444,7 @@ export const detectGrowthEvents = (artistId) => {
         observedDelta: followerDelta.delta,
         expectedDelta: followerBaseline.expected,
         liftDelta: Math.max(0, followerDelta.delta - followerBaseline.expected),
-        stdDev: followerBaseline.stdDev
+        stdDev: followerBaseline.stdDev,
       });
     }
   }
@@ -451,7 +466,7 @@ export const detectGrowthEvents = (artistId) => {
           observedDelta: trackDelta.delta,
           expectedDelta: trackBaseline.expected,
           liftDelta: Math.max(0, trackDelta.delta - trackBaseline.expected),
-          stdDev: trackBaseline.stdDev
+          stdDev: trackBaseline.stdDev,
         });
       }
     }
@@ -488,14 +503,15 @@ export const calculateMomentumScore = (artistId) => {
   let followerScore = 50; // Base score
   if (followerDelta24h) {
     // Normalize: +1000 followers/day = 100, -1000 = 0
-    followerScore = Math.min(100, Math.max(0, 50 + (followerDelta24h.delta / 20)));
+    followerScore = Math.min(100, Math.max(0, 50 + followerDelta24h.delta / 20));
   }
 
   let trackScore = 50;
   if (trackPopularities.length > 0) {
-    const avgDelta = trackPopularities.reduce((sum, t) => sum + t.delta, 0) / trackPopularities.length;
+    const avgDelta =
+      trackPopularities.reduce((sum, t) => sum + t.delta, 0) / trackPopularities.length;
     // Normalize: +10 popularity points/day = 100, -10 = 0
-    trackScore = Math.min(100, Math.max(0, 50 + (avgDelta * 5)));
+    trackScore = Math.min(100, Math.max(0, 50 + avgDelta * 5));
   }
 
   let trendScore = 50;
@@ -507,26 +523,23 @@ export const calculateMomentumScore = (artistId) => {
   }
 
   // Weighted combination
-  const momentumScore = Math.round(
-    (followerScore * 0.35) +
-    (trackScore * 0.40) +
-    (trendScore * 0.25)
-  );
+  const momentumScore = Math.round(followerScore * 0.35 + trackScore * 0.4 + trendScore * 0.25);
 
   return {
     overall: momentumScore,
     components: {
       followerScore,
       trackScore,
-      trendScore
+      trendScore,
     },
     deltas: {
       followers24h: followerDelta24h,
       followers7d: followerDelta7d,
-      avgTrackPopularity24h: trackPopularities.length > 0
-        ? trackPopularities.reduce((sum, t) => sum + t.delta, 0) / trackPopularities.length
-        : 0
-    }
+      avgTrackPopularity24h:
+        trackPopularities.length > 0
+          ? trackPopularities.reduce((sum, t) => sum + t.delta, 0) / trackPopularities.length
+          : 0,
+    },
   };
 };
 
@@ -558,7 +571,7 @@ export const getSpotifyOverview = (artistId) => {
         name: trackInfo?.name || 'Unknown Track',
         delta: delta.delta,
         percentChange: delta.percentChange,
-        current: delta.current
+        current: delta.current,
       });
     }
   }
@@ -570,12 +583,12 @@ export const getSpotifyOverview = (artistId) => {
       delta24h: followerDelta24h?.delta || 0,
       delta7d: followerDelta7d?.delta || 0,
       percentChange24h: followerDelta24h?.percentChange || 0,
-      percentChange7d: followerDelta7d?.percentChange || 0
+      percentChange7d: followerDelta7d?.percentChange || 0,
     },
     tracks: trackMomentum.sort((a, b) => b.delta - a.delta),
     momentum,
     growthEvents: attribution.growthEvents || [],
-    lastUpdated: stored.lastUpdated
+    lastUpdated: stored.lastUpdated,
   };
 };
 
@@ -599,7 +612,7 @@ export const getSpotifyTimeline = (artistId, days = 30) => {
         date,
         followers: snapshot.followers,
         popularity: snapshot.popularity,
-        trackPopularities: {}
+        trackPopularities: {},
       };
     } else {
       // Take latest snapshot for the day
@@ -671,5 +684,5 @@ export default {
   getSpotifyConfig,
   clearSpotifyData,
   PLATFORM_WEIGHTS,
-  ATTRIBUTION_CONFIG
+  ATTRIBUTION_CONFIG,
 };

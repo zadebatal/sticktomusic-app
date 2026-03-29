@@ -50,9 +50,9 @@ export function normalizeWordsToTrimRange(words, trimStart = 0, trimEnd = null, 
   const trimEndUnit = safeTrimEnd ? safeTrimEnd * msMultiplier : Infinity;
 
   return words
-    .filter(word => {
+    .filter((word) => {
       const wordStart = word.start ?? word.startTime ?? 0;
-      const wordEnd = word.end ?? (wordStart + (word.duration || 0.5) * msMultiplier);
+      const wordEnd = word.end ?? wordStart + (word.duration || 0.5) * msMultiplier;
 
       if (preservePartial) {
         // Include if any part of the word overlaps the range
@@ -64,7 +64,7 @@ export function normalizeWordsToTrimRange(words, trimStart = 0, trimEnd = null, 
     })
     .map((word, index) => {
       const wordStart = word.start ?? word.startTime ?? 0;
-      const wordEnd = word.end ?? (wordStart + (word.duration || 0.5) * msMultiplier);
+      const wordEnd = word.end ?? wordStart + (word.duration || 0.5) * msMultiplier;
 
       // Convert to LOCAL time in seconds
       const localStartTime = (wordStart - trimStartUnit) / msMultiplier;
@@ -102,8 +102,14 @@ export function normalizeBeatsToTrimRange(beats, trimStart = 0, trimEnd = null) 
   const effectiveTrimEnd = safeTrimEnd ?? Infinity;
 
   return beats
-    .filter(beatTime => typeof beatTime === 'number' && !isNaN(beatTime) && beatTime >= safeTrimStart && beatTime < effectiveTrimEnd)
-    .map(beatTime => beatTime - safeTrimStart);
+    .filter(
+      (beatTime) =>
+        typeof beatTime === 'number' &&
+        !isNaN(beatTime) &&
+        beatTime >= safeTrimStart &&
+        beatTime < effectiveTrimEnd,
+    )
+    .map((beatTime) => beatTime - safeTrimStart);
 }
 
 /**
@@ -145,7 +151,9 @@ export function validateLocalTimeData(data, trimmedDuration) {
         errors.push(`Word[${i}] "${word.text}" has negative startTime: ${word.startTime}`);
       }
       if (word.startTime > trimmedDuration + tolerance) {
-        errors.push(`Word[${i}] "${word.text}" startTime ${word.startTime} exceeds trimmedDuration ${trimmedDuration}`);
+        errors.push(
+          `Word[${i}] "${word.text}" startTime ${word.startTime} exceeds trimmedDuration ${trimmedDuration}`,
+        );
       }
     });
   }
@@ -169,7 +177,9 @@ export function validateLocalTimeData(data, trimmedDuration) {
         errors.push(`Clip[${i}] has negative startTime: ${clip.startTime}`);
       }
       if (clip.startTime > trimmedDuration + tolerance) {
-        errors.push(`Clip[${i}] startTime ${clip.startTime} exceeds trimmedDuration ${trimmedDuration}`);
+        errors.push(
+          `Clip[${i}] startTime ${clip.startTime} exceeds trimmedDuration ${trimmedDuration}`,
+        );
       }
     });
   }
@@ -180,7 +190,7 @@ export function validateLocalTimeData(data, trimmedDuration) {
 
   return {
     valid: errors.length === 0,
-    errors
+    errors,
   };
 }
 
@@ -198,7 +208,7 @@ export function getTrimBoundaries(audio, fallbackDuration = 30) {
       trimStart: 0,
       trimEnd: fallbackDuration,
       trimmedDuration: fallbackDuration,
-      isTrimmed: false
+      isTrimmed: false,
     };
   }
 
@@ -211,7 +221,7 @@ export function getTrimBoundaries(audio, fallbackDuration = 30) {
     trimStart,
     trimEnd,
     trimmedDuration,
-    isTrimmed
+    isTrimmed,
   };
 }
 

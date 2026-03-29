@@ -19,7 +19,7 @@ const LyricBank = ({
   onDeleteLyrics,
   onSelectText, // Callback when text is selected for use
   compact = false, // Compact mode for sidebar display
-  showAddForm = true
+  showAddForm = true,
 }) => {
   const { theme } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
@@ -40,7 +40,7 @@ const LyricBank = ({
 
     onAddLyrics?.({
       title: newTitle.trim() || 'Untitled',
-      content: newContent.trim()
+      content: newContent.trim(),
     });
 
     setNewTitle('');
@@ -54,7 +54,7 @@ const LyricBank = ({
 
     onUpdateLyrics?.(editingId, {
       title: editTitle.trim() || 'Untitled',
-      content: editContent.trim()
+      content: editContent.trim(),
     });
 
     setEditingId(null);
@@ -83,36 +83,42 @@ const LyricBank = ({
     setSelectedLines([lineIndex]);
   }, []);
 
-  const handleLinePointerEnter = useCallback((lineIndex) => {
-    if (dragStart !== null) {
-      const start = Math.min(dragStart, lineIndex);
-      const end = Math.max(dragStart, lineIndex);
-      const newSelection = [];
-      for (let i = start; i <= end; i++) {
-        newSelection.push(i);
+  const handleLinePointerEnter = useCallback(
+    (lineIndex) => {
+      if (dragStart !== null) {
+        const start = Math.min(dragStart, lineIndex);
+        const end = Math.max(dragStart, lineIndex);
+        const newSelection = [];
+        for (let i = start; i <= end; i++) {
+          newSelection.push(i);
+        }
+        setSelectedLines(newSelection);
       }
-      setSelectedLines(newSelection);
-    }
-  }, [dragStart]);
+    },
+    [dragStart],
+  );
 
   const handlePointerUp = useCallback(() => {
     setDragStart(null);
   }, []);
 
   // Use selected text
-  const handleUseSelected = useCallback((lyric) => {
-    if (selectedLines.length === 0) return;
+  const handleUseSelected = useCallback(
+    (lyric) => {
+      if (selectedLines.length === 0) return;
 
-    const lines = lyric.content.split('\n');
-    const selectedText = selectedLines
-      .sort((a, b) => a - b)
-      .map(i => lines[i])
-      .filter(Boolean)
-      .join('\n');
+      const lines = lyric.content.split('\n');
+      const selectedText = selectedLines
+        .sort((a, b) => a - b)
+        .map((i) => lines[i])
+        .filter(Boolean)
+        .join('\n');
 
-    onSelectText?.(selectedText);
-    setSelectedLines([]);
-  }, [selectedLines, onSelectText]);
+      onSelectText?.(selectedText);
+      setSelectedLines([]);
+    },
+    [selectedLines, onSelectText],
+  );
 
   // Global pointer up listener (works for both mouse and touch)
   useEffect(() => {
@@ -127,33 +133,74 @@ const LyricBank = ({
   if (compact) {
     return (
       <div style={compactStyles.container}>
-
         {/* Add / Edit Form (compact) */}
         {(isAdding || editingId) && (
           <div style={compactStyles.editorOverlay}>
             <input
               type="text"
               value={editingId ? editTitle : newTitle}
-              onChange={(e) => editingId ? setEditTitle(e.target.value) : setNewTitle(e.target.value)}
+              onChange={(e) =>
+                editingId ? setEditTitle(e.target.value) : setNewTitle(e.target.value)
+              }
               placeholder="Title..."
               autoFocus
               style={compactStyles.editorTitle}
             />
             <textarea
               value={editingId ? editContent : newContent}
-              onChange={(e) => editingId ? setEditContent(e.target.value) : setNewContent(e.target.value)}
+              onChange={(e) =>
+                editingId ? setEditContent(e.target.value) : setNewContent(e.target.value)
+              }
               placeholder="Paste or type lyrics here..."
               style={compactStyles.editorBody}
             />
             <div style={compactStyles.editorActions}>
-              <Button variant="neutral-secondary" size="small" onClick={() => { setIsAdding(false); cancelEdit(); }}>Cancel</Button>
+              <Button
+                variant="neutral-secondary"
+                size="small"
+                onClick={() => {
+                  setIsAdding(false);
+                  cancelEdit();
+                }}
+              >
+                Cancel
+              </Button>
               {editingId ? (
                 <>
-                  <Button variant="brand-primary" size="small" onClick={handleSaveEdit} disabled={!editContent.trim()}>Replace</Button>
-                  <Button variant="neutral-secondary" size="small" onClick={() => { onAddLyrics?.({ title: editTitle.trim() || 'Untitled', content: editContent.trim() }); setEditingId(null); setEditTitle(''); setEditContent(''); }} disabled={!editContent.trim()}>Save as New</Button>
+                  <Button
+                    variant="brand-primary"
+                    size="small"
+                    onClick={handleSaveEdit}
+                    disabled={!editContent.trim()}
+                  >
+                    Replace
+                  </Button>
+                  <Button
+                    variant="neutral-secondary"
+                    size="small"
+                    onClick={() => {
+                      onAddLyrics?.({
+                        title: editTitle.trim() || 'Untitled',
+                        content: editContent.trim(),
+                      });
+                      setEditingId(null);
+                      setEditTitle('');
+                      setEditContent('');
+                    }}
+                    disabled={!editContent.trim()}
+                  >
+                    Save as New
+                  </Button>
                 </>
               ) : (
-                <Button variant="brand-primary" size="small" onClick={handleAdd} disabled={!newContent.trim()}>Add</Button>
+                <Button
+                  variant="brand-primary"
+                  size="small"
+                  onClick={handleAdd}
+                  disabled={!newContent.trim()}
+                >
+                  Add
+                </Button>
               )}
             </div>
           </div>
@@ -164,10 +211,7 @@ const LyricBank = ({
           <>
             <div style={compactStyles.header}>
               <span style={compactStyles.count}>{lyrics.length} saved</span>
-              <button
-                style={compactStyles.addBtn}
-                onClick={() => setIsAdding(true)}
-              >
+              <button style={compactStyles.addBtn} onClick={() => setIsAdding(true)}>
                 + Add
               </button>
             </div>
@@ -176,10 +220,12 @@ const LyricBank = ({
               <div style={compactStyles.empty}>No lyrics saved yet</div>
             ) : (
               <div style={compactStyles.list}>
-                {lyrics.map(lyric => {
+                {lyrics.map((lyric) => {
                   const isExpanded = expandedLyricsId === lyric.id;
                   return (
-                    <div key={lyric.id} style={compactStyles.item}
+                    <div
+                      key={lyric.id}
+                      style={compactStyles.item}
                       draggable
                       onDragStart={(e) => {
                         e.dataTransfer.setData('text/lyric', lyric.content || lyric.title || '');
@@ -201,9 +247,14 @@ const LyricBank = ({
                         <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
                           <button
                             style={compactStyles.itemBtn}
-                            onClick={(e) => { e.stopPropagation(); startEdit(lyric); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startEdit(lyric);
+                            }}
                             title="Edit"
-                          >✏️</button>
+                          >
+                            ✏️
+                          </button>
                           <button
                             style={compactStyles.itemBtn}
                             onClick={(e) => {
@@ -211,7 +262,9 @@ const LyricBank = ({
                               if (confirm('Delete these lyrics?')) onDeleteLyrics?.(lyric.id);
                             }}
                             title="Delete"
-                          >🗑️</button>
+                          >
+                            🗑️
+                          </button>
                         </div>
                       </div>
                       {isExpanded && (
@@ -225,7 +278,11 @@ const LyricBank = ({
                                 // If multiple lines selected, drag all selected text
                                 if (selectedLines.length > 1 && selectedLines.includes(i)) {
                                   const allLines = lyric.content.split('\n');
-                                  const selectedText = selectedLines.sort((a, b) => a - b).map(idx => allLines[idx]).filter(Boolean).join('\n');
+                                  const selectedText = selectedLines
+                                    .sort((a, b) => a - b)
+                                    .map((idx) => allLines[idx])
+                                    .filter(Boolean)
+                                    .join('\n');
                                   e.dataTransfer.setData('text/lyric', selectedText);
                                 } else {
                                   e.dataTransfer.setData('text/lyric', line.trim());
@@ -236,23 +293,39 @@ const LyricBank = ({
                                 ...compactStyles.lyricLine,
                                 ...(line.trim() ? { cursor: 'grab' } : {}),
                                 ...(selectedLines.includes(i) && expandedLyricsId === lyric.id
-                                  ? { backgroundColor: `${theme.accent.primary}4d`, color: '#fff', borderRadius: '3px' }
-                                  : {})
+                                  ? {
+                                      backgroundColor: `${theme.accent.primary}4d`,
+                                      color: '#fff',
+                                      borderRadius: '3px',
+                                    }
+                                  : {}),
                               }}
                               onClick={() => {
                                 if (line.trim() && onSelectText) {
                                   onSelectText(line.trim());
                                 }
                               }}
-                              onPointerDown={() => { if (line.trim()) handleLinePointerDown(lyric.id, i); }}
+                              onPointerDown={() => {
+                                if (line.trim()) handleLinePointerDown(lyric.id, i);
+                              }}
                               onPointerEnter={() => handleLinePointerEnter(i)}
-                              title={line.trim() ? 'Drag to text bank or click to add as overlay' : ''}
+                              title={
+                                line.trim() ? 'Drag to text bank or click to add as overlay' : ''
+                              }
                             >
                               {line || '\u00A0'}
                             </div>
                           ))}
                           {selectedLines.length > 1 && onSelectText && (
-                            <div style={{ display: 'flex', gap: '6px', padding: '6px 4px 2px', borderTop: `1px solid ${theme.border.subtle}`, marginTop: '4px' }}>
+                            <div
+                              style={{
+                                display: 'flex',
+                                gap: '6px',
+                                padding: '6px 4px 2px',
+                                borderTop: `1px solid ${theme.border.subtle}`,
+                                marginTop: '4px',
+                              }}
+                            >
                               <button
                                 style={{ ...compactStyles.addBtn, flex: 1 }}
                                 onClick={() => handleUseSelected(lyric)}
@@ -260,7 +333,11 @@ const LyricBank = ({
                                 Use {selectedLines.length} lines
                               </button>
                               <button
-                                style={{ ...compactStyles.editorCancel, padding: '3px 8px', fontSize: '10px' }}
+                                style={{
+                                  ...compactStyles.editorCancel,
+                                  padding: '3px 8px',
+                                  fontSize: '10px',
+                                }}
                                 onClick={() => setSelectedLines([])}
                               >
                                 Clear
@@ -284,19 +361,31 @@ const LyricBank = ({
     <div style={styles.container} onPointerUp={handlePointerUp}>
       <div style={styles.header}>
         <div style={styles.headerLeft}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-            <path d="M14 2v6h6"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-            <line x1="10" y1="9" x2="8" y2="9"/>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+            <path d="M14 2v6h6" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <line x1="10" y1="9" x2="8" y2="9" />
           </svg>
           <h3 style={styles.title}>Lyric Bank</h3>
           <span style={styles.count}>({lyrics.length})</span>
         </div>
 
         {showAddForm && !isAdding && (
-          <Button variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => setIsAdding(true)}>
+          <Button
+            variant="brand-primary"
+            size="small"
+            icon={<FeatherPlus />}
+            onClick={() => setIsAdding(true)}
+          >
             Add Lyrics
           </Button>
         )}
@@ -324,7 +413,12 @@ const LyricBank = ({
             <Button variant="neutral-secondary" size="small" onClick={() => setIsAdding(false)}>
               Cancel
             </Button>
-            <Button variant="brand-primary" size="small" onClick={handleAdd} disabled={!newContent.trim()}>
+            <Button
+              variant="brand-primary"
+              size="small"
+              onClick={handleAdd}
+              disabled={!newContent.trim()}
+            >
               Save Lyrics
             </Button>
           </div>
@@ -335,15 +429,22 @@ const LyricBank = ({
       <div style={styles.lyricsList}>
         {lyrics.length === 0 && !isAdding ? (
           <div style={styles.emptyState}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-              <path d="M14 2v6h6"/>
+            <svg
+              width="32"
+              height="32"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#4b5563"
+              strokeWidth="1.5"
+            >
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+              <path d="M14 2v6h6" />
             </svg>
             <p>No lyrics yet</p>
             <p style={styles.emptyHint}>Add song lyrics to use in your content</p>
           </div>
         ) : (
-          lyrics.map(lyric => (
+          lyrics.map((lyric) => (
             <div key={lyric.id} style={styles.lyricCard}>
               {/* Card Header */}
               <div
@@ -360,10 +461,10 @@ const LyricBank = ({
                     strokeWidth="2"
                     style={{
                       transform: expandedLyricsId === lyric.id ? 'rotate(90deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.2s'
+                      transition: 'transform 0.2s',
                     }}
                   >
-                    <polyline points="9 18 15 12 9 6"/>
+                    <polyline points="9 18 15 12 9 6" />
                   </svg>
                   <span style={styles.lyricTitle}>{lyric.title}</span>
                 </div>
@@ -409,7 +510,7 @@ const LyricBank = ({
                           ...(selectedLines.includes(lineIndex) && expandedLyricsId === lyric.id
                             ? styles.lyricLineSelected
                             : {}),
-                          ...(line.trim() === '' ? styles.lyricLineEmpty : {})
+                          ...(line.trim() === '' ? styles.lyricLineEmpty : {}),
                         }}
                         onPointerDown={() => handleLinePointerDown(lyric.id, lineIndex)}
                         onPointerEnter={() => handleLinePointerEnter(lineIndex)}
@@ -425,10 +526,18 @@ const LyricBank = ({
                       <span style={styles.selectionCount}>
                         {selectedLines.length} line{selectedLines.length !== 1 ? 's' : ''} selected
                       </span>
-                      <Button variant="brand-primary" size="small" onClick={() => handleUseSelected(lyric)}>
+                      <Button
+                        variant="brand-primary"
+                        size="small"
+                        onClick={() => handleUseSelected(lyric)}
+                      >
                         Use Selected
                       </Button>
-                      <Button variant="neutral-tertiary" size="small" onClick={() => setSelectedLines([])}>
+                      <Button
+                        variant="neutral-tertiary"
+                        size="small"
+                        onClick={() => setSelectedLines([])}
+                      >
                         Clear
                       </Button>
                     </div>
@@ -477,34 +586,34 @@ const getStyles = (theme) => ({
     borderRadius: '12px',
     padding: '16px',
     border: `1px solid ${theme.bg.surface}`,
-    userSelect: 'none'
+    userSelect: 'none',
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: '16px'
+    marginBottom: '16px',
   },
   headerLeft: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px'
+    gap: '8px',
   },
   title: {
     fontSize: '14px',
     fontWeight: '600',
     color: theme.text.primary,
-    margin: 0
+    margin: 0,
   },
   count: {
     fontSize: '13px',
-    color: theme.text.muted
+    color: theme.text.muted,
   },
   addForm: {
     backgroundColor: theme.bg.page,
     borderRadius: '8px',
     padding: '16px',
-    marginBottom: '16px'
+    marginBottom: '16px',
   },
   titleInput: {
     width: '100%',
@@ -515,7 +624,7 @@ const getStyles = (theme) => ({
     color: theme.text.primary,
     fontSize: '14px',
     marginBottom: '12px',
-    outline: 'none'
+    outline: 'none',
   },
   contentTextarea: {
     width: '100%',
@@ -528,12 +637,12 @@ const getStyles = (theme) => ({
     fontFamily: 'monospace',
     resize: 'vertical',
     outline: 'none',
-    lineHeight: '1.6'
+    lineHeight: '1.6',
   },
   lyricsList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px'
+    gap: '8px',
   },
   emptyState: {
     display: 'flex',
@@ -542,17 +651,17 @@ const getStyles = (theme) => ({
     justifyContent: 'center',
     padding: '32px',
     color: theme.text.muted,
-    textAlign: 'center'
+    textAlign: 'center',
   },
   emptyHint: {
     fontSize: '12px',
     color: theme.text.muted,
-    marginTop: '4px'
+    marginTop: '4px',
   },
   lyricCard: {
     backgroundColor: theme.bg.page,
     borderRadius: '8px',
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   lyricHeader: {
     display: 'flex',
@@ -560,21 +669,21 @@ const getStyles = (theme) => ({
     justifyContent: 'space-between',
     padding: '12px 16px',
     cursor: 'pointer',
-    borderBottom: '1px solid transparent'
+    borderBottom: '1px solid transparent',
   },
   lyricTitleRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px'
+    gap: '8px',
   },
   lyricTitle: {
     fontSize: '14px',
     fontWeight: '500',
-    color: theme.text.primary
+    color: theme.text.primary,
   },
   lyricActions: {
     display: 'flex',
-    gap: '4px'
+    gap: '4px',
   },
   actionBtn: {
     padding: '4px 8px',
@@ -582,7 +691,7 @@ const getStyles = (theme) => ({
     border: 'none',
     borderRadius: '4px',
     cursor: 'pointer',
-    fontSize: '12px'
+    fontSize: '12px',
   },
   actionBtnDanger: {
     padding: '4px 8px',
@@ -590,23 +699,23 @@ const getStyles = (theme) => ({
     border: 'none',
     borderRadius: '4px',
     cursor: 'pointer',
-    fontSize: '12px'
+    fontSize: '12px',
   },
   lyricContent: {
-    padding: '0 16px 16px 16px'
+    padding: '0 16px 16px 16px',
   },
   selectionHint: {
     fontSize: '11px',
     color: theme.text.muted,
     marginBottom: '8px',
-    fontStyle: 'italic'
+    fontStyle: 'italic',
   },
   linesContainer: {
     backgroundColor: theme.bg.input,
     borderRadius: '6px',
     padding: '8px',
     maxHeight: '300px',
-    overflowY: 'auto'
+    overflowY: 'auto',
   },
   lyricLine: {
     display: 'flex',
@@ -616,14 +725,14 @@ const getStyles = (theme) => ({
     borderRadius: '4px',
     cursor: 'pointer',
     transition: 'background-color 0.1s',
-    touchAction: 'none'
+    touchAction: 'none',
   },
   lyricLineSelected: {
     backgroundColor: `${theme.accent.primary}4d`,
-    color: '#fff'
+    color: '#fff',
   },
   lyricLineEmpty: {
-    minHeight: '20px'
+    minHeight: '20px',
   },
   lineNumber: {
     fontSize: '10px',
@@ -631,13 +740,13 @@ const getStyles = (theme) => ({
     width: '24px',
     textAlign: 'right',
     flexShrink: 0,
-    paddingTop: '2px'
+    paddingTop: '2px',
   },
   lineText: {
     fontSize: '13px',
     color: theme.text.primary,
     lineHeight: '1.5',
-    wordBreak: 'break-word'
+    wordBreak: 'break-word',
   },
   selectionActions: {
     display: 'flex',
@@ -646,32 +755,32 @@ const getStyles = (theme) => ({
     marginTop: '12px',
     padding: '8px 12px',
     backgroundColor: `${theme.accent.primary}1a`,
-    borderRadius: '6px'
+    borderRadius: '6px',
   },
   selectionCount: {
     fontSize: '12px',
-    color: theme.accent.hover
+    color: theme.accent.hover,
   },
   editForm: {
     padding: '16px',
-    borderTop: `1px solid ${theme.bg.surface}`
+    borderTop: `1px solid ${theme.bg.surface}`,
   },
 });
 
 // Compact styles for sidebar
 const getCompactStyles = (theme) => ({
   container: {
-    padding: '0'
+    padding: '0',
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: '8px'
+    marginBottom: '8px',
   },
   count: {
     fontSize: '10px',
-    color: theme.text.muted
+    color: theme.text.muted,
   },
   addBtn: {
     padding: '3px 8px',
@@ -681,30 +790,30 @@ const getCompactStyles = (theme) => ({
     color: theme.accent.hover,
     fontSize: '10px',
     fontWeight: 600,
-    cursor: 'pointer'
+    cursor: 'pointer',
   },
   empty: {
     fontSize: '11px',
     color: theme.text.muted,
     textAlign: 'center',
-    padding: '12px 4px'
+    padding: '12px 4px',
   },
   list: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '3px'
+    gap: '3px',
   },
   item: {
     backgroundColor: theme.hover.bg,
     borderRadius: '6px',
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   itemHeader: {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
     padding: '6px 8px',
-    cursor: 'pointer'
+    cursor: 'pointer',
   },
   itemTitle: {
     display: 'block',
@@ -713,7 +822,7 @@ const getCompactStyles = (theme) => ({
     color: theme.text.primary,
     whiteSpace: 'nowrap',
     overflow: 'hidden',
-    textOverflow: 'ellipsis'
+    textOverflow: 'ellipsis',
   },
   itemPreview: {
     display: 'block',
@@ -721,7 +830,7 @@ const getCompactStyles = (theme) => ({
     color: theme.text.muted,
     whiteSpace: 'nowrap',
     overflow: 'hidden',
-    textOverflow: 'ellipsis'
+    textOverflow: 'ellipsis',
   },
   itemBtn: {
     background: 'none',
@@ -730,27 +839,27 @@ const getCompactStyles = (theme) => ({
     fontSize: '10px',
     padding: '2px 4px',
     borderRadius: '3px',
-    lineHeight: 1
+    lineHeight: 1,
   },
   expandedBody: {
     padding: '4px 8px 8px',
     maxHeight: '150px',
     overflowY: 'auto',
     borderTop: `1px solid ${theme.border.subtle}`,
-    backgroundColor: theme.overlay.light
+    backgroundColor: theme.overlay.light,
   },
   lyricLine: {
     fontSize: '10px',
     color: theme.text.secondary,
     lineHeight: '1.6',
     padding: '0 4px',
-    fontFamily: 'monospace'
+    fontFamily: 'monospace',
   },
   // Editor overlay (add / edit)
   editorOverlay: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px'
+    gap: '6px',
   },
   editorTitle: {
     width: '100%',
@@ -762,7 +871,7 @@ const getCompactStyles = (theme) => ({
     fontSize: '12px',
     fontWeight: 500,
     outline: 'none',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
   },
   editorBody: {
     width: '100%',
@@ -777,13 +886,13 @@ const getCompactStyles = (theme) => ({
     resize: 'vertical',
     outline: 'none',
     minHeight: '120px',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
   },
   editorActions: {
     display: 'flex',
     justifyContent: 'flex-end',
-    gap: '6px'
-  }
+    gap: '6px',
+  },
 });
 
 export default LyricBank;

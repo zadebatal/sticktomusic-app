@@ -6,8 +6,16 @@
  */
 
 import {
-  collection, doc, setDoc, updateDoc, deleteDoc,
-  writeBatch, query, orderBy, onSnapshot, serverTimestamp
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  writeBatch,
+  query,
+  orderBy,
+  onSnapshot,
+  serverTimestamp,
 } from 'firebase/firestore';
 import log from '../utils/logger';
 
@@ -24,7 +32,7 @@ export const createLyricsEntry = ({
   audioId = null,
   audioStartTime = null,
   audioEndTime = null,
-  collectionIds = []
+  collectionIds = [],
 }) => {
   const now = new Date().toISOString();
   return {
@@ -37,7 +45,7 @@ export const createLyricsEntry = ({
     audioStartTime,
     audioEndTime,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 };
 
@@ -71,13 +79,13 @@ export const addLyrics = (artistId, lyricsData) => {
 
 export const updateLyrics = (artistId, lyricsId, updates) => {
   const lyrics = getLyrics(artistId);
-  const index = lyrics.findIndex(l => l.id === lyricsId);
+  const index = lyrics.findIndex((l) => l.id === lyricsId);
   if (index === -1) return null;
 
   lyrics[index] = {
     ...lyrics[index],
     ...updates,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 
   saveLyrics(artistId, lyrics);
@@ -86,7 +94,7 @@ export const updateLyrics = (artistId, lyricsId, updates) => {
 
 export const deleteLyrics = (artistId, lyricsId) => {
   const lyrics = getLyrics(artistId);
-  const filtered = lyrics.filter(l => l.id !== lyricsId);
+  const filtered = lyrics.filter((l) => l.id !== lyricsId);
   if (filtered.length === lyrics.length) return false;
 
   saveLyrics(artistId, filtered);
@@ -100,7 +108,7 @@ const migrateLyricsToFirestore = async (db, artistId, lyrics) => {
 
   try {
     const batch = writeBatch(db);
-    lyrics.forEach(lyric => {
+    lyrics.forEach((lyric) => {
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'lyrics', lyric.id);
       batch.set(docRef, { ...lyric, updatedAt: serverTimestamp() });
     });
@@ -124,7 +132,7 @@ export const subscribeToLyrics = (db, artistId, callback) => {
   return onSnapshot(
     q,
     (snapshot) => {
-      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       log('[Lyrics] Real-time update:', items.length, 'items');
 
       if (items.length === 0) {
@@ -143,7 +151,7 @@ export const subscribeToLyrics = (db, artistId, callback) => {
     (error) => {
       log.error('[Lyrics] Subscription error:', error);
       callback(getLyrics(artistId));
-    }
+    },
   );
 };
 
@@ -157,7 +165,7 @@ export const addLyricsAsync = async (db, artistId, lyricsData) => {
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'lyrics', newEntry.id);
       await setDoc(docRef, {
         ...newEntry,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       });
       log('[Lyrics] Saved to Firestore:', newEntry.id);
     } catch (error) {
@@ -176,7 +184,7 @@ export const updateLyricsAsync = async (db, artistId, lyricsId, updates) => {
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'lyrics', lyricsId);
       await updateDoc(docRef, {
         ...updates,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       });
       log('[Lyrics] Updated in Firestore:', lyricsId);
     } catch (error) {
