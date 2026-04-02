@@ -120,7 +120,9 @@ const AestheticHome = ({
   };
 
   const handleVideoUpload = (e) => {
-    const files = Array.from(e.target.files);
+    const files = Array.from(e.target.files).filter(
+      (f) => f.type.startsWith('video/') || f.name.match(/\.(mp4|mov|webm|avi|mkv|m4v)$/i),
+    );
     e.target.value = '';
     if (files.length > 0) {
       onUploadVideos(files);
@@ -131,6 +133,14 @@ const AestheticHome = ({
     const files = e.target.files;
     if (files.length > 0) {
       const file = files[0];
+      // Validate file type — Electron may not enforce accept attribute
+      if (
+        !file.type.startsWith('audio/') &&
+        !file.name.match(/\.(mp3|wav|m4a|aac|ogg|flac|aif|aiff|wma)$/i)
+      ) {
+        e.target.value = '';
+        return;
+      }
       const url = URL.createObjectURL(file);
       setPendingAudio({ file, url, name: file.name });
     }
@@ -173,7 +183,11 @@ const AestheticHome = ({
   const handleEditAudio = (audio) => setEditingAudio(audio);
 
   const handleImageUpload = (e, bank) => {
-    const files = Array.from(e.target.files);
+    const files = Array.from(e.target.files).filter(
+      (f) =>
+        f.type.startsWith('image/') ||
+        f.name.match(/\.(jpg|jpeg|png|gif|webp|heic|heif|tif|tiff|dng|svg|bmp)$/i),
+    );
     e.target.value = '';
     if (files.length > 0 && onUploadImages) {
       onUploadImages(files, bank);
@@ -517,7 +531,7 @@ const AestheticHome = ({
                         id="video-bank-input"
                         ref={videoInputRef}
                         type="file"
-                        accept="video/*"
+                        accept="video/*,.mp4,.mov,.webm,.avi,.mkv,.m4v"
                         multiple
                         onChange={handleVideoUpload}
                         style={{ display: 'none' }}

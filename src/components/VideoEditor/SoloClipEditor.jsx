@@ -76,6 +76,10 @@ import {
   makeFieldSetter,
 } from './shared/editorConstants';
 import CloseConfirmOverlay from './shared/CloseConfirmOverlay';
+import WordPreview from './shared/WordPreview';
+import InlineWordsRow from './shared/InlineWordsRow';
+import WordBoundaryLines from './shared/WordBoundaryLines';
+import useWordBoundaryDrag from './shared/useWordBoundaryDrag';
 
 /**
  * SoloClipEditor v2 — "Solo Clip" video editor mode
@@ -356,6 +360,9 @@ const SoloClipEditor = ({
   // ── Word Timeline state ──
   const [showWordTimeline, setShowWordTimeline] = useState(false);
   const [loadedBankLyricId, setLoadedBankLyricId] = useState(null);
+  const [selectedWordId, setSelectedWordId] = useState(null);
+  const [activeTimelineRow, setActiveTimelineRow] = useState('clip');
+  const [wordCutDrag, setWordCutDrag] = useState(null);
 
   // ── Lyrics state ──
   const [lyrics, setLyrics] = useState(() => {
@@ -807,6 +814,9 @@ const SoloClipEditor = ({
     }
   }, []);
 
+  // ── Word boundary drag hook ──
+  useWordBoundaryDrag(wordCutDrag, pxPerSec, setWords, setWordCutDrag);
+
   // ── Text overlay CRUD ──
   const getDefaultTextStyle = useCallback(
     () => ({
@@ -1108,6 +1118,8 @@ const SoloClipEditor = ({
       setCurrentTime(0);
       setEditingTextId(null);
       setEditingTextValue('');
+      setSelectedWordId(null);
+      setActiveTimelineRow('clip');
       setActiveVideoIndex(index);
     },
     [activeVideoIndex],
@@ -1431,6 +1443,18 @@ const SoloClipEditor = ({
   // Video text banks for left panel
   const { videoTextBank1, videoTextBank2 } = getVideoTextBanks();
 
+  // ── Current word for preview ──
+  const currentWord =
+    words.length > 0
+      ? words.find((w) => {
+          const s = w.startTime ?? w.start ?? 0;
+          return (
+            currentTime >= s &&
+            currentTime < s + (w.duration ?? ((w.end ?? 0) - (w.start ?? 0) || 0.5))
+          );
+        })
+      : null;
+
   // ── RENDER ──
   return (
     <EditorShell onBackdropClick={handleCloseRequest} isMobile={isMobile}>
@@ -1461,8 +1485,10 @@ const SoloClipEditor = ({
               className="flex items-center justify-center rounded-lg bg-[#1a1a1aff] border border-neutral-200 relative overflow-hidden"
               style={{ aspectRatio: '9/16', height: '50vh' }}
               onPointerDown={(e) => {
-                if (e.target === e.currentTarget || e.target.tagName === 'VIDEO')
+                if (e.target === e.currentTarget || e.target.tagName === 'VIDEO') {
                   setEditingTextId(null);
+                  setSelectedWordId(null);
+                }
               }}
             >
               {clip ? (
@@ -1520,6 +1546,7 @@ const SoloClipEditor = ({
                     onSelect={() => {
                       setEditingTextId(overlay.id);
                       setEditingTextValue(overlay.text);
+                      setSelectedWordId(null);
                     }}
                     position={overlay.position || { x: 50, y: 50, width: 80 }}
                     onPositionChange={(newPos) =>
@@ -1550,6 +1577,9 @@ const SoloClipEditor = ({
                     }
                   />
                 ))}
+
+              {/* Word preview overlay */}
+              <WordPreview currentWord={currentWord} textStyle={textStyle} />
             </div>
 
             {/* Reroll */}
@@ -1660,6 +1690,7 @@ const SoloClipEditor = ({
                       onClick={() => {
                         setEditingTextId(overlay.id);
                         setEditingTextValue(overlay.text);
+                        setSelectedWordId(null);
                       }}
                       className={`mb-1.5 p-2.5 rounded-lg cursor-pointer ${editingTextId === overlay.id ? 'bg-brand-600/10 border border-brand-600/30' : 'bg-neutral-100/50 border border-neutral-200'}`}
                     >
@@ -1919,8 +1950,29 @@ const SoloClipEditor = ({
                         <span className="text-caption font-caption text-neutral-400">Text</span>
                       </div>
                     )}
-                    <div style={{ height: '40px' }} className="flex items-center justify-end pr-1">
-                      <span className="text-caption font-caption text-neutral-400">Clip</span>
+                    {words.length > 0 && (
+                      <div
+                        style={{ height: '28px', cursor: 'pointer' }}
+                        className="flex items-center justify-end pr-1"
+                        onClick={() => setActiveTimelineRow('words')}
+                      >
+                        <span
+                          className={`text-caption font-caption ${activeTimelineRow === 'words' ? 'text-indigo-400 font-semibold' : 'text-neutral-400'}`}
+                        >
+                          Words
+                        </span>
+                      </div>
+                    )}
+                    <div
+                      style={{ height: '40px', cursor: 'pointer' }}
+                      className="flex items-center justify-end pr-1"
+                      onClick={() => setActiveTimelineRow('clip')}
+                    >
+                      <span
+                        className={`text-caption font-caption ${activeTimelineRow === 'clip' ? 'text-indigo-400 font-semibold' : 'text-neutral-400'}`}
+                      >
+                        Clip
+                      </span>
                     </div>
                     {hasAudioTrack && (
                       <div
@@ -2067,6 +2119,7 @@ const SoloClipEditor = ({
                                   onClick={() => {
                                     setEditingTextId(overlay.id);
                                     setEditingTextValue(overlay.text);
+                                    setSelectedWordId(null);
                                   }}
                                 >
                                   <span
@@ -2152,6 +2205,21 @@ const SoloClipEditor = ({
                             );
                           })}
                         </div>
+                      )}
+
+                      {/* Words row — inline word timeline */}
+                      {words.length > 0 && (
+                        <InlineWordsRow
+                          words={words}
+                          pxPerSec={pxPerSec}
+                          selectedWordId={selectedWordId}
+                          onWordClick={(wordId, wStart) => {
+                            handleSeek(wStart);
+                            setSelectedWordId(wordId);
+                            setEditingTextId(null);
+                            setActiveTimelineRow('words');
+                          }}
+                        />
                       )}
 
                       {/* Clip row — single clip spanning its duration */}
@@ -2257,6 +2325,30 @@ const SoloClipEditor = ({
                           </div>
                         )}
                       </div>
+
+                      {/* Word boundary lines — visible when words row is active */}
+                      {words.length > 0 && activeTimelineRow === 'words' && (
+                        <WordBoundaryLines
+                          words={words}
+                          pxPerSec={pxPerSec}
+                          onStartDrag={(e, type, wi) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            const word = words[wi];
+                            if (!word) return;
+                            const wStart = word.startTime ?? word.start ?? 0;
+                            const wDur =
+                              word.duration ?? ((word.end ?? 0) - (word.start ?? 0) || 0.5);
+                            setWordCutDrag({
+                              active: true,
+                              wordIndex: wi,
+                              boundaryType: type,
+                              startX: e.clientX,
+                              originalPos: type === 'end' ? wStart + wDur : wStart,
+                            });
+                          }}
+                        />
+                      )}
 
                       {/* Audio waveform row — continuous strip, height scales with volume */}
                       {hasAudioTrack &&
@@ -2796,13 +2888,18 @@ const SoloClipEditor = ({
                   const selOverlay = editingTextId
                     ? textOverlays.find((o) => o.id === editingTextId)
                     : null;
-                  const activeStyle = selOverlay?.style || getDefaultTextStyle();
-                  const disabled = !selOverlay;
+                  const isWordMode = !selOverlay && !!selectedWordId;
+                  const activeStyle =
+                    selOverlay?.style || (isWordMode ? textStyle : getDefaultTextStyle());
+                  const disabled = !selOverlay && !isWordMode;
                   const handleStyleChange = (updates) => {
-                    if (selOverlay)
+                    if (selOverlay) {
                       updateTextOverlay(selOverlay.id, {
                         style: { ...selOverlay.style, ...updates },
                       });
+                    } else if (isWordMode) {
+                      setTextStyle((prev) => ({ ...prev, ...updates }));
+                    }
                   };
                   const strokeInfo = activeStyle.textStroke
                     ? parseStroke(activeStyle.textStroke)
@@ -2813,14 +2910,19 @@ const SoloClipEditor = ({
                     >
                       {disabled && (
                         <div className="text-xs text-neutral-400 italic mb-3">
-                          Click text on preview to edit
+                          Click a word or text overlay to style it
+                        </div>
+                      )}
+                      {isWordMode && (
+                        <div className="text-xs text-indigo-400 italic mb-1">
+                          Styling lyrics words
                         </div>
                       )}
 
                       {/* Add + Delete buttons — always accessible */}
                       <div
                         className="flex gap-2"
-                        style={disabled ? { opacity: 1, pointerEvents: 'auto' } : {}}
+                        style={disabled || isWordMode ? { opacity: 1, pointerEvents: 'auto' } : {}}
                       >
                         <Button
                           variant="brand-secondary"
@@ -3077,6 +3179,7 @@ const SoloClipEditor = ({
                                 onClick={() => {
                                   setEditingTextId(overlay.id);
                                   setEditingTextValue(overlay.text);
+                                  setSelectedWordId(null);
                                 }}
                               >
                                 <span className="text-body font-body text-[#ffffffff] text-[12px] truncate flex-1">

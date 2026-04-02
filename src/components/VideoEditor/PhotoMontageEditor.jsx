@@ -88,6 +88,10 @@ import {
   makeFieldSetter,
 } from './shared/editorConstants';
 import CloseConfirmOverlay from './shared/CloseConfirmOverlay';
+import WordPreview from './shared/WordPreview';
+import InlineWordsRow from './shared/InlineWordsRow';
+import WordBoundaryLines from './shared/WordBoundaryLines';
+import useWordBoundaryDrag from './shared/useWordBoundaryDrag';
 
 /**
  * PhotoMontageEditor — Turn photos into a fast-paced video with transitions.
@@ -223,6 +227,9 @@ const PhotoMontageEditor = ({
   // ── Words extra state ──
   const [showWordTimeline, setShowWordTimeline] = useState(false);
   const [loadedBankLyricId, setLoadedBankLyricId] = useState(null);
+  const [selectedWordId, setSelectedWordId] = useState(null);
+  const [activeTimelineRow, setActiveTimelineRow] = useState('photos');
+  const [wordCutDrag, setWordCutDrag] = useState(null);
 
   // ── Beat detection ──
   const { beats, bpm, isAnalyzing: beatAnalyzing, analyzeAudio } = useBeatDetection();
@@ -355,6 +362,8 @@ const PhotoMontageEditor = ({
     (index) => {
       if (index === activeVideoIndex) return;
       setActiveVideoIndex(index);
+      setSelectedWordId(null);
+      setActiveTimelineRow('photos');
     },
     [activeVideoIndex],
   );
@@ -623,6 +632,9 @@ const PhotoMontageEditor = ({
     maxZoom: 3,
     basePixelsPerSecond: 40,
   });
+
+  // Word boundary drag (shared hook)
+  useWordBoundaryDrag(wordCutDrag, effectivePxPerSecHook, setWords, setWordCutDrag);
 
   // Refs for stable access inside playhead drag effect
   const selectedAudioRef = useRef(selectedAudio);
@@ -1586,6 +1598,18 @@ const PhotoMontageEditor = ({
 
   const bankLabel = useCallback((idx) => getBankLabel(idx), []);
 
+  // ── Current word (for inline preview) ──
+  const currentWord =
+    words.length > 0
+      ? words.find((w) => {
+          const s = w.startTime ?? w.start ?? 0;
+          return (
+            currentTime >= s &&
+            currentTime < s + (w.duration ?? ((w.end ?? 0) - (w.start ?? 0) || 0.5))
+          );
+        })
+      : null;
+
   // ── Render ──
   return (
     <EditorShell onBackdropClick={handleCloseRequest} isMobile={isMobile}>
@@ -1928,6 +1952,7 @@ const PhotoMontageEditor = ({
                       onSelect={() => {
                         setEditingTextId(overlay.id);
                         setEditingTextValue(overlay.text);
+                        setSelectedWordId(null);
                       }}
                       position={overlay.position || { x: 50, y: 50, width: 80 }}
                       onPositionChange={(newPos) =>
@@ -1960,6 +1985,9 @@ const PhotoMontageEditor = ({
                       }
                     />
                   ))}
+
+                {/* Inline word preview */}
+                <WordPreview currentWord={currentWord} textStyle={textStyle} />
 
                 {/* Photo counter */}
                 <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/60 text-white text-[11px] font-semibold">
@@ -2299,11 +2327,29 @@ const PhotoMontageEditor = ({
                           <span className="text-caption font-caption text-neutral-400">Text</span>
                         </div>
                       )}
+                      {words.length > 0 && (
+                        <div
+                          style={{ height: '28px', cursor: 'pointer' }}
+                          className="flex items-center justify-end pr-1"
+                          onClick={() => setActiveTimelineRow('words')}
+                        >
+                          <span
+                            className={`text-caption font-caption ${activeTimelineRow === 'words' ? 'text-indigo-400 font-semibold' : 'text-neutral-400'}`}
+                          >
+                            Words
+                          </span>
+                        </div>
+                      )}
                       <div
-                        style={{ height: '36px' }}
+                        style={{ height: '36px', cursor: 'pointer' }}
                         className="flex items-center justify-end pr-1"
+                        onClick={() => setActiveTimelineRow('photos')}
                       >
-                        <span className="text-caption font-caption text-neutral-400">Photos</span>
+                        <span
+                          className={`text-caption font-caption ${activeTimelineRow === 'photos' ? 'text-indigo-400 font-semibold' : 'text-neutral-400'}`}
+                        >
+                          Photos
+                        </span>
                       </div>
                       {hasAudioTrack && (
                         <div
@@ -2525,6 +2571,7 @@ const PhotoMontageEditor = ({
                                         setEditingTextId(overlay.id);
                                         setEditingTextValue(overlay.text);
                                         setSelectedTextIds(new Set());
+                                        setSelectedWordId(null);
                                       }
                                     }}
                                   >
@@ -2609,6 +2656,21 @@ const PhotoMontageEditor = ({
                               );
                             })}
                           </div>
+                        )}
+
+                        {/* Inline words row */}
+                        {words.length > 0 && (
+                          <InlineWordsRow
+                            words={words}
+                            pxPerSec={effectivePxPerSec}
+                            selectedWordId={selectedWordId}
+                            onWordClick={(wordId, wStart) => {
+                              handleSeek(wStart);
+                              setSelectedWordId(wordId);
+                              setEditingTextId(null);
+                              setActiveTimelineRow('words');
+                            }}
+                          />
                         )}
 
                         {/* Photo filmstrip row — expanded cycling cells */}
@@ -2729,7 +2791,8 @@ const PhotoMontageEditor = ({
                           })()}
 
                         {/* Unified cut lines — draggable to resize photo durations */}
-                        {photoDurations.length > 1 &&
+                        {activeTimelineRow === 'photos' &&
+                          photoDurations.length > 1 &&
                           (() => {
                             let cumDur = 0;
                             const boundaries = [];
@@ -2740,12 +2803,13 @@ const PhotoMontageEditor = ({
                               }
                             });
                             const canDrag = !beatSyncEnabled;
+                            const wordsRowH = words.length > 0 ? 28 : 0;
                             return boundaries.map(({ px, idx, cumDur: boundaryTime }) => (
                               <div
                                 key={`cut-${idx}`}
                                 style={{
                                   position: 'absolute',
-                                  top: '24px',
+                                  top: `${24 + (textOverlays.length > 0 ? Math.max(24, textOverlays.length * 24) : 0) + wordsRowH}px`,
                                   bottom: 0,
                                   left: `${px - 3}px`,
                                   width: '7px',
@@ -2812,6 +2876,30 @@ const PhotoMontageEditor = ({
                               </div>
                             ));
                           })()}
+
+                        {/* Word boundary lines */}
+                        {words.length > 0 && activeTimelineRow === 'words' && (
+                          <WordBoundaryLines
+                            words={words}
+                            pxPerSec={effectivePxPerSec}
+                            onStartDrag={(e, type, wi) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              const word = words[wi];
+                              if (!word) return;
+                              const wStart = word.startTime ?? word.start ?? 0;
+                              const wDur =
+                                word.duration ?? ((word.end ?? 0) - (word.start ?? 0) || 0.5);
+                              setWordCutDrag({
+                                active: true,
+                                wordIndex: wi,
+                                boundaryType: type,
+                                startX: e.clientX,
+                                originalPos: type === 'end' ? wStart + wDur : wStart,
+                              });
+                            }}
+                          />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -3238,13 +3326,16 @@ const PhotoMontageEditor = ({
                 const selOverlay = editingTextId
                   ? textOverlays.find((o) => o.id === editingTextId)
                   : null;
-                const activeStyle = selOverlay?.style || getDefaultTextStyle();
-                const disabled = !selOverlay;
+                const isWordMode = !selOverlay && !!selectedWordId;
+                const activeStyle =
+                  selOverlay?.style || (isWordMode ? textStyle : getDefaultTextStyle());
+                const disabled = !selOverlay && !isWordMode;
                 const handleStyleChange = (updates) => {
                   if (selOverlay)
                     updateTextOverlay(selOverlay.id, {
                       style: { ...selOverlay.style, ...updates },
                     });
+                  else if (isWordMode) setTextStyle((prev) => ({ ...prev, ...updates }));
                 };
                 const strokeInfo = activeStyle.textStroke
                   ? parseStroke(activeStyle.textStroke)
@@ -3255,21 +3346,28 @@ const PhotoMontageEditor = ({
                   >
                     {disabled && (
                       <div className="text-xs text-neutral-400 italic mb-3">
-                        Click text on preview to edit
+                        Click a word or text overlay to style it
+                      </div>
+                    )}
+                    {isWordMode && (
+                      <div className="text-xs text-indigo-400 italic mb-1">
+                        Styling lyrics words
                       </div>
                     )}
 
-                    {/* Add + Delete buttons — always accessible */}
+                    {/* Add + Delete buttons — always accessible (escape disabled when isWordMode) */}
                     <div
                       className="flex gap-2"
-                      style={disabled ? { opacity: 1, pointerEvents: 'auto' } : {}}
+                      style={disabled || isWordMode ? { opacity: 1, pointerEvents: 'auto' } : {}}
                     >
                       <Button
                         variant="brand-secondary"
                         size="small"
                         icon={<FeatherPlus />}
                         onClick={() => addTextOverlay()}
-                        style={{ opacity: 1, pointerEvents: 'auto' }}
+                        style={
+                          isWordMode ? { display: 'none' } : { opacity: 1, pointerEvents: 'auto' }
+                        }
                       >
                         Add Text
                       </Button>
@@ -3513,6 +3611,7 @@ const PhotoMontageEditor = ({
                               onClick={() => {
                                 setEditingTextId(overlay.id);
                                 setEditingTextValue(overlay.text);
+                                setSelectedWordId(null);
                               }}
                             >
                               <span className="text-body font-body text-[#ffffffff] text-[12px] truncate flex-1">

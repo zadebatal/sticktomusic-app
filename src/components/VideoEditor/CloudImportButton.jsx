@@ -240,8 +240,8 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
         }}
         title="Import from cloud"
       >
-        <span style={{ fontSize: compact ? '11px' : '13px' }}>&#9729;</span>
-        {!compact && <span>Cloud</span>}
+        {!compact && <span>GDrive / Dropbox</span>}
+        {compact && <span style={{ fontSize: '11px' }}>&#9729;</span>}
       </button>
       {showMenu && (
         <div

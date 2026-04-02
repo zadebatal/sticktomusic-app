@@ -153,7 +153,22 @@ export default async function handler(req, res) {
       return res.status(resp.status).json(data);
     }
 
-    return res.status(400).json({ error: 'Invalid action. Use: analyze, download, status' });
+    if (action === 'rip') {
+      if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+      const resp = await fetch(`${backendUrl}/api/rip`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? { 'X-API-Key': apiKey } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json();
+      return res.status(resp.status).json(data);
+    }
+
+    return res.status(400).json({ error: 'Invalid action. Use: analyze, download, rip, status' });
   } catch (error) {
     console.error('Web import proxy error:', error.message);
     return res.status(500).json({ error: 'Web import proxy error: ' + error.message });

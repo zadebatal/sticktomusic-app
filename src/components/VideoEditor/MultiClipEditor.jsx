@@ -76,6 +76,10 @@ import {
   makeFieldSetter,
 } from './shared/editorConstants';
 import CloseConfirmOverlay from './shared/CloseConfirmOverlay';
+import WordPreview from './shared/WordPreview';
+import InlineWordsRow from './shared/InlineWordsRow';
+import WordBoundaryLines from './shared/WordBoundaryLines';
+import useWordBoundaryDrag from './shared/useWordBoundaryDrag';
 
 /**
  * MultiClipEditor v1 — "Multi-Clip" video editor mode
@@ -393,6 +397,9 @@ const MultiClipEditor = ({
   const [lyricsBank, setLyricsBank] = useState([]);
   const [showLyricBankPicker, setShowLyricBankPicker] = useState(false);
   const [showWordTimeline, setShowWordTimeline] = useState(false);
+  const [selectedWordId, setSelectedWordId] = useState(null);
+  const [activeTimelineRow, setActiveTimelineRow] = useState('clips');
+  const [wordCutDrag, setWordCutDrag] = useState(null);
   const [loadedBankLyricId, setLoadedBankLyricId] = useState(null);
 
   // ── Audio trimmer state ──
@@ -612,6 +619,21 @@ const MultiClipEditor = ({
     maxZoom: 3,
     basePixelsPerSecond: 40,
   });
+
+  // Wire word boundary drag for inline words row
+  useWordBoundaryDrag(wordCutDrag, pxPerSec, setWords, setWordCutDrag);
+
+  // Compute current word for preview highlight
+  const currentWord =
+    words.length > 0
+      ? words.find((w) => {
+          const s = w.startTime ?? w.start ?? 0;
+          return (
+            currentTime >= s &&
+            currentTime < s + (w.duration ?? ((w.end ?? 0) - (w.start ?? 0) || 0.5))
+          );
+        })
+      : null;
 
   const playbackLoop = useCallback(() => {
     const startBoundary = selectedAudio?.startTime || 0;
@@ -1412,6 +1434,8 @@ const MultiClipEditor = ({
       setActiveClipIndex(0);
       setEditingTextId(null);
       setEditingTextValue('');
+      setSelectedWordId(null);
+      setActiveTimelineRow('clips');
       setActiveVideoIndex(index);
     },
     [activeVideoIndex],
@@ -1870,8 +1894,10 @@ const MultiClipEditor = ({
                   height: '50vh',
                 }}
                 onPointerDown={(e) => {
-                  if (e.target === e.currentTarget || e.target.tagName === 'VIDEO')
+                  if (e.target === e.currentTarget || e.target.tagName === 'VIDEO') {
                     setEditingTextId(null);
+                    setSelectedWordId(null);
+                  }
                 }}
               >
                 {currentClip ? (
@@ -1941,6 +1967,7 @@ const MultiClipEditor = ({
                       onSelect={() => {
                         setEditingTextId(overlay.id);
                         setEditingTextValue(overlay.text);
+                        setSelectedWordId(null);
                       }}
                       position={overlay.position || { x: 50, y: 50, width: 80 }}
                       onPositionChange={(newPos) =>
@@ -1971,6 +1998,9 @@ const MultiClipEditor = ({
                       }
                     />
                   ))}
+
+                {/* Word preview on video */}
+                <WordPreview currentWord={currentWord} textStyle={textStyle} />
               </div>
 
               {/* Reroll */}
@@ -2622,6 +2652,7 @@ const MultiClipEditor = ({
                             onClick={() => {
                               setEditingTextId(overlay.id);
                               setEditingTextValue(overlay.text);
+                              setSelectedWordId(null);
                             }}
                             className={`mx-0 mb-1.5 p-2.5 rounded-lg cursor-pointer transition-all ${isSelected ? 'bg-brand-600/10 border border-brand-600/30' : 'bg-neutral-100/50 border border-neutral-200'}`}
                           >
@@ -3078,11 +3109,29 @@ const MultiClipEditor = ({
                           <span className="text-caption font-caption text-neutral-400">Text</span>
                         </div>
                       )}
+                      {words.length > 0 && (
+                        <div
+                          style={{ height: '28px', cursor: 'pointer' }}
+                          className="flex items-center justify-end pr-1"
+                          onClick={() => setActiveTimelineRow('words')}
+                        >
+                          <span
+                            className={`text-caption font-caption ${activeTimelineRow === 'words' ? 'text-indigo-400 font-semibold' : 'text-neutral-400'}`}
+                          >
+                            Words
+                          </span>
+                        </div>
+                      )}
                       <div
-                        style={{ height: '48px' }}
+                        style={{ height: '48px', cursor: 'pointer' }}
                         className="flex items-center justify-end pr-1"
+                        onClick={() => setActiveTimelineRow('clips')}
                       >
-                        <span className="text-caption font-caption text-neutral-400">Clips</span>
+                        <span
+                          className={`text-caption font-caption ${activeTimelineRow === 'clips' ? 'text-indigo-400 font-semibold' : 'text-neutral-400'}`}
+                        >
+                          Clips
+                        </span>
                       </div>
                       {hasAudioTrack && (
                         <div
@@ -3244,6 +3293,7 @@ const MultiClipEditor = ({
                                     onClick={() => {
                                       setEditingTextId(overlay.id);
                                       setEditingTextValue(overlay.text);
+                                      setSelectedWordId(null);
                                     }}
                                   >
                                     <span
@@ -3329,6 +3379,21 @@ const MultiClipEditor = ({
                               );
                             })}
                           </div>
+                        )}
+
+                        {/* Inline words row */}
+                        {words.length > 0 && (
+                          <InlineWordsRow
+                            words={words}
+                            pxPerSec={pxPerSec}
+                            selectedWordId={selectedWordId}
+                            onWordClick={(wordId, wStart) => {
+                              handleSeek(wStart);
+                              setSelectedWordId(wordId);
+                              setEditingTextId(null);
+                              setActiveTimelineRow('words');
+                            }}
+                          />
                         )}
 
                         {/* Clips row — pixel-width blocks */}
@@ -3630,8 +3695,13 @@ const MultiClipEditor = ({
                           })()}
 
                         {/* Unified cut lines — span from clips row through all waveform rows */}
-                        {clips.length > 1 &&
+                        {activeTimelineRow === 'clips' &&
+                          clips.length > 1 &&
                           (() => {
+                            const cutLineTop =
+                              24 +
+                              (textOverlays.length > 0 ? textOverlays.length * 24 : 0) +
+                              (words.length > 0 ? 28 : 0);
                             let cumDur = 0;
                             const boundaries = [];
                             clips.forEach((clipItem, idx) => {
@@ -3645,7 +3715,7 @@ const MultiClipEditor = ({
                                 <div
                                   style={{
                                     position: 'absolute',
-                                    top: '24px',
+                                    top: `${cutLineTop}px`,
                                     bottom: 0,
                                     left: `${px}px`,
                                     width: '2px',
@@ -3657,7 +3727,7 @@ const MultiClipEditor = ({
                                 <div
                                   style={{
                                     position: 'absolute',
-                                    top: '24px',
+                                    top: `${cutLineTop}px`,
                                     bottom: 0,
                                     left: `${px - 6}px`,
                                     width: '12px',
@@ -3685,6 +3755,30 @@ const MultiClipEditor = ({
                               </div>
                             ));
                           })()}
+
+                        {/* Word boundary lines for inline words row */}
+                        {words.length > 0 && activeTimelineRow === 'words' && (
+                          <WordBoundaryLines
+                            words={words}
+                            pxPerSec={pxPerSec}
+                            onStartDrag={(e, type, wi) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              const word = words[wi];
+                              if (!word) return;
+                              const wStart = word.startTime ?? word.start ?? 0;
+                              const wDur =
+                                word.duration ?? ((word.end ?? 0) - (word.start ?? 0) || 0.5);
+                              setWordCutDrag({
+                                active: true,
+                                wordIndex: wi,
+                                boundaryType: type,
+                                startX: e.clientX,
+                                originalPos: type === 'end' ? wStart + wDur : wStart,
+                              });
+                            }}
+                          />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -4248,13 +4342,18 @@ const MultiClipEditor = ({
                 const selOverlay = editingTextId
                   ? textOverlays.find((o) => o.id === editingTextId)
                   : null;
-                const activeStyle = selOverlay?.style || getDefaultTextStyle();
-                const disabled = !selOverlay;
+                const isWordMode = !selOverlay && !!selectedWordId;
+                const activeStyle =
+                  selOverlay?.style || (isWordMode ? textStyle : getDefaultTextStyle());
+                const disabled = !selOverlay && !isWordMode;
                 const handleStyleChange = (updates) => {
-                  if (selOverlay)
+                  if (selOverlay) {
                     updateTextOverlay(selOverlay.id, {
                       style: { ...selOverlay.style, ...updates },
                     });
+                  } else if (isWordMode) {
+                    setTextStyle((prev) => ({ ...prev, ...updates }));
+                  }
                 };
                 const strokeInfo = activeStyle.textStroke
                   ? parseStroke(activeStyle.textStroke)
@@ -4265,14 +4364,19 @@ const MultiClipEditor = ({
                   >
                     {disabled && (
                       <div className="text-xs text-neutral-400 italic mb-3">
-                        Click text on preview to edit
+                        Click a word or text overlay to style it
+                      </div>
+                    )}
+                    {isWordMode && (
+                      <div className="text-xs text-indigo-400 italic mb-1">
+                        Styling lyrics words
                       </div>
                     )}
 
                     {/* Add + Delete buttons — always accessible */}
                     <div
                       className="flex gap-2"
-                      style={disabled ? { opacity: 1, pointerEvents: 'auto' } : {}}
+                      style={disabled || isWordMode ? { opacity: 1, pointerEvents: 'auto' } : {}}
                     >
                       <Button
                         variant="brand-secondary"
@@ -4523,6 +4627,7 @@ const MultiClipEditor = ({
                               onClick={() => {
                                 setEditingTextId(overlay.id);
                                 setEditingTextValue(overlay.text);
+                                setSelectedWordId(null);
                               }}
                             >
                               <span className="text-body font-body text-[#ffffffff] text-[12px] truncate flex-1">

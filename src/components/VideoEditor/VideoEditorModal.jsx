@@ -12,6 +12,10 @@ const PhotoMontageEditor = React.lazy(() => import('./PhotoMontageEditor'));
 const ClipperEditor = React.lazy(() => import('./ClipperEditor'));
 import AudioClipSelector from './AudioClipSelector';
 import CloudImportButton from './CloudImportButton';
+import WordPreview from './shared/WordPreview';
+import InlineWordsRow from './shared/InlineWordsRow';
+import WordBoundaryLines from './shared/WordBoundaryLines';
+import useWordBoundaryDrag from './shared/useWordBoundaryDrag';
 import useEditorHistory from '../../hooks/useEditorHistory';
 import useWaveform from '../../hooks/useWaveform';
 import { saveApiKey, loadApiKey } from '../../services/storageService';
@@ -497,41 +501,64 @@ const VideoEditorModal = ({
   const getTextBanks = useCallback(() => {
     let textBank1 = [],
       textBank2 = [];
+    const extractTexts = (bank) =>
+      (bank || []).map((e) => (typeof e === 'string' ? e : e?.text || '')).filter(Boolean);
     // Use niche text banks if available (single source of truth from niche)
     if (category?.nicheTextBanks) {
-      const extractTexts = (bank) =>
-        (bank || []).map((e) => (typeof e === 'string' ? e : e?.text || '')).filter(Boolean);
       if (category.nicheTextBanks[0]?.length > 0)
         textBank1 = [...extractTexts(category.nicheTextBanks[0])];
       if (category.nicheTextBanks[1]?.length > 0)
         textBank2 = [...extractTexts(category.nicheTextBanks[1])];
-    } else {
-      // Fallback: merge from collections when not opened from niche
-      sidebarCollections.forEach((col) => {
-        if (col.textBank1?.length) textBank1 = [...textBank1, ...col.textBank1];
-        if (col.textBank2?.length) textBank2 = [...textBank2, ...col.textBank2];
-      });
     }
+    // Also merge from collections (reads both legacy textBank1/2 AND migrated textBanks[] array)
+    sidebarCollections.forEach((col) => {
+      if (col.textBank1?.length) textBank1 = [...textBank1, ...col.textBank1];
+      if (col.textBank2?.length) textBank2 = [...textBank2, ...col.textBank2];
+      // Read from migrated textBanks[] array (what addToTextBank writes to)
+      if (col.textBanks?.length > 0) {
+        if (col.textBanks[0]?.length) textBank1 = [...textBank1, ...extractTexts(col.textBanks[0])];
+        if (col.textBanks[1]?.length) textBank2 = [...textBank2, ...extractTexts(col.textBanks[1])];
+      }
+    });
+    // Deduplicate
+    textBank1 = [...new Set(textBank1)];
+    textBank2 = [...new Set(textBank2)];
     return { textBank1, textBank2 };
   }, [sidebarCollections, category?.nicheTextBanks]);
 
   const handleAddToTextBank = useCallback(
     (bankNum, text) => {
-      if (!text.trim() || !artistId || sidebarCollections.length === 0) return;
-      const targetCol = sidebarCollections[0];
-      addToTextBank(artistId, targetCol.id, bankNum, text.trim(), db);
-      setSidebarCollections((prev) =>
-        prev.map((col) =>
-          col.id === targetCol.id
-            ? {
-                ...col,
-                [`textBank${bankNum}`]: [...(col[`textBank${bankNum}`] || []), text.trim()],
-              }
-            : col,
-        ),
-      );
+      if (!text.trim() || !artistId) return false;
+      // Find target collection: try niche first (category.id), then sidebar collections
+      const colFromCategory = category?.id
+        ? sidebarCollections.find((c) => c.id === category.id)
+        : null;
+      const targetCol = colFromCategory || sidebarCollections[0];
+      const targetColId = targetCol?.id || category?.id;
+      if (!targetColId) return false;
+      addToTextBank(artistId, targetColId, bankNum, text.trim(), db);
+      // Update local state so UI refreshes immediately
+      // addToTextBank writes to textBanks[bankNum], so update that in local state
+      setSidebarCollections((prev) => {
+        const exists = prev.some((c) => c.id === targetColId);
+        if (exists) {
+          return prev.map((col) => {
+            if (col.id !== targetColId) return col;
+            const textBanks = [...(col.textBanks || [])];
+            while (textBanks.length <= bankNum) textBanks.push([]);
+            textBanks[bankNum] = [...(textBanks[bankNum] || []), text.trim()];
+            return { ...col, textBanks };
+          });
+        }
+        // Collection not in sidebar yet — add a minimal entry so getTextBanks picks it up
+        const textBanks = [];
+        while (textBanks.length <= bankNum) textBanks.push([]);
+        textBanks[bankNum] = [text.trim()];
+        return [...prev, { id: targetColId, textBanks }];
+      });
+      return true;
     },
-    [artistId, sidebarCollections],
+    [artistId, sidebarCollections, category?.id],
   );
 
   // Text state (lyrics/words derived from allVideos above)
@@ -568,11 +595,14 @@ const VideoEditorModal = ({
 
   // Cut line drag state (draggable boundaries between clips on waveform tracks)
   const [cutLineDrag, setCutLineDrag] = useState(null); // { active, clipIndex, startX, originalStartTime, originalPrevDuration }
+  // Word cut line drag state (draggable boundaries between words)
+  const [wordCutDrag, setWordCutDrag] = useState(null); // { active, wordIndex, startX, originalPrevEnd, originalCurrStart }
 
   // AI Transcription state
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptionStep, setTranscriptionStep] = useState('');
   const [transcriptionError, setTranscriptionError] = useState(null);
 
   // Video loading state
@@ -730,13 +760,19 @@ const VideoEditorModal = ({
     return isBlobUrl ? clip.url : localUrl || clip.url;
   }, []);
 
-  // Get current clip based on currentTime
-  const currentClip =
-    clips.find((clip, i) => {
-      const nextClip = clips[i + 1];
-      if (!nextClip) return true; // Last clip
-      return currentTime >= clip.startTime && currentTime < nextClip.startTime;
-    }) || clips[0];
+  // Get current clip based on currentTime using cumulative durations (matches timeline visual layout)
+  // Returns null if playhead is past all clips
+  const currentClip = useMemo(() => {
+    if (!clips.length) return null;
+    let cumTime = 0;
+    for (let i = 0; i < clips.length; i++) {
+      const clipEnd = cumTime + (clips[i].duration || 1);
+      if (currentTime >= cumTime && currentTime < clipEnd) return clips[i];
+      cumTime = clipEnd;
+    }
+    // Past all clips — show nothing
+    return null;
+  }, [clips, currentTime]);
 
   // Get audio trim boundaries (if trimmed) or full duration
   const audioStartTime = selectedAudio?.startTime || 0;
@@ -959,11 +995,9 @@ const VideoEditorModal = ({
       (audioRef.current?.duration > 0 ? audioRef.current.duration : 0) ||
       duration;
     const effectiveDuration = endBoundary - startBoundary;
-    // Loop at the shorter of audio duration and total clip duration (don't play into empty space)
+    // Loop at audio duration if available, else at total clip duration
     const loopEnd =
-      totalClipDuration > 0
-        ? Math.min(effectiveDuration > 0 ? effectiveDuration : Infinity, totalClipDuration)
-        : effectiveDuration;
+      effectiveDuration > 0 ? effectiveDuration : totalClipDuration > 0 ? totalClipDuration : 0;
 
     // Update ref to avoid stale closure
     isPlayingRef.current = isPlaying;
@@ -1041,15 +1075,33 @@ const VideoEditorModal = ({
   // Sync video with audio time (use active video element)
   useEffect(() => {
     const activeVideo = activeVideoRef.current === 'A' ? videoRef.current : videoRefB.current;
+    // Hide video when playhead is past all clips
+    if (!currentClip) {
+      if (videoRef.current) videoRef.current.style.opacity = '0';
+      if (videoRefB.current) videoRefB.current.style.opacity = '0';
+      if (activeVideo && !activeVideo.paused) activeVideo.pause();
+      return;
+    }
+    // Restore video visibility when clip is active
+    const activeEl = activeVideoRef.current === 'A' ? videoRef.current : videoRefB.current;
+    const inactiveEl = activeVideoRef.current === 'A' ? videoRefB.current : videoRef.current;
+    if (activeEl) activeEl.style.opacity = '1';
+    if (inactiveEl) inactiveEl.style.opacity = '0';
     if (activeVideo && currentClip?.url) {
-      // Calculate position within the clip (respects slip editing sourceOffset)
-      const clipStartTime = currentClip.startTime || 0;
+      // Calculate clip start from cumulative durations (matches timeline visual layout)
+      let clipStartTime = 0;
+      for (let i = 0; i < clips.length; i++) {
+        if (clips[i].id === currentClip.id) break;
+        clipStartTime += clips[i].duration || 1;
+      }
       const clipDuration = currentClip.duration || 2;
       const sourceOffset = currentClip.sourceOffset || 0;
-      const positionInClip = sourceOffset + ((currentTime - clipStartTime) % clipDuration);
+      const timeInClip = Math.max(0, currentTime - clipStartTime);
+      const positionInClip = sourceOffset + (timeInClip % clipDuration);
 
-      // Set video time if significantly different
-      if (Math.abs(activeVideo.currentTime - positionInClip) > 0.3) {
+      // Set video time if significantly different (lower threshold during slip for responsive preview)
+      const seekThreshold = slipEdit?.active ? 0.05 : 0.3;
+      if (Math.abs(activeVideo.currentTime - positionInClip) > seekThreshold) {
         activeVideo.currentTime = positionInClip;
       }
 
@@ -1060,7 +1112,7 @@ const VideoEditorModal = ({
         activeVideo.pause();
       }
     }
-  }, [currentClip, currentTime, isPlaying]);
+  }, [currentClip, currentTime, isPlaying, clips, slipEdit?.active]);
 
   // Handlers - MUST be defined before useEffect that references them (TDZ fix)
   const handleSeek = useCallback(
@@ -1293,13 +1345,30 @@ const VideoEditorModal = ({
   useUnsavedChanges(hasUnsavedWork);
 
   // Handle close with confirmation if there's unsaved work
+  // Ignore backdrop clicks during any active drag operation
   const handleCloseRequest = useCallback(() => {
+    if (
+      slipEdit?.active ||
+      clipResize?.active ||
+      cutLineDrag?.active ||
+      wordCutDrag?.active ||
+      playheadDragging
+    )
+      return;
     if (hasUnsavedWork) {
       setShowCloseConfirm(true);
     } else {
       onClose();
     }
-  }, [hasUnsavedWork, onClose]);
+  }, [
+    hasUnsavedWork,
+    onClose,
+    slipEdit?.active,
+    clipResize?.active,
+    cutLineDrag?.active,
+    wordCutDrag?.active,
+    playheadDragging,
+  ]);
 
   const handleConfirmClose = useCallback(() => {
     setShowCloseConfirm(false);
@@ -1424,6 +1493,22 @@ const VideoEditorModal = ({
         e.preventDefault();
         handleToggleMute();
       }
+      // Delete/Backspace to remove selected text overlay or selected clips
+      if (
+        (e.code === 'Delete' || e.code === 'Backspace') &&
+        e.target.tagName !== 'INPUT' &&
+        e.target.tagName !== 'TEXTAREA'
+      ) {
+        e.preventDefault();
+        if (editingTextId) {
+          removeTextOverlay(editingTextId);
+        } else if (selectedClips.length > 0) {
+          // Remove selected clips
+          setClips((prev) => prev.filter((_, i) => !selectedClips.includes(i)));
+          setSelectedClips([]);
+        }
+        return;
+      }
       // Cmd+S / Ctrl+S to save
       if ((e.metaKey || e.ctrlKey) && e.code === 'KeyS') {
         e.preventDefault();
@@ -1441,6 +1526,9 @@ const VideoEditorModal = ({
     handleCloseRequest,
     currentTime,
     duration,
+    editingTextId,
+    removeTextOverlay,
+    selectedClips,
   ]);
 
   // Prevent background scroll when modal is open (P0-UI-04)
@@ -1807,6 +1895,15 @@ const VideoEditorModal = ({
   const handleAudioUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Validate file type — Electron may not enforce accept attribute
+    if (
+      !file.type.startsWith('audio/') &&
+      !file.name.match(/\.(mp3|wav|m4a|aac|ogg|flac|aif|aiff|wma)$/i)
+    ) {
+      toast.error('Please select an audio file (mp3, wav, m4a, etc.)');
+      if (audioFileInputRef.current) audioFileInputRef.current.value = '';
+      return;
+    }
     const localUrl = URL.createObjectURL(file);
     const uploadedAudio = {
       id: `upload_${Date.now()}`,
@@ -2008,7 +2105,16 @@ const VideoEditorModal = ({
     setClips((prev) =>
       prev.map((clip, i) => {
         if (!indicesToReroll.includes(i) || clip.locked) return clip;
-        const randomClip = availableClips[Math.floor(Math.random() * availableClips.length)];
+        // Exclude current source from pool so reroll always picks a different clip
+        const pool = availableClips.filter((c) => c.id !== clip.sourceId);
+        const randomClip =
+          pool.length > 0
+            ? pool[Math.floor(Math.random() * pool.length)]
+            : availableClips[Math.floor(Math.random() * availableClips.length)];
+        // Pick a random sourceOffset within the source video
+        const sourceDuration = randomClip.duration || randomClip.videoDuration || 10;
+        const maxOffset = Math.max(0, sourceDuration - (clip.duration || 0.5));
+        const randomOffset = maxOffset > 0 ? Math.random() * maxOffset : 0;
         return {
           ...clip,
           // Preserve timeline position and trim
@@ -2020,10 +2126,12 @@ const VideoEditorModal = ({
           url: randomClip.url,
           localUrl: randomClip.localUrl,
           thumbnail: randomClip.thumbnailUrl || randomClip.thumbnail,
-          sourceOffset: 0,
+          sourceOffset: randomOffset,
         };
       }),
     );
+    // Force video swap effect to re-detect the change
+    lastClipIdRef.current = null;
     toast.success(`Rerolled ${rerollCount} clip${rerollCount !== 1 ? 's' : ''}`);
   }, [
     editingTextId,
@@ -2325,11 +2433,15 @@ const VideoEditorModal = ({
     };
 
     document.addEventListener('mousemove', handleResizeMove);
+    document.addEventListener('pointermove', handleResizeMove);
     document.addEventListener('mouseup', handleResizeEnd);
+    document.addEventListener('pointerup', handleResizeEnd);
     document.addEventListener('pointercancel', handleResizeEnd);
     return () => {
       document.removeEventListener('mousemove', handleResizeMove);
+      document.removeEventListener('pointermove', handleResizeMove);
       document.removeEventListener('mouseup', handleResizeEnd);
+      document.removeEventListener('pointerup', handleResizeEnd);
       document.removeEventListener('pointercancel', handleResizeEnd);
     };
   }, [clipResize, handleUpdateClipDuration, timelineScale]);
@@ -2372,17 +2484,31 @@ const VideoEditorModal = ({
 
     document.body.style.cursor = 'col-resize';
     document.addEventListener('mousemove', handleCutLineMove);
+    document.addEventListener('pointermove', handleCutLineMove);
     document.addEventListener('mouseup', handleCutLineUp);
+    document.addEventListener('pointerup', handleCutLineUp);
     document.addEventListener('pointercancel', handleCutLineUp);
     return () => {
       document.removeEventListener('mousemove', handleCutLineMove);
+      document.removeEventListener('pointermove', handleCutLineMove);
       document.removeEventListener('mouseup', handleCutLineUp);
+      document.removeEventListener('pointerup', handleCutLineUp);
       document.removeEventListener('pointercancel', handleCutLineUp);
       document.body.style.cursor = '';
     };
   }, [cutLineDrag, timelineScale, setClips]);
 
-  // Slip edit handler — click-hold + drag to shift sourceOffset within fixed clip boundary
+  // Word cut line drag — adjust word boundary (handles gaps between words)
+  const pxPerSecForWordDrag = 40 * timelineScale;
+  useWordBoundaryDrag(wordCutDrag, pxPerSecForWordDrag, setWords, setWordCutDrag);
+
+  // Slip edit handler — drag on slip bar to shift sourceOffset within fixed clip boundary
+  // Uses refs to avoid re-running effect on every clips change (which would tear down listeners)
+  const clipsRef = useRef(clips);
+  clipsRef.current = clips;
+  const getClipUrlRef = useRef(getClipUrl);
+  getClipUrlRef.current = getClipUrl;
+
   useEffect(() => {
     if (!slipEdit?.active) return;
 
@@ -2397,13 +2523,21 @@ const VideoEditorModal = ({
         updated[slipEdit.clipIndex] = { ...updated[slipEdit.clipIndex], sourceOffset: newOffset };
         return updated;
       });
+      // Seek video preview to the new sourceOffset for real-time feedback
+      const activeVideo = activeVideoRef.current === 'A' ? videoRef.current : videoRefB.current;
+      if (activeVideo) {
+        // Pause during slip so seek frames are visible
+        if (!activeVideo.paused) activeVideo.pause();
+        activeVideo.currentTime = newOffset;
+      }
     };
 
     const handleSlipUp = () => {
-      // Capture new thumbnail at the updated sourceOffset
-      const clip = clips[slipEdit.clipIndex];
+      // Capture new thumbnail at the updated sourceOffset (read from ref for latest state)
+      const currentClips = clipsRef.current;
+      const clip = currentClips[slipEdit.clipIndex];
       if (clip) {
-        const url = getClipUrl(clip);
+        const url = getClipUrlRef.current(clip);
         const cachedBlob = videoCache.current.get(url);
         const videoSrc = cachedBlob || url;
         if (videoSrc) {
@@ -2452,42 +2586,26 @@ const VideoEditorModal = ({
 
     document.body.style.cursor = 'ew-resize';
     document.addEventListener('mousemove', handleSlipMove);
+    document.addEventListener('pointermove', handleSlipMove);
     document.addEventListener('mouseup', handleSlipUp);
     document.addEventListener('pointerup', handleSlipUp);
     document.addEventListener('pointercancel', handleSlipUp);
     return () => {
       document.removeEventListener('mousemove', handleSlipMove);
+      document.removeEventListener('pointermove', handleSlipMove);
       document.removeEventListener('mouseup', handleSlipUp);
       document.removeEventListener('pointerup', handleSlipUp);
       document.removeEventListener('pointercancel', handleSlipUp);
       document.body.style.cursor = '';
     };
-  }, [slipEdit, timelineScale, setClips, clips, getClipUrl]);
+  }, [slipEdit, timelineScale, setClips]);
 
-  // Slip edit: pointer down on clip (starts 200ms timer, promotes to slip on hold)
-  const handleClipPointerDown = useCallback(
-    (e, index) => {
-      if (clips[index]?.locked) return;
-      const startX = e.clientX;
-      slipTimerRef.current = setTimeout(() => {
-        setSlipEdit({
-          active: true,
-          clipIndex: index,
-          startX,
-          originalOffset: clips[index]?.sourceOffset || 0,
-        });
-      }, 200);
-    },
-    [clips],
-  );
-
+  // Pointer up on clip cell — clears timer and resets cursor (slip cleanup handled by document listener)
   const handleClipPointerUp = useCallback(() => {
     if (slipTimerRef.current) {
       clearTimeout(slipTimerRef.current);
       slipTimerRef.current = null;
     }
-    // Always clear any active slip edit on pointer release
-    setSlipEdit(null);
     document.body.style.cursor = '';
   }, []);
 
@@ -2580,6 +2698,7 @@ const VideoEditorModal = ({
     }
 
     setIsTranscribing(true);
+    setTranscriptionStep('Preparing audio...');
     setTranscriptionError(null);
 
     try {
@@ -2693,6 +2812,7 @@ const VideoEditorModal = ({
       }
 
       // Send to server proxy (keeps API key server-side)
+      setTranscriptionStep('Sending to AI...');
       log('Whisper: Sending to server proxy for transcription...');
       const formData = new FormData();
       formData.append('file', wavBlob, 'audio.wav');
@@ -2719,6 +2839,7 @@ const VideoEditorModal = ({
       }
 
       const result = await whisperResponse.json();
+      setTranscriptionStep('Processing words...');
       log('Whisper: Transcription complete', result);
 
       // Process words from Whisper response
@@ -2759,6 +2880,7 @@ const VideoEditorModal = ({
       setTranscriptionError(error.message);
     } finally {
       setIsTranscribing(false);
+      setTranscriptionStep('');
     }
   }, [selectedAudio, duration, toast]);
 
@@ -3005,10 +3127,9 @@ const VideoEditorModal = ({
               category?.videos?.[0]?.url ||
               category?.videos?.[0]?.localUrl ? (
                 <>
-                  {/* Primary video element (A) */}
+                  {/* Primary video element (A) — src managed imperatively by clip swap useEffect */}
                   <video
                     ref={videoRef}
-                    src={getClipUrl(currentClip) || getClipUrl(category?.videos?.[0])}
                     style={{
                       width: '100%',
                       height: '100%',
@@ -3222,48 +3343,7 @@ const VideoEditorModal = ({
               ))}
 
               {/* Active word from lyrics — centered, fully styled */}
-              {currentWord &&
-                (() => {
-                  const scaledFontSize = Math.round((textStyle.fontSize || 48) * 0.35);
-                  const wordTextTransform =
-                    textStyle.textCase === 'upper'
-                      ? 'uppercase'
-                      : textStyle.textCase === 'lower'
-                        ? 'lowercase'
-                        : 'none';
-                  const wordTextShadow = textStyle.outline
-                    ? `0 0 4px ${textStyle.outlineColor || '#000'}, 1px 1px 2px ${textStyle.outlineColor || '#000'}, -1px -1px 2px ${textStyle.outlineColor || '#000'}`
-                    : 'none';
-                  return (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        width: '80%',
-                        textAlign: textStyle.textAlign || 'center',
-                        pointerEvents: 'none',
-                        zIndex: 7,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: scaledFontSize,
-                          fontFamily: textStyle.fontFamily || 'sans-serif',
-                          fontWeight: textStyle.fontWeight || '600',
-                          color: textStyle.color || '#ffffff',
-                          textTransform: wordTextTransform,
-                          textShadow: wordTextShadow,
-                          WebkitTextStroke: textStyle.textStroke || 'unset',
-                          userSelect: 'none',
-                        }}
-                      >
-                        {currentWord.text}
-                      </span>
-                    </div>
-                  );
-                })()}
+              <WordPreview currentWord={currentWord} textStyle={textStyle} />
 
               {/* Crop Overlay */}
               {cropMode === '4:3' && (
@@ -3942,74 +4022,17 @@ const VideoEditorModal = ({
 
                       {/* Words row — absolute positioning based on word timing */}
                       {words.length > 0 && (
-                        <div
-                          style={{
-                            height: '28px',
-                            position: 'relative',
-                            minWidth: '100%',
-                            borderBottom: '1px solid #222',
+                        <InlineWordsRow
+                          words={words}
+                          pxPerSec={pxPerSec}
+                          selectedWordId={selectedWordId}
+                          onWordClick={(wordId, wStart) => {
+                            handleSeek(wStart);
+                            setSelectedWordId(wordId);
+                            setEditingTextId(null);
+                            setActiveTimelineRow('words');
                           }}
-                        >
-                          {words.map((word, wi) => {
-                            const wDur =
-                              word.duration ?? ((word.end ?? 0) - (word.start ?? 0) || 0.5);
-                            const wWidth = Math.max(40, wDur * pxPerSec);
-                            const wStart = word.startTime ?? word.start ?? 0;
-                            const wordId = word.id || `w_${wi}`;
-                            const isSelected = selectedWordId === wordId;
-                            return (
-                              <div
-                                key={wordId}
-                                style={{
-                                  position: 'absolute',
-                                  left: `${wStart * pxPerSec}px`,
-                                  width: `${wWidth}px`,
-                                  height: '100%',
-                                  backgroundColor: isSelected
-                                    ? 'rgba(99,102,241,0.25)'
-                                    : 'rgba(16,185,129,0.15)',
-                                  border: isSelected
-                                    ? '2px solid #a5b4fc'
-                                    : '1px solid rgba(0,0,0,0.3)',
-                                  boxShadow: isSelected
-                                    ? '0 0 0 1px rgba(129, 140, 248, 0.6), 0 0 8px rgba(99, 102, 241, 0.4)'
-                                    : 'none',
-                                  overflow: 'hidden',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: 'pointer',
-                                  zIndex: isSelected ? 5 : 1,
-                                  borderRadius: '3px',
-                                  boxSizing: 'border-box',
-                                }}
-                                title={word.text}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSeek(wStart);
-                                  setSelectedWordId(wordId);
-                                  setEditingTextId(null);
-                                  setActiveTimelineRow('words');
-                                }}
-                              >
-                                <span
-                                  style={{
-                                    fontSize: '9px',
-                                    color: isSelected ? '#c7d2fe' : '#a1a1aa',
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    userSelect: 'none',
-                                    padding: '0 2px',
-                                    fontWeight: isSelected ? 600 : 400,
-                                  }}
-                                >
-                                  {word.text}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
+                        />
                       )}
 
                       {/* Clips row — always spans full timelinePx so empty area is visible */}
@@ -4021,7 +4044,7 @@ const VideoEditorModal = ({
                         ) : (
                           <div className="flex" style={{ height: '100%', minWidth: '100%' }}>
                             {clips.map((clip, index) => {
-                              const clipWidth = Math.max(50, (clip.duration || 1) * pxPerSec);
+                              const clipWidth = Math.max(4, (clip.duration || 1) * pxPerSec);
                               const thumbWidth = Math.min(68, clipWidth - 2);
                               return (
                                 <div
@@ -4040,7 +4063,6 @@ const VideoEditorModal = ({
                                     handleClipDragOver(index);
                                   }}
                                   onDragEnd={handleClipDragEnd}
-                                  onPointerDown={(e) => handleClipPointerDown(e, index)}
                                   onPointerUp={handleClipPointerUp}
                                   onPointerLeave={handleClipPointerUp}
                                   style={{
@@ -4052,7 +4074,7 @@ const VideoEditorModal = ({
                                     flexShrink: 0,
                                     boxSizing: 'border-box',
                                     width: `${clipWidth}px`,
-                                    minWidth: '50px',
+                                    minWidth: '4px',
                                     display: 'flex',
                                     flexDirection: 'row',
                                     border:
@@ -4104,6 +4126,48 @@ const VideoEditorModal = ({
                                         borderRadius: '4px 4px 0 0',
                                       }}
                                     />
+                                  )}
+                                  {/* Slip edit bar — drag to shift source offset */}
+                                  {!clip.locked && (
+                                    <div
+                                      onPointerDown={(e) => {
+                                        e.stopPropagation();
+                                        e.preventDefault();
+                                        setSlipEdit({
+                                          active: true,
+                                          clipIndex: index,
+                                          startX: e.clientX,
+                                          originalOffset: clip.sourceOffset || 0,
+                                        });
+                                      }}
+                                      style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        right: 0,
+                                        height: '8px',
+                                        background:
+                                          slipEdit?.active && slipEdit.clipIndex === index
+                                            ? 'linear-gradient(90deg, #f59e0b, #fbbf24)'
+                                            : 'linear-gradient(90deg, rgba(245,158,11,0.2), rgba(245,158,11,0.4))',
+                                        cursor: 'ew-resize',
+                                        zIndex: 6,
+                                        borderRadius: '4px 4px 0 0',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                      }}
+                                      title="Drag to shift source offset"
+                                    >
+                                      <div
+                                        style={{
+                                          width: 16,
+                                          height: 2,
+                                          background: 'rgba(255,255,255,0.5)',
+                                          borderRadius: 1,
+                                        }}
+                                      />
+                                    </div>
                                   )}
                                   {/* Thumbnail area */}
                                   <div
@@ -4318,7 +4382,7 @@ const VideoEditorModal = ({
                               }}
                             >
                               {clips.map((clip, idx) => {
-                                const segWidth = Math.max(50, (clip.duration || 1) * pxPerSec);
+                                const segWidth = Math.max(4, (clip.duration || 1) * pxPerSec);
                                 const bars = perClipSourceWaveforms[idx] || [];
                                 return (
                                   <div
@@ -4372,7 +4436,7 @@ const VideoEditorModal = ({
                           let cumPx = 0;
                           const boundaries = [];
                           clips.forEach((clip, idx) => {
-                            cumPx += Math.max(50, (clip.duration || 1) * pxPerSec);
+                            cumPx += Math.max(4, (clip.duration || 1) * pxPerSec);
                             if (idx < clips.length - 1) {
                               boundaries.push({ px: cumPx, idx });
                             }
@@ -4426,32 +4490,29 @@ const VideoEditorModal = ({
                           ));
                         })()}
 
-                      {/* Word boundary cut lines — only visible when words row is active */}
-                      {words.length > 1 &&
-                        activeTimelineRow === 'words' &&
-                        (() => {
-                          const wordBoundaries = [];
-                          words.forEach((word, wi) => {
-                            if (wi === 0) return;
+                      {/* Word boundary cut lines — at start AND end of each word, draggable */}
+                      {words.length > 0 && activeTimelineRow === 'words' && (
+                        <WordBoundaryLines
+                          words={words}
+                          pxPerSec={pxPerSec}
+                          onStartDrag={(e, type, wi) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            const word = words[wi];
+                            if (!word) return;
                             const wStart = word.startTime ?? word.start ?? 0;
-                            wordBoundaries.push({ px: wStart * pxPerSec, wi });
-                          });
-                          return wordBoundaries.map(({ px, wi }) => (
-                            <div
-                              key={`wcut-${wi}`}
-                              style={{
-                                position: 'absolute',
-                                top: '24px',
-                                bottom: 0,
-                                left: `${px}px`,
-                                width: '2px',
-                                backgroundColor: 'rgba(165,180,252,0.5)',
-                                zIndex: 12,
-                                pointerEvents: 'none',
-                              }}
-                            />
-                          ));
-                        })()}
+                            const wDur =
+                              word.duration ?? ((word.end ?? 0) - (word.start ?? 0) || 0.5);
+                            setWordCutDrag({
+                              active: true,
+                              wordIndex: wi,
+                              boundaryType: type,
+                              startX: e.clientX,
+                              originalPos: type === 'end' ? wStart + wDur : wStart,
+                            });
+                          }}
+                        />
+                      )}
                     </div>
                     {/* inner content wrapper */}
                   </div>
@@ -4904,8 +4965,7 @@ const VideoEditorModal = ({
                               onChange={(e) => setNewTextA(e.target.value)}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' && newTextA.trim()) {
-                                  handleAddToTextBank(1, newTextA);
-                                  setNewTextA('');
+                                  if (handleAddToTextBank(1, newTextA)) setNewTextA('');
                                 }
                               }}
                               placeholder="Add text..."
@@ -4917,8 +4977,7 @@ const VideoEditorModal = ({
                               icon={<FeatherPlus />}
                               onClick={() => {
                                 if (newTextA.trim()) {
-                                  handleAddToTextBank(1, newTextA);
-                                  setNewTextA('');
+                                  if (handleAddToTextBank(1, newTextA)) setNewTextA('');
                                 }
                               }}
                               aria-label="Add to Text Bank A"
@@ -4950,8 +5009,7 @@ const VideoEditorModal = ({
                               onChange={(e) => setNewTextB(e.target.value)}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' && newTextB.trim()) {
-                                  handleAddToTextBank(2, newTextB);
-                                  setNewTextB('');
+                                  if (handleAddToTextBank(2, newTextB)) setNewTextB('');
                                 }
                               }}
                               placeholder="Add text..."
@@ -4963,8 +5021,7 @@ const VideoEditorModal = ({
                               icon={<FeatherPlus />}
                               onClick={() => {
                                 if (newTextB.trim()) {
-                                  handleAddToTextBank(2, newTextB);
-                                  setNewTextB('');
+                                  if (handleAddToTextBank(2, newTextB)) setNewTextB('');
                                 }
                               }}
                               aria-label="Add to Text Bank B"
@@ -5359,11 +5416,70 @@ const VideoEditorModal = ({
         )}
       </div>
 
+      {/* Transcription progress overlay */}
+      {isTranscribing && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              background: '#1e1e2e',
+              borderRadius: 16,
+              padding: '40px 48px',
+              textAlign: 'center',
+              maxWidth: 400,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                border: '3px solid rgba(139, 92, 246, 0.3)',
+                borderTopColor: '#8b5cf6',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+                margin: '0 auto 20px',
+              }}
+            />
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            <div style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 8 }}>
+              Transcribing Audio
+            </div>
+            <div style={{ fontSize: 14, color: '#a0a0b8', marginBottom: 24 }}>
+              {transcriptionStep || 'Initializing...'}
+            </div>
+            <button
+              onClick={() => setIsTranscribing(false)}
+              style={{
+                background: 'transparent',
+                border: '1px solid #555',
+                borderRadius: 8,
+                color: '#999',
+                padding: '8px 20px',
+                cursor: 'pointer',
+                fontSize: 13,
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Hidden audio file input */}
       <input
         ref={audioFileInputRef}
         type="file"
-        accept="audio/*"
+        accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.aif,.aiff,.wma"
         style={{ display: 'none' }}
         onChange={handleAudioUpload}
       />

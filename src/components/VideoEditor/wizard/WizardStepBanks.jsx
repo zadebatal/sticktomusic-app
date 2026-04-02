@@ -52,6 +52,8 @@ import {
 } from '@subframe/core';
 import { useToast } from '../../ui';
 import CrossPollinationDrawer from './CrossPollinationDrawer';
+import WebImportModal from '../WebImportModal';
+import CloudImportButton from '../CloudImportButton';
 import log from '../../../utils/logger';
 
 // Bank header colors keyed by label
@@ -132,6 +134,7 @@ const WizardStepBanks = ({
     return expanded;
   });
   const [showCrossPollinationFor, setShowCrossPollinationFor] = useState(null);
+  const [showWebImport, setShowWebImport] = useState(null); // nicheId when open
 
   const fileInputRef = useRef(null);
   const pendingUploadNicheRef = useRef(null);
@@ -365,6 +368,73 @@ const WizardStepBanks = ({
     setEditingText(null);
   }, []);
 
+  // Web import completion handler
+  const handleWebImportComplete = useCallback(
+    async (files, bankIdx) => {
+      const nicheId = showWebImport;
+      if (!nicheId || !files?.length) return;
+
+      let imported = 0;
+      for (const file of files) {
+        try {
+          const item = {
+            type: file.type || 'video',
+            name: file.name,
+            url: file.url,
+            thumbnailUrl: file.thumbnailUrl || null,
+            storagePath: file.storagePath || null,
+            collectionIds: [nicheId],
+            metadata: { fileSize: file.size, source: 'web-import' },
+          };
+          const savedItem = await addToLibraryAsync(db, artistId, item);
+          await addToCollectionAsync(db, artistId, nicheId, savedItem.id);
+          addToProjectPool(artistId, projectId, [savedItem.id], db);
+          if (bankIdx != null) {
+            assignToBank(artistId, nicheId, savedItem.id, bankIdx, db);
+          }
+          imported++;
+        } catch (err) {
+          log.warn(`[WizardBanks] Web import item failed: ${err.message}`);
+        }
+      }
+
+      if (imported > 0) {
+        setLibrary(getLibrary(artistId));
+        setCollections(getCollections(artistId));
+        toastSuccess(`${imported} file${imported > 1 ? 's' : ''} imported from web`);
+      }
+      setShowWebImport(null);
+    },
+    [showWebImport, db, artistId, projectId, toastSuccess],
+  );
+
+  // Cloud import completion handler
+  const handleCloudImportComplete = useCallback(
+    async (imported, nicheId) => {
+      if (!imported?.length || !nicheId) return;
+      for (const file of imported) {
+        try {
+          const item = {
+            type: file.type || 'image',
+            name: file.name,
+            url: file.url || file.localUrl,
+            collectionIds: [nicheId],
+            metadata: { source: file.source || 'cloud-import' },
+          };
+          const savedItem = await addToLibraryAsync(db, artistId, item);
+          await addToCollectionAsync(db, artistId, nicheId, savedItem.id);
+          addToProjectPool(artistId, projectId, [savedItem.id], db);
+        } catch (err) {
+          log.warn(`[WizardBanks] Cloud import item failed: ${err.message}`);
+        }
+      }
+      setLibrary(getLibrary(artistId));
+      setCollections(getCollections(artistId));
+      toastSuccess(`${imported.length} file${imported.length > 1 ? 's' : ''} imported`);
+    },
+    [db, artistId, projectId, toastSuccess],
+  );
+
   const toggleNicheExpanded = useCallback((fmtId) => {
     setExpandedNiches((prev) => ({ ...prev, [fmtId]: !prev[fmtId] }));
   }, []);
@@ -539,13 +609,21 @@ const WizardStepBanks = ({
                                 <span className="text-caption font-caption text-neutral-400">
                                   Images
                                 </span>
-                                <button
-                                  className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
-                                  onClick={() => triggerUpload(nicheId, bankIdx, 'image')}
-                                  disabled={isUploading}
-                                >
-                                  Upload
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
+                                    onClick={() => triggerUpload(nicheId, bankIdx, 'image')}
+                                    disabled={isUploading}
+                                  >
+                                    Upload
+                                  </button>
+                                  <button
+                                    className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
+                                    onClick={() => setShowWebImport(nicheId)}
+                                  >
+                                    Web
+                                  </button>
+                                </div>
                               </div>
                               <div className="w-full items-start gap-1.5 grid grid-cols-3">
                                 {bankImages.map((item) => (
@@ -782,17 +860,34 @@ const WizardStepBanks = ({
                     </div>
                   )}
 
-                  {/* Cross-pollination trigger */}
-                  <Button
-                    variant="neutral-tertiary"
-                    size="small"
-                    icon={<FeatherDownloadCloud />}
-                    onClick={() =>
-                      setShowCrossPollinationFor(showCrossPollinationFor === fmt.id ? null : fmt.id)
-                    }
-                  >
-                    Import from other projects
-                  </Button>
+                  {/* Import sources */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="neutral-tertiary"
+                      size="small"
+                      icon={<FeatherDownloadCloud />}
+                      onClick={() =>
+                        setShowCrossPollinationFor(
+                          showCrossPollinationFor === fmt.id ? null : fmt.id,
+                        )
+                      }
+                    >
+                      From Projects
+                    </Button>
+                    <Button
+                      variant="neutral-tertiary"
+                      size="small"
+                      onClick={() => setShowWebImport(nicheId)}
+                    >
+                      From Web
+                    </Button>
+                    <CloudImportButton
+                      artistId={artistId}
+                      onImportMedia={(imported) => handleCloudImportComplete(imported, nicheId)}
+                      mediaType={isSlideshow ? 'image' : 'all'}
+                      db={db}
+                    />
+                  </div>
                 </div>
               )}
             </div>
@@ -809,6 +904,15 @@ const WizardStepBanks = ({
           Create Project
         </Button>
       </div>
+
+      {/* Web import modal */}
+      {showWebImport && (
+        <WebImportModal
+          artistId={artistId}
+          onComplete={handleWebImportComplete}
+          onClose={() => setShowWebImport(null)}
+        />
+      )}
 
       {/* Cross-pollination drawer */}
       {showCrossPollinationFor && nicheMap[showCrossPollinationFor] && (

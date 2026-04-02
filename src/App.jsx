@@ -33,6 +33,8 @@ import ContentTemplatesModal from './components/ContentTemplatesModal';
 import VideoUploadModal from './components/VideoUploadModal';
 import LateConnectModal from './components/LateConnectModal';
 import { LegacyMarketingPages } from './components/LegacyMarketingPages';
+import DesktopOnboarding from './components/DesktopOnboarding';
+import { isElectronApp, isOnboardingComplete } from './services/localMediaService';
 import { getContentQueue } from './data/contentQueue';
 
 // Theme system
@@ -1204,6 +1206,18 @@ const StickToMusicInner = () => {
   // Onboarding state
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
+
+  // Desktop onboarding (Electron first-run setup)
+  const [showDesktopOnboarding, setShowDesktopOnboarding] = useState(false);
+
+  // Desktop onboarding — check if Electron first-run setup is needed
+  useEffect(() => {
+    if (isElectronApp()) {
+      isOnboardingComplete().then((complete) => {
+        if (!complete) setShowDesktopOnboarding(true);
+      });
+    }
+  }, []);
 
   // Check if first time user — check both localStorage and Firestore-backed settings
   useEffect(() => {
@@ -2993,6 +3007,15 @@ const StickToMusicInner = () => {
         onComplete={completeOnboarding}
         onSetTab={setOperatorTab}
       />
+
+      {/* Desktop Onboarding (Electron first-run setup) */}
+      {showDesktopOnboarding && (
+        <DesktopOnboarding
+          db={db}
+          artists={firestoreArtists || []}
+          onComplete={() => setShowDesktopOnboarding(false)}
+        />
+      )}
 
       {/* Dev Environment Banner — helps QA agents identify which server they're on */}
       {process.env.NODE_ENV === 'development' && (

@@ -335,6 +335,10 @@ export const createMediaItem = ({
       mimeType: metadata.mimeType || null,
     },
 
+    // Local drive (Electron desktop)
+    syncStatus: 'cloud', // 'cloud' | 'local' | 'synced' | 'offline'
+    localPath: null, // relative path on drive (e.g. 'StickToMusic/Artist/videos/clip.mp4')
+
     // Timestamps
     createdAt: now,
     updatedAt: now,

@@ -45,7 +45,6 @@ const ProjectWizard = ({
 
   const [step, setStep] = useState(1);
   const [projectName, setProjectName] = useState('');
-  const [linkedPage, setLinkedPage] = useState(null);
   const [selectedFormats, setSelectedFormats] = useState([]);
   const [projectId, setProjectId] = useState(null);
   const [createdNicheMap, setCreatedNicheMap] = useState({}); // { formatId: nicheId }
@@ -54,37 +53,6 @@ const ProjectWizard = ({
 
   // Track whether we've created data (for cancel cleanup)
   const hasCreatedDataRef = useRef(false);
-
-  // All accounts (Late + manual) for linked page dropdown
-  const allAccounts = useMemo(() => {
-    const accounts = [...latePages.filter((p) => p.artistId === artistId)];
-    (manualAccounts || []).forEach((ma) => {
-      const handle = ma.handle?.replace('@', '');
-      const alreadyCovered = accounts.some((lp) => lp.handle?.replace('@', '') === handle);
-      if (!alreadyCovered) {
-        (ma.platforms || []).forEach((plat) => {
-          accounts.push({
-            id: `manual-${ma.handle}-${plat}`,
-            handle: ma.handle?.startsWith('@') ? ma.handle : `@${ma.handle}`,
-            platform: plat,
-            artistId,
-            isManual: true,
-          });
-        });
-      }
-    });
-    return accounts;
-  }, [latePages, manualAccounts, artistId]);
-
-  const uniquePages = useMemo(() => {
-    const seen = new Set();
-    return allAccounts.filter((p) => {
-      const key = `${p.handle}_${p.platform}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }, [allAccounts]);
 
   // Step 1 → 2: Create project
   const handleStep1Next = useCallback(async () => {
@@ -95,7 +63,6 @@ const ProjectWizard = ({
         artistId,
         {
           name: projectName.trim(),
-          linkedPage,
           color: PIPELINE_COLORS[Math.floor(Math.random() * PIPELINE_COLORS.length)],
         },
         db,
@@ -106,7 +73,7 @@ const ProjectWizard = ({
     } catch (err) {
       toastError('Failed to create project');
     }
-  }, [artistId, db, projectName, linkedPage, toastError]);
+  }, [artistId, db, projectName, toastError]);
 
   // Step 2 → 3: Create niches for selected formats
   const handleStep2Next = useCallback(async () => {
@@ -213,30 +180,6 @@ const ProjectWizard = ({
     [projectId, artistId, db],
   );
 
-  // Step 1 linked page change: update project in storage if already created
-  const handleLinkedPageChange = useCallback(
-    async (page) => {
-      setLinkedPage(page);
-      if (projectId) {
-        const cols = getUserCollections(artistId);
-        const idx = cols.findIndex((c) => c.id === projectId);
-        if (idx !== -1) {
-          cols[idx].linkedPage = page;
-          cols[idx].updatedAt = new Date().toISOString();
-          saveCollections(artistId, cols);
-          if (db) {
-            try {
-              await saveCollectionToFirestore(db, artistId, cols[idx]);
-            } catch (e) {
-              /* ok */
-            }
-          }
-        }
-      }
-    },
-    [projectId, artistId, db],
-  );
-
   // Get niche IDs as array for Step 3
   const nicheIds = useMemo(() => Object.values(createdNicheMap), [createdNicheMap]);
 
@@ -290,9 +233,6 @@ const ProjectWizard = ({
           <WizardStepName
             projectName={projectName}
             setProjectName={projectId ? handleProjectNameChange : setProjectName}
-            linkedPage={linkedPage}
-            setLinkedPage={projectId ? handleLinkedPageChange : setLinkedPage}
-            uniquePages={uniquePages}
             onNext={projectId ? () => setStep(2) : handleStep1Next}
             isMobile={isMobile}
           />

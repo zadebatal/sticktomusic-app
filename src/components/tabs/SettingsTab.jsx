@@ -1,4 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import {
+  isElectronApp,
+  getMediaFolder,
+  selectMediaFolder,
+  isDriveConnected,
+  getDiskUsage,
+  relocateOfflineFiles,
+  openInFinder,
+} from '../../services/localMediaService';
+import { formatBytes } from '../../services/syncService';
+import SyncModal from '../SyncModal';
 import { doc, setDoc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { shouldShowPaymentUI } from '../../services/subscriptionService';
@@ -45,6 +56,205 @@ import {
 const DRIVE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID;
 const DRIVE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;
 const DROPBOX_APP_KEY = process.env.REACT_APP_DROPBOX_APP_KEY;
+
+// ── Media Library Section (Electron desktop only) ──
+const MediaLibrarySection = ({ db, firestoreArtists }) => {
+  const [folder, setFolder] = useState(null);
+  const [connected, setConnected] = useState(false);
+  const [diskUsage, setDiskUsage] = useState(null);
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [relocating, setRelocating] = useState(false);
+  const [relocateResult, setRelocateResult] = useState(null);
+  const [autoImport, setAutoImport] = useState(false);
+
+  useEffect(() => {
+    getMediaFolder().then(setFolder);
+    isDriveConnected().then(setConnected);
+    getDiskUsage().then(setDiskUsage);
+    // Poll drive status every 10 seconds, disk usage every 30 seconds
+    const driveInterval = setInterval(() => isDriveConnected().then(setConnected), 10000);
+    const diskInterval = setInterval(() => getDiskUsage().then(setDiskUsage), 30000);
+    return () => {
+      clearInterval(driveInterval);
+      clearInterval(diskInterval);
+    };
+  }, []);
+
+  const handleSelectFolder = async () => {
+    const selected = await selectMediaFolder();
+    if (selected) {
+      setFolder(selected);
+      setConnected(true);
+      getDiskUsage().then(setDiskUsage);
+    }
+  };
+
+  const handleRelocate = async () => {
+    setRelocating(true);
+    setRelocateResult(null);
+    try {
+      // Pass empty array to trigger a full drive scan
+      const result = await relocateOfflineFiles([]);
+      setRelocateResult(result);
+    } catch {
+      setRelocateResult({ error: true });
+    } finally {
+      setRelocating(false);
+    }
+  };
+
+  const diskPercent = diskUsage ? (diskUsage.used / (diskUsage.used + diskUsage.free)) * 100 : 0;
+
+  return (
+    <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-neutral-50 p-6">
+      <div className="flex w-full items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600/20">
+          <span style={{ fontSize: 18 }}>💾</span>
+        </div>
+        <span className="text-body-bold font-body-bold text-white">Media Library</span>
+        <div style={{ marginLeft: 'auto' }}>
+          {connected ? (
+            <span className="text-caption font-caption text-green-400">Connected ●</span>
+          ) : folder ? (
+            <span className="text-caption font-caption text-amber-400">Disconnected</span>
+          ) : null}
+        </div>
+      </div>
+
+      {folder ? (
+        <>
+          {/* Folder path */}
+          <div className="flex w-full items-center justify-between rounded-lg bg-white/[0.03] px-4 py-3">
+            <span className="text-caption font-caption text-neutral-400">Folder</span>
+            <span
+              className="text-caption font-caption text-neutral-300 max-w-[280px] truncate"
+              title={folder}
+            >
+              {folder}
+            </span>
+          </div>
+
+          {/* Drive space indicator */}
+          {diskUsage && (
+            <div className="flex w-full flex-col gap-2">
+              <span className="text-caption font-caption text-neutral-400">
+                Used: {formatBytes(diskUsage.used)} · Free: {formatBytes(diskUsage.free)}
+              </span>
+              <div
+                style={{
+                  width: '100%',
+                  height: 6,
+                  borderRadius: 3,
+                  backgroundColor: 'rgba(255,255,255,0.08)',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${Math.min(diskPercent, 100)}%`,
+                    height: '100%',
+                    borderRadius: 3,
+                    backgroundColor:
+                      diskPercent > 90 ? '#ef4444' : diskPercent > 70 ? '#f59e0b' : '#22c55e',
+                    transition: 'width 0.3s ease',
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Action buttons row 1 */}
+          <div className="flex w-full items-center gap-2">
+            <Button variant="neutral-secondary" size="small" onClick={() => openInFinder(folder)}>
+              Open in Finder
+            </Button>
+            <Button variant="neutral-secondary" size="small" onClick={handleSelectFolder}>
+              Change Folder
+            </Button>
+          </div>
+
+          {/* Action buttons row 2 */}
+          <div className="flex w-full items-center gap-2">
+            <Button variant="neutral-secondary" size="small" onClick={() => setShowSyncModal(true)}>
+              Sync from STM Server
+            </Button>
+            <Button
+              variant="neutral-secondary"
+              size="small"
+              onClick={handleRelocate}
+              disabled={relocating}
+            >
+              {relocating ? 'Scanning drive...' : 'Relocate Media'}
+            </Button>
+          </div>
+
+          {/* Relocate result */}
+          {relocateResult && !relocateResult.error && (
+            <span className="text-caption font-caption text-neutral-400">
+              Found {relocateResult.found} of {relocateResult.total} files
+            </span>
+          )}
+          {relocateResult?.error && (
+            <span className="text-caption font-caption text-red-400">
+              Relocate scan failed. Check drive connection.
+            </span>
+          )}
+
+          {/* Auto-import toggle */}
+          <div className="flex w-full items-center justify-between rounded-lg bg-white/[0.03] px-4 py-3">
+            <span className="text-caption font-caption text-neutral-300">
+              Auto-import new files
+            </span>
+            <button
+              onClick={() => setAutoImport(!autoImport)}
+              style={{
+                width: 36,
+                height: 20,
+                borderRadius: 10,
+                backgroundColor: autoImport ? '#6366f1' : 'rgba(255,255,255,0.12)',
+                border: 'none',
+                cursor: 'pointer',
+                position: 'relative',
+                transition: 'background-color 0.2s ease',
+              }}
+            >
+              <div
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: 8,
+                  backgroundColor: '#fff',
+                  position: 'absolute',
+                  top: 2,
+                  left: autoImport ? 18 : 2,
+                  transition: 'left 0.2s ease',
+                }}
+              />
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <span className="text-caption font-caption text-neutral-400">
+            Select a folder on your drive to store media files locally. This can be an external SSD,
+            hard drive, or any folder on your computer.
+          </span>
+          <Button variant="brand-primary" size="medium" onClick={handleSelectFolder}>
+            Select Media Folder
+          </Button>
+        </>
+      )}
+
+      {/* Sync Modal */}
+      {showSyncModal && (
+        <SyncModal
+          db={db}
+          artists={firestoreArtists || []}
+          onClose={() => setShowSyncModal(false)}
+        />
+      )}
+    </div>
+  );
+};
 
 const SettingsTab = ({
   user,
@@ -682,6 +892,9 @@ const SettingsTab = ({
             );
           })()}
         </div>
+
+        {/* ── MEDIA LIBRARY (Electron only) ── */}
+        {isElectronApp() && <MediaLibrarySection db={db} firestoreArtists={firestoreArtists} />}
 
         {/* ── SUBSCRIPTION / ACCOUNT ── */}
         <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-neutral-50 p-6">

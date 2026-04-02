@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../contexts/ThemeContext';
+import UpdateBanner from './UpdateBanner';
 
 import useIsMobile from '../hooks/useIsMobile';
 import { Avatar } from '../ui/components/Avatar';
@@ -308,6 +309,7 @@ const AppShell = ({
           })}
         </nav>
       )}
+      <UpdateBanner />
     </div>
   );
 };

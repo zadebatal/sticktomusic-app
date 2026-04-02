@@ -45,8 +45,8 @@ const loadImageForCanvas = (url) => {
 
 // ── Constants ──
 
-export const THUMB_VERSION = 4;
-export const THUMB_MAX_SIZE = 520;
+export const THUMB_VERSION = 5;
+export const THUMB_MAX_SIZE = 800;
 export const THUMB_QUALITY = 0.82;
 
 // ── Image Thumbnail Migration ──

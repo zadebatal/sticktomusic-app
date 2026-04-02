@@ -2,7 +2,8 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { renderVideo, exportAsPreview } from '../../services/videoExportService';
 import { uploadVideo } from '../../services/firebaseStorage';
 import { EXPORT_STAGE } from '../../utils/status';
-import { useFocusTrap } from '../ui';
+import { useFocusTrap, useToast } from '../ui';
+import { openInFinder } from '../../services/localMediaService';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
@@ -29,6 +30,7 @@ const ExportAndPostModal = ({
   onSchedulePost, // Function to call Late API: (videoUrl, caption) => Promise
 }) => {
   const { theme } = useTheme();
+  const { success: toastSuccess } = useToast();
   const styles = useMemo(() => getStyles(theme), [theme]);
   // BUG-030: Focus trap for modal accessibility
   const trapRef = useFocusTrap(true);
@@ -69,7 +71,28 @@ const ExportAndPostModal = ({
     try {
       const blob = await renderVideo(video, setProgress);
 
-      // Download the file
+      // Save to local drive in Electron
+      if (window.electronAPI?.isElectron) {
+        try {
+          const artistName = category?.name || 'Unknown';
+          const filename = `export_${Date.now()}.mp4`;
+          const relativePath = `StickToMusic/${artistName.replace(/[/\\:*?"<>|]/g, '_')}/exports/${filename}`;
+          const arrayBuffer = await blob.arrayBuffer();
+          const fullPath = await window.electronAPI.saveFileLocally(arrayBuffer, relativePath);
+          toastSuccess(`Saved to ${relativePath}`);
+          // Open the export folder in Finder
+          if (fullPath) {
+            openInFinder(fullPath);
+          }
+          setStage(EXPORT_STAGE.DONE);
+          return;
+        } catch (err) {
+          // Fall through to browser download
+          log.warn('Local save failed, using browser download:', err);
+        }
+      }
+
+      // Download the file (browser fallback)
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -85,7 +108,7 @@ const ExportAndPostModal = ({
       setError(err.message || 'Failed to export video');
       setStage(EXPORT_STAGE.OPTIONS);
     }
-  }, [video]);
+  }, [video, category, toastSuccess]);
 
   // Export and upload to Firebase
   const handleExportAndUpload = useCallback(async () => {

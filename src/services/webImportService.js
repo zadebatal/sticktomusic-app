@@ -42,6 +42,21 @@ export function isUrlSupported(url) {
 }
 
 /**
+ * Detect if a URL points to a profile/channel page (not a single video).
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function isProfileUrl(url) {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  // TikTok profile: tiktok.com/@username (no /video/ in path)
+  if (/tiktok\.com\/@[\w.]+\/?$/i.test(lower)) return true;
+  // YouTube channel/playlist
+  if (/youtube\.com\/(c\/|channel\/|@|playlist\?)/i.test(lower)) return true;
+  return false;
+}
+
+/**
  * Get Firebase auth token for proxy calls.
  */
 async function getToken() {
@@ -79,7 +94,14 @@ export async function analyzeUrl(url) {
  * @param {number} [maxItems] - Max items to download for galleries (default: 100)
  * @returns {Promise<{ jobId: string }>}
  */
-export async function startDownload(url, artistId, maxItems, audioOnly = false) {
+export async function startDownload(
+  url,
+  artistId,
+  maxItems,
+  audioOnly = false,
+  playlist = false,
+  selectedUrls = null,
+) {
   const token = await getToken();
   const body = {
     url,
@@ -88,6 +110,8 @@ export async function startDownload(url, artistId, maxItems, audioOnly = false) 
   };
   if (maxItems) body.maxItems = maxItems;
   if (audioOnly) body.audioOnly = true;
+  if (playlist) body.playlist = true;
+  if (selectedUrls && selectedUrls.length > 0) body.urls = selectedUrls;
   const resp = await fetch(`${PROXY_URL}?action=download`, {
     method: 'POST',
     headers: {
@@ -99,6 +123,35 @@ export async function startDownload(url, artistId, maxItems, audioOnly = false) 
 
   const data = await resp.json();
   if (!resp.ok) throw new Error(data.error || `Download start failed (${resp.status})`);
+  return data;
+}
+
+/**
+ * Start a montage rip job — scene detect, classify, dedup.
+ * @param {string} artistId
+ * @param {string[]} selectedUrls - URLs of montage videos to rip
+ * @param {number} [sceneThreshold=0.3] - Scene detection sensitivity (0-1)
+ * @returns {Promise<{ jobId: string }>}
+ */
+export async function startRip(artistId, selectedUrls, sceneThreshold = 0.3) {
+  const token = await getToken();
+  const body = {
+    urls: selectedUrls,
+    artistId,
+    uploadPath: `artists/${artistId}/web-imports`,
+    sceneThreshold,
+  };
+  const resp = await fetch(`${PROXY_URL}?action=rip`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error || `Rip start failed (${resp.status})`);
   return data;
 }
 

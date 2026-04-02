@@ -1976,87 +1976,87 @@ const WordTimeline = ({
                 )}
               </div>
 
-              {/* Edit form for selected word OR word at playhead */}
-              {(selectedWord || currentWord) && (
-                <div style={styles.wordEditForm}>
-                  {selectedWordIndices.length > 1 && (
-                    <div style={styles.multiSelectInfo}>
-                      {selectedWordIndices.length} words selected
-                    </div>
-                  )}
-                  <div style={styles.wordEditRow}>
-                    <label style={styles.wordEditLabel}>Text:</label>
-                    <input
-                      type="text"
-                      value={(selectedWord || currentWord).text}
-                      onChange={(e) => {
-                        const indexToUpdate =
-                          selectedWordIndices.length > 0
-                            ? selectedWordIndices[0]
-                            : currentWordIndex;
-                        if (indexToUpdate < 0) return;
-                        setWords((prev) => {
-                          const newWords = [...prev];
-                          newWords[indexToUpdate] = {
-                            ...newWords[indexToUpdate],
-                            text: e.target.value,
-                          };
-                          return newWords;
-                        });
-                      }}
-                      style={styles.wordEditInput}
-                    />
+              {/* Edit form — always rendered to prevent modal resize */}
+              <div
+                style={{ ...styles.wordEditForm, opacity: selectedWord || currentWord ? 1 : 0.35 }}
+              >
+                {selectedWordIndices.length > 1 && (
+                  <div style={styles.multiSelectInfo}>
+                    {selectedWordIndices.length} words selected
                   </div>
-                  <div style={styles.wordEditRow}>
-                    <label style={styles.wordEditLabel}>Start:</label>
-                    <input
-                      type="number"
-                      value={(selectedWord || currentWord).startTime.toFixed(2)}
-                      step="0.1"
-                      onChange={(e) => {
-                        const indexToUpdate =
-                          selectedWordIndices.length > 0
-                            ? selectedWordIndices[0]
-                            : currentWordIndex;
-                        if (indexToUpdate < 0) return;
-                        setWords((prev) => {
-                          const newWords = [...prev];
-                          newWords[indexToUpdate] = {
-                            ...newWords[indexToUpdate],
-                            startTime: parseFloat(e.target.value) || 0,
-                          };
-                          return newWords;
-                        });
-                      }}
-                      style={styles.wordEditInput}
-                    />
-                  </div>
-                  <div style={styles.wordEditRow}>
-                    <label style={styles.wordEditLabel}>Duration:</label>
-                    <input
-                      type="number"
-                      value={((selectedWord || currentWord).duration || 0.5).toFixed(2)}
-                      step="0.1"
-                      onChange={(e) => {
-                        const indexToUpdate =
-                          selectedWordIndices.length > 0
-                            ? selectedWordIndices[0]
-                            : currentWordIndex;
-                        if (indexToUpdate < 0) return;
-                        setWords((prev) => {
-                          const newWords = [...prev];
-                          newWords[indexToUpdate] = {
-                            ...newWords[indexToUpdate],
-                            duration: parseFloat(e.target.value) || 0.1,
-                          };
-                          return newWords;
-                        });
-                      }}
-                      style={styles.wordEditInput}
-                    />
-                  </div>
+                )}
+                <div style={styles.wordEditRow}>
+                  <label style={styles.wordEditLabel}>Text:</label>
+                  <input
+                    type="text"
+                    value={(selectedWord || currentWord)?.text || ''}
+                    placeholder="—"
+                    disabled={!(selectedWord || currentWord)}
+                    onChange={(e) => {
+                      const indexToUpdate =
+                        selectedWordIndices.length > 0 ? selectedWordIndices[0] : currentWordIndex;
+                      if (indexToUpdate < 0) return;
+                      setWords((prev) => {
+                        const newWords = [...prev];
+                        newWords[indexToUpdate] = {
+                          ...newWords[indexToUpdate],
+                          text: e.target.value,
+                        };
+                        return newWords;
+                      });
+                    }}
+                    style={styles.wordEditInput}
+                  />
                 </div>
-              )}
+                <div style={styles.wordEditRow}>
+                  <label style={styles.wordEditLabel}>Start:</label>
+                  <input
+                    type="number"
+                    value={(selectedWord || currentWord)?.startTime?.toFixed(2) || ''}
+                    placeholder="—"
+                    disabled={!(selectedWord || currentWord)}
+                    step="0.1"
+                    onChange={(e) => {
+                      const indexToUpdate =
+                        selectedWordIndices.length > 0 ? selectedWordIndices[0] : currentWordIndex;
+                      if (indexToUpdate < 0) return;
+                      setWords((prev) => {
+                        const newWords = [...prev];
+                        newWords[indexToUpdate] = {
+                          ...newWords[indexToUpdate],
+                          startTime: parseFloat(e.target.value) || 0,
+                        };
+                        return newWords;
+                      });
+                    }}
+                    style={styles.wordEditInput}
+                  />
+                </div>
+                <div style={styles.wordEditRow}>
+                  <label style={styles.wordEditLabel}>Duration:</label>
+                  <input
+                    type="number"
+                    value={(selectedWord || currentWord)?.duration?.toFixed(2) || ''}
+                    placeholder="—"
+                    disabled={!(selectedWord || currentWord)}
+                    step="0.1"
+                    onChange={(e) => {
+                      const indexToUpdate =
+                        selectedWordIndices.length > 0 ? selectedWordIndices[0] : currentWordIndex;
+                      if (indexToUpdate < 0) return;
+                      setWords((prev) => {
+                        const newWords = [...prev];
+                        newWords[indexToUpdate] = {
+                          ...newWords[indexToUpdate],
+                          duration: parseFloat(e.target.value) || 0.1,
+                        };
+                        return newWords;
+                      });
+                    }}
+                    style={styles.wordEditInput}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
