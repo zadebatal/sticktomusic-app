@@ -30,12 +30,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ── Local Drive Storage ──
   selectMediaFolder: () => ipcRenderer.invoke('select-media-folder'),
   getMediaFolder: () => ipcRenderer.invoke('get-media-folder'),
+  setMediaFolder: (path) => ipcRenderer.invoke('set-media-folder', path),
   saveFileLocally: (arrayBuffer, relativePath) =>
     ipcRenderer.invoke('save-file-locally', arrayBuffer, relativePath),
   readLocalFile: (relativePath) => ipcRenderer.invoke('read-local-file', relativePath),
   checkFileExists: (relativePath) => ipcRenderer.invoke('check-file-exists', relativePath),
   isDriveConnected: () => ipcRenderer.invoke('is-drive-connected'),
   getLocalFileUrl: (relativePath) => ipcRenderer.invoke('get-local-file-url', relativePath),
+  probeDurations: (urls) => ipcRenderer.invoke('probe-durations', urls),
 
   // ── Relocate (DaVinci Comprehensive Search) ──
   recursiveScan: (rootPath) => ipcRenderer.invoke('recursive-scan', rootPath),
@@ -51,7 +53,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('file-changed', (_event, data) => cb(data));
   },
 
+  // ── Local File Management ──
+  trashFile: (filePath) => ipcRenderer.invoke('trash-file', filePath),
+  restoreFromTrash: (filename, destPath) =>
+    ipcRenderer.invoke('restore-from-trash', filename, destPath),
+  listDirectory: (dirPath) => ipcRenderer.invoke('list-directory', dirPath),
+  generateLocalThumbnail: (videoPath, outputPath) =>
+    ipcRenderer.invoke('generate-local-thumbnail', videoPath, outputPath),
+  renamePath: (oldPath, newPath) =>
+    ipcRenderer.invoke('rename-path', oldPath, newPath),
+
   // ── Onboarding ──
   isOnboardingComplete: () => ipcRenderer.invoke('is-onboarding-complete'),
   setOnboardingComplete: (value) => ipcRenderer.invoke('set-onboarding-complete', value),
+
+  // ── Local yt-dlp Download ──
+  ytdlpAvailable: () => ipcRenderer.invoke('ytdlp-available'),
+  ytdlpDownload: (url, outputDir, options) => ipcRenderer.invoke('ytdlp-download', url, outputDir, options),
+  ytdlpInfo: (url) => ipcRenderer.invoke('ytdlp-info', url),
+  onYtdlpProgress: (cb) => {
+    ipcRenderer.on('ytdlp-progress', (_event, data) => cb(data));
+  },
+
+  // ── Local Montage Rip (yt-dlp + FFmpeg scene detect) ──
+  ffmpegAvailable: () => ipcRenderer.invoke('ffmpeg-available'),
+  localRip: (urls, outputDir, options) => ipcRenderer.invoke('local-rip', urls, outputDir, options),
+  onLocalRipProgress: (cb) => {
+    ipcRenderer.on('local-rip-progress', (_event, data) => cb(data));
+  },
 });

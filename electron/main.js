@@ -13,6 +13,10 @@ const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
 
+const express = require('express');
+const transnet = require('./transnet');
+const scenedetect = require('./scenedetect');
+
 // electron-updater is optional in dev (not installed in root devDeps initially)
 let autoUpdater = null;
 try {
@@ -21,20 +25,23 @@ try {
   // Not available in dev — that's fine
 }
 
-// electron-store for persistent config
-let Store = null;
+// electron-store for persistent config (v10+ is ESM-only, must use dynamic import)
 let store = null;
-try {
-  Store = require('electron-store');
-  store = new Store();
-} catch {
-  // Fallback: in-memory config if electron-store not installed
-  const _mem = {};
-  store = {
-    get: (k, d) => (k in _mem ? _mem[k] : d),
-    set: (k, v) => (_mem[k] = v),
-  };
-}
+const _storeReady = (async () => {
+  try {
+    const { default: Store } = await import('electron-store');
+    store = new Store();
+    console.log(`[config] electron-store loaded. Path: ${store.path}`);
+    console.log(`[config] Persisted config:`, JSON.stringify(store.store));
+  } catch (err) {
+    console.warn(`[config] electron-store failed (${err.message}), using in-memory fallback`);
+    const _mem = {};
+    store = {
+      get: (k, d) => (k in _mem ? _mem[k] : d),
+      set: (k, v) => { _mem[k] = v; },
+    };
+  }
+})();
 
 const isDev = !app.isPackaged;
 let mainWindow = null;
@@ -77,6 +84,7 @@ function createWindow() {
     mainWindow.focus();
   });
 
+
   // Save window position on move/resize
   const saveBounds = () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -108,7 +116,8 @@ function createWindow() {
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'build', 'index.html'));
+    // Production: load from embedded server (handles API proxy + static files)
+    mainWindow.loadURL(`http://localhost:${serverPort}`);
   }
 
   console.log(`[electron] Window opened — ${isDev ? 'dev server' : 'production build'}`);
@@ -215,6 +224,14 @@ ipcMain.handle('get-media-folder', () => {
   return store.get('mediaFolder', null);
 });
 
+ipcMain.handle('set-media-folder', (_event, folderPath) => {
+  store.set('mediaFolder', folderPath);
+  const stmRoot = path.join(folderPath, 'StickToMusic');
+  fs.mkdirSync(stmRoot, { recursive: true });
+  console.log(`[storage] Media folder set programmatically: ${folderPath}`);
+  return folderPath;
+});
+
 ipcMain.handle('save-file-locally', async (_event, arrayBuffer, relativePath) => {
   const root = store.get('mediaFolder');
   if (!root) throw new Error('No media folder configured');
@@ -248,13 +265,46 @@ ipcMain.handle('is-drive-connected', () => {
 ipcMain.handle('get-local-file-url', (_event, relativePath) => {
   const root = store.get('mediaFolder');
   if (!root) return null;
-  const fullPath = path.join(root, relativePath);
-  // file:// protocol with proper encoding for spaces and special chars
-  return `file://${encodeURI(fullPath).replace(/#/g, '%23')}`;
+  // Serve via embedded Express to avoid CORS issues with file:// protocol
+  return `http://localhost:${serverPort}/local-media/${encodeURIComponent(relativePath).replace(/%2F/g, '/')}`;
 });
+
+/**
+ * Convert an absolute file path to an http://localhost URL served by the embedded Express server.
+ * Falls back to file:// if the path isn't under the media folder.
+ */
+function toLocalUrl(fullPath) {
+  const root = store.get('mediaFolder');
+  if (root && fullPath.startsWith(root)) {
+    const rel = fullPath.slice(root.length).replace(/^\//, '');
+    return `http://localhost:${serverPort}/local-media/${encodeURIComponent(rel).replace(/%2F/g, '/')}`;
+  }
+  return `file://${encodeURI(fullPath).replace(/#/g, '%23')}`;
+}
 
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
+});
+
+// Batch probe video durations using ffprobe (fast, reliable)
+ipcMain.handle('probe-durations', async (_event, urls) => {
+  const root = store.get('mediaFolder');
+  const results = {};
+  for (const url of urls) {
+    try {
+      // Extract file path from localhost URL
+      let filePath = null;
+      if (url.includes('/local-media/') && root) {
+        const rel = decodeURIComponent(url.split('/local-media/')[1] || '');
+        filePath = path.join(root, rel);
+      }
+      if (filePath && fs.existsSync(filePath)) {
+        const dur = getVideoDuration(filePath);
+        if (dur > 0) results[url] = dur;
+      }
+    } catch {}
+  }
+  return results;
 });
 
 // ── IPC: Recursive Scan (DaVinci-style Relocate) ──
@@ -335,6 +385,67 @@ ipcMain.handle('stop-watching', (_event, folderPath) => {
   }
 });
 
+// ── IPC: Local File Management (project/niche folder structure) ──
+
+// Trash a file (move to .trash/ folder)
+ipcMain.handle('trash-file', async (_event, filePath) => {
+  const root = store.get('mediaFolder');
+  if (!root) throw new Error('No media folder');
+  const trashDir = path.join(root, 'StickToMusic', '.trash');
+  fs.mkdirSync(trashDir, { recursive: true });
+  const dest = path.join(trashDir, path.basename(filePath));
+  fs.renameSync(filePath, dest);
+  return dest;
+});
+
+// Restore from trash
+ipcMain.handle('restore-from-trash', async (_event, filename, destPath) => {
+  const root = store.get('mediaFolder');
+  if (!root) throw new Error('No media folder');
+  const trashPath = path.join(root, 'StickToMusic', '.trash', filename);
+  if (!fs.existsSync(trashPath)) throw new Error('File not found in trash');
+  fs.mkdirSync(path.dirname(destPath), { recursive: true });
+  fs.renameSync(trashPath, destPath);
+  return destPath;
+});
+
+// List files in a directory
+ipcMain.handle('list-directory', async (_event, dirPath) => {
+  if (!fs.existsSync(dirPath)) return [];
+  return fs.readdirSync(dirPath, { withFileTypes: true })
+    .filter(e => !e.name.startsWith('.'))
+    .map(e => ({
+      name: e.name,
+      isDirectory: e.isDirectory(),
+      path: path.join(dirPath, e.name),
+    }));
+});
+
+// Generate thumbnail from video using FFmpeg
+ipcMain.handle('generate-local-thumbnail', async (_event, videoPath, outputPath) => {
+  const cmd = [
+    'ffmpeg', '-y', '-i', videoPath,
+    '-ss', '00:00:01', '-vframes', '1',
+    '-vf', 'scale=480:-1', '-q:v', '3',
+    outputPath
+  ];
+  try {
+    const { execFileSync } = require('child_process');
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    execFileSync(cmd[0], cmd.slice(1), { timeout: 15000 });
+    if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) return outputPath;
+  } catch {}
+  return null;
+});
+
+// Rename a file or directory
+ipcMain.handle('rename-path', async (_event, oldPath, newPath) => {
+  if (!fs.existsSync(oldPath)) throw new Error('Path not found');
+  fs.mkdirSync(path.dirname(newPath), { recursive: true });
+  fs.renameSync(oldPath, newPath);
+  return newPath;
+});
+
 // ── IPC: Onboarding complete flag ──
 ipcMain.handle('is-onboarding-complete', () => {
   return store.get('onboardingComplete', false);
@@ -344,8 +455,684 @@ ipcMain.handle('set-onboarding-complete', (_event, value) => {
   store.set('onboardingComplete', !!value);
 });
 
+// ── IPC: Local yt-dlp Download ──
+function getYtdlpPath() {
+  // Bundled binary in electron/bin, or system-installed
+  const bundled = path.join(__dirname, 'bin', 'yt-dlp');
+  if (fs.existsSync(bundled)) return bundled;
+  // Fall back to system yt-dlp
+  try {
+    const systemPath = execSync('which yt-dlp').toString().trim();
+    if (systemPath) return systemPath;
+  } catch {}
+  return null;
+}
+
+ipcMain.handle('ytdlp-available', () => {
+  return getYtdlpPath() !== null;
+});
+
+ipcMain.handle('ytdlp-download', async (_event, url, outputDir, options = {}) => {
+  const ytdlp = getYtdlpPath();
+  if (!ytdlp) throw new Error('yt-dlp not found');
+
+  const mediaFolder = store.get('mediaFolder');
+  const targetDir = outputDir || (mediaFolder ? path.join(mediaFolder, 'StickToMusic', 'Downloads') : app.getPath('downloads'));
+  fs.mkdirSync(targetDir, { recursive: true });
+
+  const outputTemplate = path.join(targetDir, '%(title).80s.%(ext)s');
+  const args = [
+    '-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
+    '--merge-output-format', 'mp4',
+    '--no-playlist',
+    '--restrict-filenames',
+    '--max-filesize', '2G',
+    '-o', outputTemplate,
+  ];
+
+  if (options.audioOnly) {
+    args.splice(0, args.length,
+      '-f', 'bestaudio/best',
+      '--extract-audio',
+      '--audio-format', 'mp3',
+      '--no-playlist',
+      '-o', outputTemplate,
+    );
+  }
+
+  args.push(url);
+
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process');
+    const proc = spawn(ytdlp, args, { cwd: targetDir });
+    let stderr = '';
+
+    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+    proc.stdout.on('data', (data) => {
+      // Parse progress from yt-dlp output
+      const line = data.toString();
+      const match = line.match(/(\d+\.?\d*)%/);
+      if (match && mainWindow) {
+        mainWindow.webContents.send('ytdlp-progress', { percent: parseFloat(match[1]), line: line.trim() });
+      }
+    });
+
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        return reject(new Error(`yt-dlp failed: ${stderr.slice(-300)}`));
+      }
+      // Find downloaded files
+      const files = [];
+      try {
+        for (const f of fs.readdirSync(targetDir)) {
+          const fpath = path.join(targetDir, f);
+          const stat = fs.statSync(fpath);
+          // Only include files modified in the last 60 seconds (from this download)
+          if (stat.isFile() && Date.now() - stat.mtimeMs < 60000) {
+            const ext = path.extname(f).toLowerCase();
+            const isVideo = ['.mp4', '.webm', '.mkv', '.mov', '.avi'].includes(ext);
+            const isAudio = ['.mp3', '.m4a', '.wav', '.aac', '.ogg', '.opus'].includes(ext);
+            // Generate thumbnail for videos
+            let thumbnailUrl = null;
+            if (isVideo) {
+              const thumbDir = path.join(targetDir, '.thumbnails');
+              const thumbPath = path.join(thumbDir, f.replace(/\.\w+$/, '.jpg'));
+              try {
+                fs.mkdirSync(thumbDir, { recursive: true });
+                const ffmpegBin = getFfmpegPath();
+                if (ffmpegBin) execSync(`"${ffmpegBin}" -y -i "${fpath}" -ss 1 -vframes 1 -vf "scale=480:-1" -q:v 3 "${thumbPath}"`, { timeout: 10000 });
+                if (fs.existsSync(thumbPath) && fs.statSync(thumbPath).size > 0) thumbnailUrl = toLocalUrl(thumbPath);
+              } catch {}
+            }
+            files.push({
+              name: f,
+              path: fpath,
+              localUrl: toLocalUrl(fpath),
+              thumbnailUrl,
+              size: stat.size,
+              type: isAudio ? 'audio' : isVideo ? 'video' : 'image',
+            });
+          }
+        }
+      } catch (err) {
+        return reject(new Error('Could not read downloaded files: ' + err.message));
+      }
+      resolve(files);
+    });
+
+    // Timeout after 10 minutes
+    setTimeout(() => {
+      proc.kill();
+      reject(new Error('Download timed out'));
+    }, 600000);
+  });
+});
+
+ipcMain.handle('ytdlp-info', async (_event, url) => {
+  const ytdlp = getYtdlpPath();
+  if (!ytdlp) throw new Error('yt-dlp not found');
+
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process');
+    const proc = spawn(ytdlp, ['--dump-json', '--no-download', '--no-warnings', url]);
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+
+    proc.on('close', (code) => {
+      if (code !== 0) return reject(new Error(stderr.slice(-200)));
+      try {
+        resolve(JSON.parse(stdout));
+      } catch {
+        reject(new Error('Failed to parse video info'));
+      }
+    });
+
+    setTimeout(() => { proc.kill(); reject(new Error('Info fetch timed out')); }, 30000);
+  });
+});
+
+// ── IPC: Local Montage Rip (yt-dlp + FFmpeg scene detect + split) ──
+function getFfmpegPath() {
+  // Check common paths
+  for (const p of ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/usr/bin/ffmpeg']) {
+    if (fs.existsSync(p)) return p;
+  }
+  try {
+    return execSync('which ffmpeg').toString().trim() || null;
+  } catch { return null; }
+}
+
+function getFfprobePath() {
+  const ffmpeg = getFfmpegPath();
+  if (!ffmpeg) return null;
+  const probe = ffmpeg.replace(/ffmpeg$/, 'ffprobe');
+  return fs.existsSync(probe) ? probe : null;
+}
+
+/**
+ * Detect scene boundaries using TransNetV2 (AI) or FFmpeg scdet (fallback).
+ * Returns array of timestamps (seconds) where cuts occur.
+ */
+async function detectScenes(videoPath, threshold) {
+  const ffmpeg = getFfmpegPath();
+  if (!ffmpeg) throw new Error('FFmpeg not found');
+
+  // Primary: histogram-based scene detection (PySceneDetect-style, proven reliable)
+  try {
+    const cuts = scenedetect.detectScenes(videoPath, ffmpeg, {
+      threshold: threshold || 0.3,
+      minSceneDuration: 0.15, // allow very short clips (montage-style)
+    });
+    if (cuts.length > 0) return cuts;
+  } catch (err) {
+    console.warn(`[scdet] Histogram detector failed: ${err.message}`);
+  }
+
+  // Fallback: FFmpeg scdet
+  const scdetThreshold = Math.round((threshold || 0.5) * 80);
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process');
+    const args = ['-v', 'info', '-i', videoPath, '-filter:v', `scdet=threshold=${scdetThreshold}`, '-an', '-f', 'null', '-'];
+    let stderr = '';
+    const proc = spawn(ffmpeg, args, { timeout: 120000 });
+    proc.stderr.on('data', (d) => { stderr += d.toString(); });
+    proc.on('close', () => {
+      const times = [];
+      const regex = /lavfi\.scd\.time:\s*([\d.]+)/g;
+      let match;
+      while ((match = regex.exec(stderr)) !== null) times.push(parseFloat(match[1]));
+      console.log(`[scdet] FFmpeg fallback: ${times.length} cuts in ${path.basename(videoPath)}`);
+      resolve(times);
+    });
+    proc.on('error', reject);
+  });
+}
+
+/**
+ * Get video duration using ffprobe.
+ */
+function getVideoDuration(videoPath) {
+  const ffprobe = getFfprobePath();
+  if (!ffprobe) return 0;
+  try {
+    const out = execSync(
+      `"${ffprobe}" -v error -show_entries format=duration -of csv=p=0 "${videoPath}"`,
+      { timeout: 10000 }
+    ).toString().trim();
+    return parseFloat(out) || 0;
+  } catch { return 0; }
+}
+
+/**
+ * Split a video at given timestamps using FFmpeg.
+ * Returns array of output file paths.
+ */
+function splitVideo(videoPath, cutTimes, outputDir) {
+  const ffmpeg = getFfmpegPath();
+  if (!ffmpeg) throw new Error('FFmpeg not found');
+  const duration = getVideoDuration(videoPath);
+  const basename = path.basename(videoPath, path.extname(videoPath));
+
+  // Build segments: [0, cut1], [cut1, cut2], ..., [cutN, end]
+  const boundaries = [0, ...cutTimes];
+  if (duration > 0) boundaries.push(duration);
+
+  const clips = [];
+  const promises = [];
+
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    const start = boundaries[i];
+    const end = boundaries[i + 1];
+    const clipDur = end - start;
+    if (clipDur < 0.03) continue; // ~1 frame at 30fps — keep everything meaningful
+
+    const clipName = `${basename}_clip${String(i + 1).padStart(3, '0')}.mp4`;
+    const clipPath = path.join(outputDir, clipName);
+
+    promises.push(new Promise((resolve, reject) => {
+      const { spawn } = require('child_process');
+      const args = [
+        '-y',
+        '-i', videoPath,
+        '-ss', String(start), // -ss AFTER -i for frame-accurate seek
+        '-t', String(clipDur),
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '18', // re-encode for accuracy
+        '-c:a', 'aac', '-b:a', '128k',
+        '-avoid_negative_ts', 'make_zero',
+        clipPath
+      ];
+      const proc = spawn(ffmpeg, args, { timeout: 30000 });
+      proc.on('close', (code) => {
+        if (code === 0 && fs.existsSync(clipPath) && fs.statSync(clipPath).size > 0) {
+          // Generate thumbnail
+          const thumbName = clipName.replace(/\.mp4$/i, '.jpg');
+          const thumbDir = path.join(outputDir, '.thumbnails');
+          const thumbPath = path.join(thumbDir, thumbName);
+          try {
+            fs.mkdirSync(thumbDir, { recursive: true });
+            execSync(`"${ffmpeg}" -y -i "${clipPath}" -ss 0 -vframes 1 -vf "scale=480:-1" -q:v 3 "${thumbPath}"`, { timeout: 10000 });
+          } catch {}
+          const hasThumb = fs.existsSync(thumbPath) && fs.statSync(thumbPath).size > 0;
+
+          clips.push({
+            id: `rip_${basename}_clip${String(i + 1).padStart(3, '0')}_${Date.now()}`,
+            sourceId: `rip_${basename}_clip${String(i + 1).padStart(3, '0')}`,
+            name: clipName,
+            path: clipPath,
+            localUrl: toLocalUrl(clipPath),
+            thumbnailUrl: hasThumb ? toLocalUrl(thumbPath) : null,
+            size: fs.statSync(clipPath).size,
+            type: 'video',
+            clipIndex: i,
+            startTime: start,
+            duration: clipDur,
+          });
+        }
+        resolve();
+      });
+      proc.on('error', resolve);
+    }));
+  }
+
+  return Promise.all(promises).then(() =>
+    clips.sort((a, b) => a.clipIndex - b.clipIndex)
+  );
+}
+
+/**
+ * Compute a perceptual hash (aHash) from an 8x8 grayscale frame.
+ * Returns a 64-bit hash as a BigInt. Similar images → similar hash.
+ */
+function perceptualHash(videoPath, ffmpegPath) {
+  try {
+    // Extract one 8x8 grayscale frame
+    const raw = execSync(
+      `"${ffmpegPath}" -v error -i "${videoPath}" -vf "scale=8:8,format=gray" -vframes 1 -f rawvideo pipe:1`,
+      { maxBuffer: 1024, timeout: 10000 }
+    );
+    if (raw.length < 64) return null;
+    // Average hash: each pixel → 1 if above average, 0 if below
+    let sum = 0;
+    for (let i = 0; i < 64; i++) sum += raw[i];
+    const avg = sum / 64;
+    let hash = BigInt(0);
+    for (let i = 0; i < 64; i++) {
+      if (raw[i] > avg) hash |= BigInt(1) << BigInt(i);
+    }
+    return hash;
+  } catch { return null; }
+}
+
+/**
+ * Hamming distance between two 64-bit hashes.
+ */
+function hammingDistance(a, b) {
+  let xor = a ^ b;
+  let dist = 0;
+  while (xor > 0n) {
+    dist += Number(xor & 1n);
+    xor >>= 1n;
+  }
+  return dist;
+}
+
+/**
+ * Deduplicate clips: group visually similar clips, keep only the longest from each group.
+ * Uses perceptual hashing (aHash) on the first frame of each clip.
+ *
+ * @param {Array} clips - Clip objects with { path, duration, ... }
+ * @param {string} ffmpegPath - Path to FFmpeg
+ * @param {number} [maxDist=10] - Max hamming distance to consider clips as duplicates
+ * @returns {Array} Deduplicated clips (longest kept from each group)
+ */
+function deduplicateClips(clips, ffmpegPath, maxDist = 3) {
+  if (clips.length <= 1) return clips;
+
+  // Compute hashes
+  const hashed = clips.map((clip) => ({
+    ...clip,
+    _hash: perceptualHash(clip.path, ffmpegPath),
+  }));
+
+  // Group by similarity
+  const used = new Set();
+  const groups = [];
+  for (let i = 0; i < hashed.length; i++) {
+    if (used.has(i) || !hashed[i]._hash) continue;
+    const group = [i];
+    used.add(i);
+    for (let j = i + 1; j < hashed.length; j++) {
+      if (used.has(j) || !hashed[j]._hash) continue;
+      if (hammingDistance(hashed[i]._hash, hashed[j]._hash) <= maxDist) {
+        group.push(j);
+        used.add(j);
+      }
+    }
+    groups.push(group);
+  }
+
+  // Keep the longest clip from each group
+  const kept = [];
+  for (const group of groups) {
+    let bestIdx = group[0];
+    let bestDur = hashed[bestIdx].duration || 0;
+    for (const idx of group) {
+      const dur = hashed[idx].duration || 0;
+      if (dur > bestDur) {
+        bestDur = dur;
+        bestIdx = idx;
+      }
+    }
+    const clip = { ...hashed[bestIdx] };
+    delete clip._hash;
+    kept.push(clip);
+
+    // Delete duplicate files from disk
+    for (const idx of group) {
+      if (idx !== bestIdx) {
+        try { fs.unlinkSync(hashed[idx].path); } catch {}
+        // Also delete thumbnail if it exists
+        const thumbPath = hashed[idx].path.replace(/\.mp4$/i, '.jpg');
+        const thumbDir = path.join(path.dirname(hashed[idx].path), '.thumbnails');
+        try { fs.unlinkSync(path.join(thumbDir, path.basename(thumbPath))); } catch {}
+      }
+    }
+  }
+
+  // Add any clips that couldn't be hashed (keep them all)
+  for (let i = 0; i < hashed.length; i++) {
+    if (!hashed[i]._hash && !used.has(i)) {
+      const clip = { ...hashed[i] };
+      delete clip._hash;
+      kept.push(clip);
+    }
+  }
+
+  const removed = clips.length - kept.length;
+  if (removed > 0) {
+    console.log(`[dedup] Removed ${removed} duplicates, kept ${kept.length} unique clips`);
+  }
+  return kept.sort((a, b) => (a.clipIndex || 0) - (b.clipIndex || 0));
+}
+
+/**
+ * Full local rip pipeline:
+ * 1. Download videos via yt-dlp
+ * 2. Scene detect via TransNetV2/FFmpeg
+ * 3. Split into clips
+ * 4. Return clip file info
+ */
+ipcMain.handle('local-rip', async (_event, urls, outputDir, options = {}) => {
+  const ytdlp = getYtdlpPath();
+  if (!ytdlp) throw new Error('yt-dlp not found');
+  const ffmpeg = getFfmpegPath();
+  if (!ffmpeg) throw new Error('FFmpeg not found');
+
+  const mediaFolder = store.get('mediaFolder');
+  const targetDir = outputDir || (mediaFolder
+    ? path.join(mediaFolder, 'StickToMusic', 'Downloads')
+    : app.getPath('downloads'));
+  fs.mkdirSync(targetDir, { recursive: true });
+
+  const threshold = options.sceneThreshold || 0.5;
+  const allClips = [];
+  const urlList = Array.isArray(urls) ? urls : [urls];
+
+  for (let vi = 0; vi < urlList.length; vi++) {
+    const videoUrl = urlList[vi];
+
+    // ── Step 1: Download via yt-dlp ──
+    if (mainWindow) {
+      mainWindow.webContents.send('local-rip-progress', {
+        phase: 'downloading',
+        message: `Downloading ${vi + 1} of ${urlList.length}...`,
+        videoIndex: vi,
+        totalVideos: urlList.length,
+      });
+    }
+
+    let videoPath;
+    try {
+      // --restrict-filenames: replaces #, spaces, unicode with safe ASCII chars
+      // --print after_move:filepath: outputs the exact final filepath (no guessing)
+      const outputTemplate = path.join(targetDir, `dl_${vi + 1}_%(title).60s.%(ext)s`);
+      videoPath = await new Promise((resolve, reject) => {
+        const { spawn } = require('child_process');
+        const args = [
+          '-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
+          '--merge-output-format', 'mp4',
+          '--no-playlist',
+          '--restrict-filenames',
+          '--print', 'after_move:filepath',
+          '-o', outputTemplate,
+          videoUrl,
+        ];
+        const proc = spawn(ytdlp, args, { cwd: targetDir });
+        let stdout = '';
+        let stderr = '';
+        proc.stdout.on('data', (d) => {
+          const line = d.toString();
+          stdout += line;
+          const match = line.match(/(\d+\.?\d*)%/);
+          if (match && mainWindow) {
+            mainWindow.webContents.send('local-rip-progress', {
+              phase: 'downloading',
+              message: `Downloading ${vi + 1}/${urlList.length}... ${Math.round(parseFloat(match[1]))}%`,
+              percent: parseFloat(match[1]),
+            });
+          }
+        });
+        proc.stderr.on('data', (d) => { stderr += d.toString(); });
+        proc.on('close', (code) => {
+          if (code !== 0) return reject(new Error(`yt-dlp: ${stderr.slice(-200)}`));
+          // --print after_move:filepath outputs the final path as the LAST line
+          const lines = stdout.trim().split('\n').filter(Boolean);
+          const finalPath = lines[lines.length - 1]?.trim();
+          if (finalPath && fs.existsSync(finalPath)) {
+            resolve(finalPath);
+          } else {
+            // Fallback: find the dl_{vi+1}_ prefixed file
+            const prefix = `dl_${vi + 1}_`;
+            const found = fs.readdirSync(targetDir)
+              .filter((f) => f.startsWith(prefix) && /\.(mp4|webm|mkv|mov)$/i.test(f))
+              .map((f) => path.join(targetDir, f))
+              .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+            found ? resolve(found) : reject(new Error('Downloaded file not found'));
+          }
+        });
+        setTimeout(() => { proc.kill(); reject(new Error('Download timed out')); }, 300000);
+      });
+    } catch (err) {
+      console.warn(`[local-rip] Download failed for ${videoUrl}: ${err.message}`);
+      continue;
+    }
+
+    console.log(`[local-rip] Downloaded: ${path.basename(videoPath)}`);
+
+    // ── Step 2: Scene detect ──
+    if (mainWindow) {
+      mainWindow.webContents.send('local-rip-progress', {
+        phase: 'detecting',
+        message: `Detecting scenes in video ${vi + 1}...`,
+      });
+    }
+
+    const cutTimes = await detectScenes(videoPath, threshold);
+    console.log(`[local-rip] ${path.basename(videoPath)}: ${cutTimes.length} scene cuts`);
+
+    if (cutTimes.length === 0) {
+      // No scenes — return the whole video as one clip with thumbnail
+      const stat = fs.statSync(videoPath);
+      const thumbDir = path.join(targetDir, '.thumbnails');
+      const thumbName = path.basename(videoPath, path.extname(videoPath)) + '.jpg';
+      const thumbPath = path.join(thumbDir, thumbName);
+      try {
+        fs.mkdirSync(thumbDir, { recursive: true });
+        execSync(`"${ffmpeg}" -y -i "${videoPath}" -ss 0 -vframes 1 -vf "scale=480:-1" -q:v 3 "${thumbPath}"`, { timeout: 10000 });
+      } catch {}
+      const hasThumb = fs.existsSync(thumbPath) && fs.statSync(thumbPath).size > 0;
+      allClips.push({
+        name: path.basename(videoPath),
+        path: videoPath,
+        localUrl: toLocalUrl(videoPath),
+        thumbnailUrl: hasThumb ? toLocalUrl(thumbPath) : null,
+        size: stat.size,
+        type: 'video',
+        clipIndex: 0,
+        startTime: 0,
+        duration: getVideoDuration(videoPath),
+      });
+      continue;
+    }
+
+    // ── Step 3: Split ──
+    if (mainWindow) {
+      mainWindow.webContents.send('local-rip-progress', {
+        phase: 'splitting',
+        message: `Splitting video ${vi + 1} into ${cutTimes.length + 1} clips...`,
+      });
+    }
+
+    const clips = await splitVideo(videoPath, cutTimes, targetDir);
+    allClips.push(...clips);
+
+    // Remove the original full video after splitting
+    if (clips.length > 0) {
+      try { fs.unlinkSync(videoPath); } catch {}
+    }
+  }
+
+  // Dedup disabled — montage clips are intentionally different, 8x8 hash is too coarse
+  // to distinguish moody/dark aesthetic clips. Keep all clips the scene detector found.
+  if (false && allClips.length > 1) {
+    if (mainWindow) {
+      mainWindow.webContents.send('local-rip-progress', {
+        phase: 'deduplicating',
+        message: `Removing duplicates from ${allClips.length} clips...`,
+      });
+    }
+    const ffmpeg = getFfmpegPath();
+    const uniqueClips = deduplicateClips(allClips, ffmpeg);
+    const removed = allClips.length - uniqueClips.length;
+    allClips.length = 0;
+    allClips.push(...uniqueClips);
+    if (removed > 0) console.log(`[local-rip] Dedup: ${removed} duplicates removed`);
+  }
+
+  if (mainWindow) {
+    mainWindow.webContents.send('local-rip-progress', {
+      phase: 'complete',
+      message: `Done! ${allClips.length} unique clips.`,
+      totalClips: allClips.length,
+    });
+  }
+
+  console.log(`[local-rip] Pipeline complete: ${allClips.length} unique clips from ${urls.length} videos`);
+  return allClips;
+});
+
+ipcMain.handle('ffmpeg-available', () => {
+  return getFfmpegPath() !== null;
+});
+
+// ── Embedded Server (serves production build + proxies API) ──
+const VERCEL_TARGET = 'https://sticktomusic.com';
+let serverPort = 3000; // dev default; production picks a random available port
+
+function startEmbeddedServer() {
+  return new Promise((resolve) => {
+    const server = express();
+    server.use(express.json({ limit: '10mb' }));
+
+    // API proxy — forward /api/* to sticktomusic.com
+    server.all('/api/*', async (req, res) => {
+      const targetUrl = `${VERCEL_TARGET}${req.originalUrl}`;
+      try {
+        const headers = {
+          'Origin': 'https://sticktomusic.com',
+          'Referer': 'https://sticktomusic.com/',
+          'Accept': 'application/json',
+        };
+        if (req.headers.authorization) headers['Authorization'] = req.headers.authorization;
+        if (req.headers['content-type']) headers['Content-Type'] = req.headers['content-type'];
+
+        const fetchOptions = { method: req.method, headers };
+        if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body) {
+          fetchOptions.body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+        }
+
+        const response = await fetch(targetUrl, fetchOptions);
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        if (req.method === 'OPTIONS') return res.status(200).end();
+
+        const contentType = response.headers.get('content-type') || '';
+        const body = await response.text();
+        res.status(response.status);
+        if (contentType.includes('json')) res.setHeader('Content-Type', 'application/json');
+        res.send(body);
+      } catch (err) {
+        console.error(`[proxy] Error: ${req.method} ${req.originalUrl}:`, err.message);
+        res.status(502).json({ error: 'Proxy error: ' + err.message });
+      }
+    });
+
+    // Serve local media files — allows the renderer to load local content without CORS issues
+    server.get('/local-media/*', (req, res) => {
+      const mediaFolder = store.get('mediaFolder');
+      if (!mediaFolder) return res.status(404).send('No media folder');
+      // req.params[0] is already URL-decoded by Express
+      const relativePath = req.params[0];
+      const fullPath = path.join(mediaFolder, relativePath);
+      // CORS headers for media playback
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Accept-Ranges', 'bytes');
+      // Security: ensure the path stays within the media folder
+      if (!fullPath.startsWith(mediaFolder)) return res.status(403).send('Forbidden');
+      if (!fs.existsSync(fullPath)) return res.status(404).send('Not found');
+      res.sendFile(fullPath);
+    });
+
+    // Serve static build files
+    // In dev: build/ at project root. In production: app-build/ (renamed to avoid electron-builder exclusion)
+    const buildPath = isDev
+      ? path.join(__dirname, '..', 'build')
+      : path.join(__dirname, '..', 'app-build');
+    server.use(express.static(buildPath));
+
+    // SPA fallback — serve index.html for all non-API, non-static routes
+    server.get('*', (req, res) => {
+      res.sendFile(path.join(buildPath, 'index.html'));
+    });
+
+    // Use fixed port so Firebase Auth can whitelist localhost
+    const PROD_PORT = 4321;
+    const listener = server.listen(PROD_PORT, () => {
+      serverPort = listener.address().port;
+      console.log(`[server] Embedded server running on http://localhost:${serverPort}`);
+      resolve(serverPort);
+    });
+    // Fallback to random port if 4321 is taken
+    listener.on('error', () => {
+      const fallback = server.listen(0, () => {
+        serverPort = fallback.address().port;
+        console.log(`[server] Embedded server running on http://localhost:${serverPort} (fallback)`);
+        resolve(serverPort);
+      });
+    });
+  });
+}
+
 // ── App Lifecycle ──
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Wait for electron-store to initialize before anything else
+  await _storeReady;
+
   // Firebase session handling
   session.defaultSession.webRequest.onBeforeSendHeaders(
     { urls: ['*://*.firebaseapp.com/*', '*://*.googleapis.com/*'] },
@@ -354,17 +1141,27 @@ app.whenReady().then(() => {
     }
   );
 
+  // Start embedded server in ALL modes (serves /local-media/* for desktop file access)
+  await startEmbeddedServer();
+
   buildMenu();
   createWindow();
   setupAutoUpdater();
 
   // Check for updates 5 seconds after launch (non-blocking)
   if (autoUpdater && !isDev) {
-    setTimeout(() => autoUpdater.checkForUpdates(), 5000);
+    setTimeout(() => {
+      try { autoUpdater.checkForUpdates().catch(() => {}); } catch {}
+    }, 5000);
   }
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    } else if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
   });
 });
 

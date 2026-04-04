@@ -251,6 +251,12 @@ const MultiClipEditor = ({
   // ── Clip durations tracking ──
   const clipDurationsRef = useRef({});
   const [clipDurationsState, setClipDurationsState] = useState({});
+  const advancingClipRef = useRef(false); // guard against double-advance from useEffect + onEnded
+  const pendingSeekRef = useRef(null); // deferred seek position when clip src changes
+
+  // Resolve a unique key for a clip (ripped clips may lack id/sourceId)
+  const getClipKey = (clip) =>
+    clip?.id || clip?.sourceId || clip?.name || clip?.localUrl || 'unknown';
 
   const getClipDuration = (clipId) => {
     return clipDurationsRef.current[clipId] || 5;
@@ -261,9 +267,46 @@ const MultiClipEditor = ({
     setClipDurationsState((prev) => ({ ...prev, [clipId]: duration }));
   };
 
+  // Initialize clip durations — from metadata OR by probing the video file
+  useEffect(() => {
+    let changed = false;
+    for (const clip of clips) {
+      const key = getClipKey(clip);
+      if (key === 'unknown' || clipDurationsRef.current[key]) continue;
+
+      // Use metadata duration if available
+      if (clip.duration) {
+        clipDurationsRef.current[key] = clip.duration;
+        changed = true;
+        continue;
+      }
+
+      // Probe the video file for duration (for library items without metadata)
+      const url = clip.localUrl || clip.url || clip.src;
+      if (url) {
+        const v = document.createElement('video');
+        v.preload = 'metadata';
+        v.src = url;
+        v.onloadedmetadata = () => {
+          if (v.duration && isFinite(v.duration)) {
+            clipDurationsRef.current[key] = v.duration;
+            setClipDurationsState((prev) => ({ ...prev, [key]: v.duration }));
+          }
+          v.src = '';
+          v.remove();
+        };
+        v.onerror = () => {
+          v.src = '';
+          v.remove();
+        };
+      }
+    }
+    if (changed) setClipDurationsState({ ...clipDurationsRef.current });
+  }, [clips]);
+
   // Calculate total duration across all clips
   const calculateTotalDuration = useCallback(() => {
-    return clips.reduce((sum, clip) => sum + getClipDuration(clip.id || clip.sourceId), 0);
+    return clips.reduce((sum, clip) => sum + getClipDuration(getClipKey(clip)), 0);
   }, [clips]);
 
   const totalDuration = calculateTotalDuration();
@@ -548,8 +591,21 @@ const MultiClipEditor = ({
 
   const handleVideoLoaded = useCallback(() => {
     if (videoRef.current && activeClipIndex < clips.length) {
-      const clipId = clips[activeClipIndex].id || clips[activeClipIndex].sourceId;
-      setClipDuration(clipId, videoRef.current.duration);
+      const clip = clips[activeClipIndex];
+      const key = getClipKey(clip);
+      // Only set duration if not already known (preserves beat-determined durations)
+      if (
+        !clipDurationsRef.current[key] &&
+        videoRef.current.duration &&
+        isFinite(videoRef.current.duration)
+      ) {
+        setClipDuration(key, videoRef.current.duration);
+      }
+      // Apply deferred seek if we changed clips via handleSeek
+      if (pendingSeekRef.current !== null) {
+        videoRef.current.currentTime = pendingSeekRef.current;
+        pendingSeekRef.current = null;
+      }
     }
   }, [activeClipIndex, clips]);
 
@@ -582,8 +638,7 @@ const MultiClipEditor = ({
           let targetClipIndex = 0;
           let timeInClip = time;
           for (let i = 0; i < clips.length; i++) {
-            const clipId = clips[i].id || clips[i].sourceId;
-            const clipDur = clipDurationsRef.current[clipId] || 5;
+            const clipDur = clipDurationsRef.current[getClipKey(clips[i])] || 5;
             if (accumulatedTime + clipDur >= time) {
               targetClipIndex = i;
               timeInClip = time - accumulatedTime;
@@ -669,7 +724,7 @@ const MultiClipEditor = ({
       // For multi-clip, currentTime is accumulated global time
       let accBefore = 0;
       for (let i = 0; i < activeClipIndex; i++) {
-        accBefore += getClipDuration(clips[i]?.id || clips[i]?.sourceId);
+        accBefore += getClipDuration(getClipKey(clips[i]));
       }
       setCurrentTime(accBefore + videoRef.current.currentTime);
     }
@@ -700,26 +755,28 @@ const MultiClipEditor = ({
     setIsPlaying(!isPlaying);
   }, [isPlaying, playbackLoop, selectedAudio]);
 
-  // Handle clip progression
+  // Handle clip progression (for trimmed clips where displayed duration < file duration)
   useEffect(() => {
-    if (!videoRef.current || clips.length === 0) return;
+    if (!videoRef.current || clips.length === 0 || advancingClipRef.current) return;
 
     const currentClip = clips[activeClipIndex];
-    const currentClipId = currentClip.id || currentClip.sourceId;
-    const currentClipDuration = getClipDuration(currentClipId);
+    if (!currentClip) return;
+    const currentClipDuration = getClipDuration(getClipKey(currentClip));
 
     if (videoRef.current.currentTime >= currentClipDuration) {
-      // Current clip ended
+      advancingClipRef.current = true;
       if (activeClipIndex < clips.length - 1) {
-        // Advance to next clip
         setActiveClipIndex((prev) => prev + 1);
         setCurrentTime(0);
         videoRef.current.currentTime = 0;
       } else {
-        // Last clip ended
         setIsPlaying(false);
         if (animationRef.current) cancelAnimationFrame(animationRef.current);
       }
+      // Reset guard after React has processed the state update
+      requestAnimationFrame(() => {
+        advancingClipRef.current = false;
+      });
     }
   }, [currentTime, activeClipIndex, clips]);
 
@@ -732,8 +789,7 @@ const MultiClipEditor = ({
       let timeInClip = time;
 
       for (let i = 0; i < clips.length; i++) {
-        const clipId = clips[i].id || clips[i].sourceId;
-        const clipDur = getClipDuration(clipId);
+        const clipDur = getClipDuration(getClipKey(clips[i]));
         if (accumulatedTime + clipDur >= time) {
           targetClipIndex = i;
           timeInClip = time - accumulatedTime;
@@ -742,10 +798,14 @@ const MultiClipEditor = ({
         accumulatedTime += clipDur;
       }
 
-      setActiveClipIndex(targetClipIndex);
       setCurrentTime(time);
 
-      if (videoRef.current) {
+      if (targetClipIndex !== activeClipIndex) {
+        // Clip src will change on re-render, deferring seek until onLoadedMetadata
+        pendingSeekRef.current = timeInClip;
+        setActiveClipIndex(targetClipIndex);
+      } else if (videoRef.current) {
+        // Same clip — seek immediately
         videoRef.current.currentTime = timeInClip;
       }
       if (audioRef.current) {
@@ -1093,7 +1153,7 @@ const MultiClipEditor = ({
       e.preventDefault();
       const clipItem = clips[clipIndex];
       if (!clipItem) return;
-      const clipId = clipItem.id || clipItem.sourceId;
+      const clipId = getClipKey(clipItem);
       setClipResize({
         active: true,
         clipIndex,
@@ -1634,7 +1694,7 @@ const MultiClipEditor = ({
       name: video.name || 'Multi-Clip',
       clips: video.clips.map((clip, i) => {
         const clipUrl = clip.url || clip.localUrl || clip.src;
-        const clipId = clip.id || clip.sourceId;
+        const clipId = getClipKey(clip);
         return {
           id: `clip_${timestamp}_${i}`,
           sourceId: clip.id || clipId,
@@ -1698,7 +1758,7 @@ const MultiClipEditor = ({
         name: video.name || 'Multi-Clip',
         clips: video.clips.map((clip, i) => {
           const clipUrl = clip.url || clip.localUrl || clip.src;
-          const clipId = clip.id || clip.sourceId;
+          const clipId = getClipKey(clip);
           return {
             id: `clip_${timestamp}_${savedCount}_${i}`,
             sourceId: clip.id || clipId,
@@ -1906,6 +1966,8 @@ const MultiClipEditor = ({
                     src={getClipUrl(currentClip)}
                     onLoadedMetadata={handleVideoLoaded}
                     onEnded={() => {
+                      if (advancingClipRef.current) return; // useEffect already handled it
+                      advancingClipRef.current = true;
                       if (activeClipIndex < clips.length - 1) {
                         setActiveClipIndex((prev) => prev + 1);
                         if (videoRef.current) videoRef.current.currentTime = 0;
@@ -1917,11 +1979,15 @@ const MultiClipEditor = ({
                           !audioRef.current.paused &&
                           audioRef.current.duration > totalDuration
                         ) {
+                          advancingClipRef.current = false;
                           return; // Audio continues — playbackLoop will switch to audio time
                         }
                         setIsPlaying(false);
                         if (animationRef.current) cancelAnimationFrame(animationRef.current);
                       }
+                      requestAnimationFrame(() => {
+                        advancingClipRef.current = false;
+                      });
                     }}
                     loop={false}
                     playsInline
@@ -2377,7 +2443,7 @@ const MultiClipEditor = ({
                                     {clip.name || 'Clip'}
                                   </div>
                                   <div style={{ fontSize: '9px', color: theme.text.muted }}>
-                                    {formatTime(getClipDuration(clip.id || clip.sourceId))}
+                                    {formatTime(getClipDuration(getClipKey(clip)))}
                                   </div>
                                 </div>
                                 <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
@@ -2905,8 +2971,8 @@ const MultiClipEditor = ({
                 : 0;
               // Per-clip source waveforms (downsampled)
               const perClipSourceWaveforms = clips.map((c) => {
-                const data = clipWaveforms[c.id || c.sourceId] || [];
-                const clipDur = getClipDuration(c.id || c.sourceId);
+                const data = clipWaveforms[getClipKey(c)] || [];
+                const clipDur = getClipDuration(getClipKey(c));
                 const segPx = clipDur * pxPerSec;
                 const maxBars = Math.max(10, Math.round(segPx / 3));
                 return downsample(data, maxBars);
@@ -3398,6 +3464,7 @@ const MultiClipEditor = ({
 
                         {/* Clips row — pixel-width blocks */}
                         <div style={{ height: '48px', position: 'relative', width: '100%' }}>
+                          {/* DEBUG: clip key + duration inspection — REMOVE AFTER DEBUGGING */}
                           {clips.length === 0 ? (
                             <div className="text-center py-3 text-neutral-500 text-[13px]">
                               <p>Click clips to add, or use Cut by beat</p>
@@ -3405,7 +3472,7 @@ const MultiClipEditor = ({
                           ) : (
                             <div className="flex" style={{ height: '100%', minWidth: '100%' }}>
                               {clips.map((clipItem, idx) => {
-                                const clipId = clipItem.id || clipItem.sourceId;
+                                const clipId = getClipKey(clipItem);
                                 const clipDur = getClipDuration(clipId);
                                 const clipWidth = Math.max(50, clipDur * pxPerSec);
                                 const thumbWidth = Math.min(68, clipWidth - 2);
@@ -3445,9 +3512,7 @@ const MultiClipEditor = ({
                                     onClick={() => {
                                       let accBefore = 0;
                                       for (let j = 0; j < idx; j++)
-                                        accBefore += getClipDuration(
-                                          clips[j].id || clips[j].sourceId,
-                                        );
+                                        accBefore += getClipDuration(getClipKey(clips[j]));
                                       setActiveClipIndex(idx);
                                       setCurrentTime(accBefore);
                                       if (videoRef.current) videoRef.current.currentTime = 0;
@@ -3645,7 +3710,7 @@ const MultiClipEditor = ({
                                 }}
                               >
                                 {clips.map((clipItem, idx) => {
-                                  const clipId = clipItem.id || clipItem.sourceId;
+                                  const clipId = getClipKey(clipItem);
                                   const clipDur = getClipDuration(clipId);
                                   const segWidth = Math.max(50, clipDur * pxPerSec);
                                   const bars = perClipSourceWaveforms[idx] || [];
@@ -3705,7 +3770,7 @@ const MultiClipEditor = ({
                             let cumDur = 0;
                             const boundaries = [];
                             clips.forEach((clipItem, idx) => {
-                              cumDur += getClipDuration(clipItem.id || clipItem.sourceId);
+                              cumDur += getClipDuration(getClipKey(clipItem));
                               if (idx < clips.length - 1) {
                                 boundaries.push({ px: cumDur * pxPerSec, idx });
                               }
@@ -3743,11 +3808,9 @@ const MultiClipEditor = ({
                                       clipIndex: clipIdx,
                                       startX: e.clientX,
                                       originalStartTime: 0,
-                                      originalPrevDuration: getClipDuration(
-                                        clips[idx].id || clips[idx].sourceId,
-                                      ),
+                                      originalPrevDuration: getClipDuration(getClipKey(clips[idx])),
                                       originalCurrDuration: getClipDuration(
-                                        clips[clipIdx].id || clips[clipIdx].sourceId,
+                                        getClipKey(clips[clipIdx]),
                                       ),
                                     });
                                   }}
@@ -4124,7 +4187,7 @@ const MultiClipEditor = ({
                               {clip.name || 'Clip'}
                             </div>
                             <div className="text-[9px] text-neutral-500">
-                              {formatTime(getClipDuration(clip.id || clip.sourceId))}
+                              {formatTime(getClipDuration(getClipKey(clip)))}
                             </div>
                           </div>
                           <div className="flex gap-0.5 flex-shrink-0">

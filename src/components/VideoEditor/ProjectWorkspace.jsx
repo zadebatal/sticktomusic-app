@@ -86,6 +86,12 @@ import AllMediaContent from './AllMediaContent';
 import WebImportModal from './WebImportModal';
 import { generateCaptions } from '../../services/captionGeneratorService';
 import DumpAndGenerateModal from './DumpAndGenerateModal';
+import {
+  createProjectFolder,
+  createNicheFolder,
+  getMediaPath,
+} from '../../services/localProjectService';
+import { isElectronApp } from '../../services/localMediaService';
 import log from '../../utils/logger';
 
 const FORMAT_TO_EDITOR = {
@@ -118,6 +124,7 @@ const ProjectWorkspace = ({
   db,
   user = null,
   artistId,
+  artistName = '',
   projectId,
   initialNicheId = null,
   onBack,
@@ -272,10 +279,14 @@ const ProjectWorkspace = ({
         const recentWrites = getRecentCollectionSnapshots();
         const recentRemovals = getRecentCollectionRemovals();
 
+        // Build lookup maps for O(1) access (avoid O(n²) .find() loops)
+        const prevUserMap = new Map(prevUser.map((c) => [c.id, c]));
+        const currentLocalMap = new Map(currentLocal.map((c) => [c.id, c]));
+
         // Build merged result starting from subscription data
         const result = newUser.map((col) => {
-          const fromPrev = prevUser.find((p) => p.id === col.id);
-          const fromLocal = currentLocal.find((l) => l.id === col.id);
+          const fromPrev = prevUserMap.get(col.id);
+          const fromLocal = currentLocalMap.get(col.id);
           const fromRecent = recentWrites.get(col.id);
           const removed = recentRemovals.get(col.id)?.removedIds;
           // Union mediaIds from all four sources
@@ -397,9 +408,9 @@ const ProjectWorkspace = ({
         // Log guard results for each niche
         const niches = result.filter((c) => c.isPipeline);
         for (const n of niches) {
-          const sub = newUser.find((c) => c.id === n.id);
-          const prev = prevUser.find((c) => c.id === n.id);
-          const loc = currentLocal.find((c) => c.id === n.id);
+          const sub = newUser.find((c) => c.id === n.id); // small array (niches only), OK
+          const prev = prevUserMap.get(n.id);
+          const loc = currentLocalMap.get(n.id);
           const rec = recentWrites.get(n.id);
           if (sub?.mediaIds?.length !== n.mediaIds?.length) {
             log(
@@ -430,25 +441,78 @@ const ProjectWorkspace = ({
       });
     };
 
+    // Debounce subscription callbacks — prevents rapid re-renders during batch Firestore updates
+    let colTimer, libTimer, contentTimer;
+    const debouncedSetCollections = (data) => {
+      clearTimeout(colTimer);
+      colTimer = setTimeout(() => safeSetCollections(data), 300);
+    };
+    const debouncedSetLibrary = (data) => {
+      clearTimeout(libTimer);
+      libTimer = setTimeout(() => setLibrary(data), 300);
+    };
+    const debouncedSetContent = (data) => {
+      clearTimeout(contentTimer);
+      contentTimer = setTimeout(() => setCreatedContent(data), 300);
+    };
+
     const unsubs = [];
     if (db) {
-      unsubs.push(subscribeToCollections(db, artistId, safeSetCollections));
-      unsubs.push(subscribeToLibrary(db, artistId, setLibrary));
-      unsubs.push(subscribeToCreatedContent(db, artistId, setCreatedContent));
+      unsubs.push(subscribeToCollections(db, artistId, debouncedSetCollections));
+      unsubs.push(subscribeToLibrary(db, artistId, debouncedSetLibrary));
+      unsubs.push(subscribeToCreatedContent(db, artistId, debouncedSetContent));
     }
-    return () => unsubs.forEach((u) => u && u());
+    return () => {
+      unsubs.forEach((u) => u && u());
+      clearTimeout(colTimer);
+      clearTimeout(libTimer);
+      clearTimeout(contentTimer);
+    };
   }, [db, artistId]);
 
-  // Background thumbnail regeneration (v1→v2 quality upgrade)
+  // Clean orphaned mediaIds — remove IDs from collections AND project pool that don't exist in the library
+  const orphanCleanRef = useRef(false);
+  useEffect(() => {
+    if (!db || !artistId || orphanCleanRef.current || library.length === 0) return;
+    orphanCleanRef.current = true;
+    // Defer cleanup so it doesn't block initial render
+    const timer = setTimeout(() => {
+      const libraryIds = new Set(library.map((m) => m.id));
+      const userCollections = collections.filter((c) => !c._smart);
+      let cleaned = 0;
+      for (const col of userCollections) {
+        if (!col.mediaIds?.length) continue;
+        const valid = col.mediaIds.filter((id) => libraryIds.has(id));
+        if (valid.length < col.mediaIds.length) {
+          const removed = col.mediaIds.length - valid.length;
+          col.mediaIds = valid;
+          cleaned += removed;
+          saveCollectionToFirestore(db, artistId, col).catch(() => {});
+        }
+      }
+      if (cleaned > 0) {
+        saveCollections(artistId, userCollections);
+        setCollections([...collections]);
+        log(`[Cleanup] Removed ${cleaned} orphaned mediaIds from collections`);
+      }
+    }, 1000); // 1s delay — let UI render first
+    return () => clearTimeout(timer);
+  }, [db, artistId, library, collections]);
+
+  // Background thumbnail regeneration (v1→v2 quality upgrade) — deferred
   const thumbMigrationRef = useRef(false);
   useEffect(() => {
     if (!db || !artistId || thumbMigrationRef.current) return;
-    const needsUpgrade = library.some(
-      (item) => item.type === MEDIA_TYPES.IMAGE && item.url && item.thumbVersion !== THUMB_VERSION,
-    );
-    if (!needsUpgrade) return;
-    thumbMigrationRef.current = true;
-    migrateThumbnails(db, artistId, library, uploadFile).catch(log.error);
+    const timer = setTimeout(() => {
+      const needsUpgrade = library.some(
+        (item) =>
+          item.type === MEDIA_TYPES.IMAGE && item.url && item.thumbVersion !== THUMB_VERSION,
+      );
+      if (!needsUpgrade) return;
+      thumbMigrationRef.current = true;
+      migrateThumbnails(db, artistId, library, uploadFile).catch(log.error);
+    }, 2000); // 2s delay
+    return () => clearTimeout(timer);
   }, [db, artistId, library]);
 
   // Project root
@@ -480,6 +544,18 @@ const ProjectWorkspace = ({
       setActiveNicheIdRaw(target);
     }
   }, [niches, activeNicheId]);
+
+  // Auto-create project & niche folders on disk (Electron desktop)
+  const folderCreatedRef = useRef(false);
+  useEffect(() => {
+    if (folderCreatedRef.current || !project || !artistName) return;
+    folderCreatedRef.current = true;
+    const projectName = project.name || 'Untitled';
+    createProjectFolder(artistName, projectName).catch(() => {});
+    for (const niche of niches) {
+      createNicheFolder(artistName, projectName, niche.name || 'Untitled').catch(() => {});
+    }
+  }, [project, niches, artistName]);
 
   // Active niche
   const activeNiche = useMemo(() => {
@@ -977,16 +1053,24 @@ const ProjectWorkspace = ({
       try {
         const importedIds = [];
         for (const file of files) {
-          // Create library item
+          // Create library item — use local path if available, otherwise Firebase URL
+          const hasLocalPath = !!file.localUrl || !!file.path;
           const item = {
             id: `web_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
             name: file.name,
-            url: file.url,
-            thumbnailUrl: file.thumbnailUrl || (file.type === 'image' ? file.url : null),
-            storagePath: file.storagePath,
+            url: file.url || file.localUrl || '',
+            localUrl:
+              file.localUrl ||
+              (file.path ? `file://${encodeURI(file.path).replace(/#/g, '%23')}` : null),
+            thumbnailUrl:
+              file.thumbnailUrl || (file.type === 'image' ? file.url || file.localUrl : null),
+            storagePath: file.storagePath || null,
+            localPath: file.path || null,
             type: file.type || 'image',
             size: file.size,
+            duration: file.duration || undefined, // Preserve rip pipeline duration metadata
             source: 'web-import',
+            syncStatus: hasLocalPath ? 'local' : 'cloud',
             createdAt: new Date().toISOString(),
           };
 
@@ -1019,6 +1103,34 @@ const ProjectWorkspace = ({
         setCollections(getCollections(artistId));
 
         toastSuccess(`Imported ${files.length} file${files.length !== 1 ? 's' : ''} from web`);
+
+        // Background: download cloud files to local drive (Electron desktop)
+        if (isElectronApp() && artistName && project?.name) {
+          const activeNiche = niches.find((n) => n.id === activeNicheId);
+          const nicheName = activeNiche?.name || 'Untitled';
+          for (const file of files) {
+            if (file.url && !file.path && !file.localUrl) {
+              getMediaPath(
+                artistName,
+                project.name,
+                nicheName,
+                file.type || 'video',
+                file.name,
+              ).then(async (localPath) => {
+                if (!localPath) return;
+                try {
+                  const resp = await fetch(file.url);
+                  const buf = await resp.arrayBuffer();
+                  const relativePath = localPath.replace(/^.*?StickToMusic/, 'StickToMusic');
+                  await window.electronAPI.saveFileLocally(buf, relativePath);
+                  log(`[WebImport] Saved to drive: ${file.name}`);
+                } catch (err) {
+                  log.warn(`[WebImport] Local save failed for ${file.name}: ${err.message}`);
+                }
+              });
+            }
+          }
+        }
       } catch (err) {
         log.error('Web import complete error:', err);
         toastError('Failed to add imported media to library');
@@ -1027,7 +1139,7 @@ const ProjectWorkspace = ({
       setShowWebImportModal(false);
       pendingWebImportBankRef.current = null;
     },
-    [activeNicheId, artistId, projectId, db, toastSuccess, toastError],
+    [activeNicheId, artistId, artistName, project, niches, projectId, db, toastSuccess, toastError],
   );
 
   // Import audio only — opens import modal filtered to audio
@@ -2081,6 +2193,11 @@ const ProjectWorkspace = ({
           defaultBankIndex={pendingWebImportBankRef.current ?? 0}
           bankCount={activeNiche?.banks?.length || 1}
           artistId={artistId}
+          outputDir={
+            window.electronAPI?.isElectron && artistName && project?.name && activeNiche?.name
+              ? undefined // let the IPC handler use the default — we'll pass it via getMediaPath in a future update
+              : undefined
+          }
         />
       )}
 

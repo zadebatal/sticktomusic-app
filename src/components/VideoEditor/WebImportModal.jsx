@@ -17,6 +17,11 @@ import {
   startDownload,
   pollUntilComplete,
   startRip,
+  isLocalDownloadAvailable,
+  isLocalRipAvailable,
+  getLocalVideoInfo,
+  downloadLocally,
+  ripLocally,
 } from '../../services/webImportService';
 import { getBankColor, getBankLabel } from '../../services/libraryService';
 import log from '../../utils/logger';
@@ -42,6 +47,7 @@ const WebImportModal = ({
   defaultBankIndex = 0,
   bankCount = 1,
   artistId,
+  outputDir = null, // local disk path for downloaded files (Electron)
   mediaType = 'all', // 'image' | 'video' | 'all'
   audioOnly = false,
 }) => {
@@ -90,7 +96,20 @@ const WebImportModal = ({
     setState(STATES.ANALYZING);
 
     try {
-      const data = await analyzeUrl(trimmed);
+      let data;
+      // Desktop app: try local yt-dlp first for single videos (instant analysis)
+      const canLocal = await isLocalDownloadAvailable();
+      if (canLocal && !trimmed.match(/pinterest\.com|instagram\.com/i)) {
+        try {
+          data = await getLocalVideoInfo(trimmed);
+          data._useLocal = true; // flag for import handler
+        } catch {
+          // Local failed, fall back to Railway
+          data = await analyzeUrl(trimmed);
+        }
+      } else {
+        data = await analyzeUrl(trimmed);
+      }
       setMetadata(data);
       if (data.type === 'playlist') setMaxItems(10);
       else if (data.itemCount < 0) setMaxItems(50);
@@ -115,7 +134,80 @@ const WebImportModal = ({
     setImportProgress({ status: 'Starting...', progress: 0 });
 
     try {
-      // Build selected URLs list if we have items
+      // ── LOCAL PATHS (Desktop app — everything stays on disk) ──
+      const canLocalRip = await isLocalRipAvailable();
+      const canLocalDl = await isLocalDownloadAvailable();
+
+      // LOCAL: Single video download (no rip, no profile items)
+      if (canLocalDl && !ripMode && !hasItems) {
+        setImportProgress({ status: 'Downloading to your drive...', progress: 0 });
+        const files = await downloadLocally(url.trim(), { audioOnly, outputDir }, (prog) => {
+          if (abortRef.current) return;
+          setImportProgress({
+            status: `Downloading... ${Math.round(prog.percent)}%`,
+            progress: prog.percent,
+          });
+        });
+        if (!abortRef.current) onComplete?.(files, selectedBank);
+        return;
+      }
+
+      // LOCAL: Multiple videos from profile (download each via yt-dlp)
+      if (canLocalDl && hasItems && selectedItems.size > 0 && !ripMode) {
+        const selectedUrls = metadata.items
+          .filter((item) => selectedItems.has(item.id))
+          .map((item) => item.url)
+          .filter(Boolean);
+
+        const allFiles = [];
+        for (let i = 0; i < selectedUrls.length; i++) {
+          if (abortRef.current) break;
+          setImportProgress({
+            status: `Downloading ${i + 1} of ${selectedUrls.length} to your drive...`,
+            progress: (i / selectedUrls.length) * 100,
+          });
+          try {
+            const files = await downloadLocally(
+              selectedUrls[i],
+              { audioOnly, outputDir },
+              (prog) => {
+                if (abortRef.current) return;
+                setImportProgress({
+                  status: `Downloading ${i + 1} of ${selectedUrls.length}... ${Math.round(prog.percent)}%`,
+                  progress: ((i + prog.percent / 100) / selectedUrls.length) * 100,
+                });
+              },
+            );
+            allFiles.push(...files);
+          } catch (err) {
+            log.warn(`[WebImport] Local download ${i + 1} failed: ${err.message}`);
+          }
+        }
+        if (!abortRef.current) onComplete?.(allFiles, selectedBank);
+        return;
+      }
+
+      // LOCAL: Rip mode — download + scene detect + split (all on disk via FFmpeg)
+      if (canLocalRip && ripMode && hasItems && selectedItems.size > 0) {
+        const selectedUrls = metadata.items
+          .filter((item) => selectedItems.has(item.id))
+          .map((item) => item.url)
+          .filter(Boolean);
+
+        setImportProgress({ status: 'Starting local rip...', progress: 0 });
+        const clips = await ripLocally(selectedUrls, outputDir, { sceneThreshold: 0.5 }, (prog) => {
+          if (abortRef.current) return;
+          setImportProgress({
+            status: prog.message || prog.phase || 'Processing...',
+            progress: prog.percent || 0,
+            stats: prog.totalClips ? { clips: prog.totalClips } : null,
+          });
+        });
+        if (!abortRef.current) onComplete?.(clips, selectedBank);
+        return;
+      }
+
+      // ── CLOUD FALLBACK (Railway — for web-only or when local tools unavailable) ──
       let selectedUrls = null;
       if (hasItems && selectedItems.size > 0) {
         selectedUrls = metadata.items
@@ -125,13 +217,10 @@ const WebImportModal = ({
       }
 
       let jobId;
-
       if (ripMode && selectedUrls?.length > 0) {
-        // Montage Ripper mode — scene detect + classify + dedup
         const result = await startRip(artistId, selectedUrls);
         jobId = result.jobId;
       } else {
-        // Normal download mode
         const result = await startDownload(
           url.trim(),
           artistId,
@@ -145,31 +234,22 @@ const WebImportModal = ({
 
       const files = await pollUntilComplete(jobId, (status) => {
         if (abortRef.current) return;
-        let statusText;
-        if (ripMode) {
-          statusText =
-            status.phase ||
+        const statusText = ripMode
+          ? status.phase ||
             {
-              pending: 'Waiting to start...',
-              downloading: 'Downloading montages...',
-              processing: 'Splitting & classifying clips...',
-              uploading: `Uploading unique clips... ${status.progress}%`,
+              pending: 'Waiting...',
+              downloading: 'Downloading...',
+              processing: 'Splitting clips...',
+              uploading: `Uploading... ${status.progress}%`,
               complete: 'Complete!',
             }[status.status] ||
-            status.status;
-        } else {
-          statusText =
-            {
-              pending: 'Waiting to start...',
-              downloading: audioOnly
-                ? 'Extracting audio...'
-                : isVideo
-                  ? 'Downloading videos...'
-                  : 'Downloading media...',
-              uploading: `Uploading to storage... ${status.progress}%`,
+            status.status
+          : {
+              pending: 'Waiting...',
+              downloading: 'Downloading...',
+              uploading: `Uploading... ${status.progress}%`,
               complete: 'Complete!',
             }[status.status] || status.status;
-        }
         setImportProgress({
           status: statusText,
           progress: status.progress || 0,
@@ -177,9 +257,7 @@ const WebImportModal = ({
         });
       });
 
-      if (!abortRef.current) {
-        onComplete?.(files, selectedBank);
-      }
+      if (!abortRef.current) onComplete?.(files, selectedBank);
     } catch (err) {
       log.error('Import error:', err);
       setError(err.message);

@@ -399,17 +399,23 @@ const VideoEditorModal = ({
       clips.length === 0 &&
       category?.videos?.length > 0
     ) {
-      const initialClips = category.videos.map((v, i) => ({
-        id: `clip_${Date.now()}_${i}`,
-        sourceId: v.id,
-        url: v.url || v.localUrl || v.src,
-        localUrl: v.localUrl || v.url || v.src,
-        thumbnail: v.thumbnailUrl || v.thumbnail,
-        startTime: i * 2,
-        duration: 2,
-        locked: false,
-        sourceOffset: 0,
-      }));
+      let cumStart = 0;
+      const initialClips = category.videos.map((v, i) => {
+        const dur = v.duration || v.videoDuration || 2;
+        const clip = {
+          id: `clip_${Date.now()}_${i}`,
+          sourceId: v.id,
+          url: v.url || v.localUrl || v.src,
+          localUrl: v.localUrl || v.url || v.src,
+          thumbnail: v.thumbnailUrl || v.thumbnail,
+          startTime: cumStart,
+          duration: dur,
+          locked: false,
+          sourceOffset: 0,
+        };
+        cumStart += dur;
+        return clip;
+      });
       setClips(initialClips);
     }
   }, []); // Run once on mount
@@ -632,6 +638,7 @@ const VideoEditorModal = ({
   const [selectedWordId, setSelectedWordId] = useState(null);
   const [activeTimelineRow, setActiveTimelineRow] = useState('clips'); // 'clips' | 'words'
   const previewRef = useRef(null);
+  const canvasRef = useRef(null);
 
   // Progress bar dragging state
   const [progressDragging, setProgressDragging] = useState(false);
@@ -641,8 +648,10 @@ const VideoEditorModal = ({
   const [playheadDragging, setPlayheadDragging] = useState(false);
   const wasPlayingBeforePlayheadDrag = useRef(false);
 
-  // Clip drag reordering state
-  const [clipDrag, setClipDrag] = useState({ dragging: false, fromIndex: -1, toIndex: -1 });
+  // Free-move clip drag state (DaVinci-style)
+  const [freeMoveDrag, setFreeMoveDrag] = useState(null);
+  // { active, clipIndex, startMouseX, originalStartTime, snapLine }
+  // Legacy clipDrag not used — free positioning replaces HTML5 DnD
 
   // Waveform via shared hook (below)
 
@@ -685,9 +694,11 @@ const VideoEditorModal = ({
   const previousTrimHashRef = useRef(null);
   const isPlayingRef = useRef(false); // Ref to avoid stale closure in animation loop
   const videoCache = useRef(new Map()); // Cache for preloaded video blobs
+  const fileDurationCache = useRef(new Map()); // URL → actual file duration (from ffprobe)
   const preloadQueue = useRef([]); // Queue for videos being preloaded
   const videoLoadingTimer = useRef(null); // Delayed loading indicator (avoids flash for cached videos)
   const lastClipIdRef = useRef(null); // Track last clip to detect changes
+  const loadedClipKeyRef = useRef(null); // Track which clip the active video has ACTUALLY loaded
   // Track if we're still in initial load phase (loading existing video with words)
   // This prevents clearing words due to minor duration changes when audio loads
   const initialLoadPhaseRef = useRef(existingVideo?.words?.length > 0);
@@ -751,6 +762,64 @@ const VideoEditorModal = ({
     }
   }, [selectedAudio, duration, words.length, clips.length]);
 
+  // Auto-probe clip durations via ffprobe (Electron) or video element (web)
+  const probedClipsRef = useRef(new Set());
+  const probeInFlightRef = useRef(false);
+  useEffect(() => {
+    if (clips.length === 0 || probeInFlightRef.current) return;
+    const needsProbe = clips.filter(
+      (c) => !probedClipsRef.current.has(c.id) && (c.localUrl || c.url),
+    );
+    if (needsProbe.length === 0) return;
+    needsProbe.forEach((c) => probedClipsRef.current.add(c.id));
+    probeInFlightRef.current = true;
+
+    const run = async () => {
+      let urlToDur = {};
+
+      // Electron: use ffprobe IPC (fast, reliable)
+      if (window.electronAPI?.probeDurations) {
+        const urls = [...new Set(needsProbe.map((c) => c.localUrl || c.url).filter(Boolean))];
+        try {
+          urlToDur = await window.electronAPI.probeDurations(urls);
+          // Cache for resize/cut-line duration clamping
+          Object.entries(urlToDur).forEach(([url, dur]) => fileDurationCache.current.set(url, dur));
+        } catch (err) {
+          console.warn('[Probe] ffprobe failed:', err);
+        }
+      }
+
+      probeInFlightRef.current = false;
+      if (Object.keys(urlToDur).length === 0) return;
+
+      setClips((prev) => {
+        let changed = false;
+        const updated = prev.map((c) => {
+          const url = c.localUrl || c.url;
+          const fileDur = urlToDur[url];
+          if (fileDur != null && fileDur > 0.01 && fileDur < (c.duration || Infinity) - 0.05) {
+            changed = true;
+            return { ...c, duration: fileDur };
+          }
+          return c;
+        });
+        if (!changed) return prev;
+        // Recalculate startTimes for sequential clips (close gaps from initial 2s spacing)
+        // Don't recalculate for beat-spaced or free-positioned clips
+        const hasFreePositioned = updated.some((c) => c.beatSpaced || c.freePositioned);
+        if (!hasFreePositioned) {
+          let t = 0;
+          for (let j = 0; j < updated.length; j++) {
+            updated[j] = { ...updated[j], startTime: t };
+            t += updated[j].duration || 1;
+          }
+        }
+        return updated;
+      });
+    };
+    run();
+  }, [clips, setClips]);
+
   // Helper to get the best URL for a clip (prefer cloud URL over expired blob)
   const getClipUrl = useCallback((clip) => {
     if (!clip) return null;
@@ -760,17 +829,22 @@ const VideoEditorModal = ({
     return isBlobUrl ? clip.url : localUrl || clip.url;
   }, []);
 
+  // Get the actual file duration for a clip (from ffprobe cache)
+  const getMaxClipDuration = useCallback((clip) => {
+    const url = clip?.localUrl || clip?.url;
+    return (url && fileDurationCache.current.get(url)) || 300;
+  }, []);
+
   // Get current clip based on currentTime using cumulative durations (matches timeline visual layout)
   // Returns null if playhead is past all clips
   const currentClip = useMemo(() => {
     if (!clips.length) return null;
-    let cumTime = 0;
+    // All clips now have explicit startTime (free-positioned)
     for (let i = 0; i < clips.length; i++) {
-      const clipEnd = cumTime + (clips[i].duration || 1);
-      if (currentTime >= cumTime && currentTime < clipEnd) return clips[i];
-      cumTime = clipEnd;
+      const start = clips[i].startTime || 0;
+      const end = start + (clips[i].duration || 1);
+      if (currentTime >= start && currentTime < end) return clips[i];
     }
-    // Past all clips — show nothing
     return null;
   }, [clips, currentTime]);
 
@@ -788,29 +862,32 @@ const VideoEditorModal = ({
     return normalizeBeatsToTrimRange(beats, audioStartTime, audioEndTime);
   }, [beats, audioStartTime, audioEndTime]);
 
-  // Load audio and analyze beats
+  // Load audio and analyze beats (skip beat analysis for source video audio)
   useEffect(() => {
     if (selectedAudio?.url || selectedAudio?.localUrl) {
-      // Determine best audio source - skip expired blob URLs
-      let audioSource = null;
       const localUrl = selectedAudio.localUrl;
       const isBlobUrl = localUrl && localUrl.startsWith('blob:');
 
-      if (selectedAudio.file instanceof File || selectedAudio.file instanceof Blob) {
-        audioSource = selectedAudio.file;
-        log('[VideoEditorModal] Using file object for beat detection');
-      } else if (localUrl && !isBlobUrl) {
-        audioSource = localUrl;
-        log('[VideoEditorModal] Using localUrl for beat detection');
-      } else if (selectedAudio.url) {
-        audioSource = selectedAudio.url;
-        log('[VideoEditorModal] Using cloud URL for beat detection');
-      }
+      // Only analyze beats for external audio, not source video audio
+      if (!selectedAudio.isSourceAudio) {
+        let audioSource = null;
 
-      if (audioSource) {
-        analyzeAudio(audioSource).catch((err) => {
-          log.error('Beat analysis failed:', err);
-        });
+        if (selectedAudio.file instanceof File || selectedAudio.file instanceof Blob) {
+          audioSource = selectedAudio.file;
+          log('[VideoEditorModal] Using file object for beat detection');
+        } else if (localUrl && !isBlobUrl) {
+          audioSource = localUrl;
+          log('[VideoEditorModal] Using localUrl for beat detection');
+        } else if (selectedAudio.url) {
+          audioSource = selectedAudio.url;
+          log('[VideoEditorModal] Using cloud URL for beat detection');
+        }
+
+        if (audioSource) {
+          analyzeAudio(audioSource).catch((err) => {
+            log.error('Beat analysis failed:', err);
+          });
+        }
       }
 
       // Create audio element for playback - use cloud URL if blob expired
@@ -843,10 +920,13 @@ const VideoEditorModal = ({
         audioRef.current.src = playbackUrl;
         audioRef.current.load();
 
-        // Handle audio ended
+        // Handle audio ended — only stop playback if audio covers the full clip range
         audioRef.current.onended = () => {
-          setIsPlaying(false);
-          setCurrentTime(0);
+          // Don't stop playback if clips extend beyond audio (wall-clock takes over)
+          if (totalClipDuration <= (audioRef.current?.duration || 0)) {
+            setIsPlaying(false);
+            setCurrentTime(0);
+          }
         };
 
         // Fallback: if audio was already cached, onloadedmetadata may not re-fire
@@ -912,11 +992,16 @@ const VideoEditorModal = ({
     });
   }, [clips, clipWaveforms, downsample]);
 
-  // Total clip duration for timeline-relative positioning (clips may not span full audio)
-  const totalClipDuration = useMemo(
-    () => clips.reduce((s, c) => s + (c.duration || 1), 0),
-    [clips],
-  );
+  // Total clip duration — use the furthest clip end position (supports gaps from free-move)
+  const totalClipDuration = useMemo(() => {
+    if (!clips.length) return 0;
+    let maxEnd = 0;
+    for (const c of clips) {
+      const end = (c.startTime || 0) + (c.duration || 1);
+      if (end > maxEnd) maxEnd = end;
+    }
+    return maxEnd;
+  }, [clips]);
 
   // Stable timeline duration: always the max of clips, audio, and user cap — audio is a guide, not a constraint
   const timelineDuration = useMemo(() => {
@@ -995,9 +1080,8 @@ const VideoEditorModal = ({
       (audioRef.current?.duration > 0 ? audioRef.current.duration : 0) ||
       duration;
     const effectiveDuration = endBoundary - startBoundary;
-    // Loop at audio duration if available, else at total clip duration
-    const loopEnd =
-      effectiveDuration > 0 ? effectiveDuration : totalClipDuration > 0 ? totalClipDuration : 0;
+    // Loop at the end of whichever is longer: audio or clips
+    const loopEnd = Math.max(effectiveDuration, totalClipDuration) || 0;
 
     // Update ref to avoid stale closure
     isPlayingRef.current = isPlaying;
@@ -1008,6 +1092,8 @@ const VideoEditorModal = ({
         audioRef.current?.src &&
         audioRef.current.src !== '' &&
         audioRef.current.src !== window.location.href;
+      // Only use audio-driven timing when audio is at least as long as clips
+      const useAudioTiming = hasAudio && effectiveDuration >= totalClipDuration;
       if (hasAudio) {
         audioRef.current.play().catch(() => {});
       }
@@ -1022,9 +1108,9 @@ const VideoEditorModal = ({
 
         let relTime;
 
-        // Primary: use audio element time if audio is actively playing
+        // Primary: use audio element time only when audio covers the full clip range
         if (
-          hasAudio &&
+          useAudioTiming &&
           audioRef.current &&
           !audioRef.current.paused &&
           audioRef.current.currentTime > 0
@@ -1038,11 +1124,11 @@ const VideoEditorModal = ({
             relTime = actualTime - startBoundary;
           }
         } else {
-          // Fallback: use wall-clock elapsed time
+          // Wall-clock timing (always used when clips are longer than audio)
           const elapsed = (performance.now() - playStartRef.current) / 1000;
           relTime = playOffsetRef.current + elapsed;
 
-          // Loop if we've exceeded duration
+          // Loop if we've exceeded total duration
           if (loopEnd > 0 && relTime >= loopEnd) {
             relTime = 0;
             playStartRef.current = performance.now();
@@ -1072,56 +1158,120 @@ const VideoEditorModal = ({
     // eslint-disable-next-line
   }, [isPlaying, selectedAudio, duration, totalClipDuration]);
 
-  // Sync video with audio time (use active video element)
+  // Sync hidden video elements — seeking + play/pause (canvas handles display)
   useEffect(() => {
     const activeVideo = activeVideoRef.current === 'A' ? videoRef.current : videoRefB.current;
-    // Hide video when playhead is past all clips
     if (!currentClip) {
-      if (videoRef.current) videoRef.current.style.opacity = '0';
-      if (videoRefB.current) videoRefB.current.style.opacity = '0';
       if (activeVideo && !activeVideo.paused) activeVideo.pause();
       return;
     }
-    // Restore video visibility when clip is active
-    const activeEl = activeVideoRef.current === 'A' ? videoRef.current : videoRefB.current;
-    const inactiveEl = activeVideoRef.current === 'A' ? videoRefB.current : videoRef.current;
-    if (activeEl) activeEl.style.opacity = '1';
-    if (inactiveEl) inactiveEl.style.opacity = '0';
     if (activeVideo && currentClip?.url) {
-      // Calculate clip start from cumulative durations (matches timeline visual layout)
-      let clipStartTime = 0;
-      for (let i = 0; i < clips.length; i++) {
-        if (clips[i].id === currentClip.id) break;
-        clipStartTime += clips[i].duration || 1;
-      }
-      const clipDuration = currentClip.duration || 2;
+      // All clips have explicit startTime (free-positioned)
+      const clipStartTime = currentClip.startTime || 0;
       const sourceOffset = currentClip.sourceOffset || 0;
       const timeInClip = Math.max(0, currentTime - clipStartTime);
-      const positionInClip = sourceOffset + (timeInClip % clipDuration);
+      const fileDuration =
+        activeVideo.duration && isFinite(activeVideo.duration)
+          ? activeVideo.duration
+          : currentClip.duration || 1;
 
-      // Set video time if significantly different (lower threshold during slip for responsive preview)
-      const seekThreshold = slipEdit?.active ? 0.05 : 0.3;
-      if (Math.abs(activeVideo.currentTime - positionInClip) > seekThreshold) {
-        activeVideo.currentTime = positionInClip;
-      }
-
-      // Only call play/pause when state actually differs (prevents AbortError)
-      if (isPlaying && activeVideo.paused) {
-        activeVideo.play().catch(() => {});
-      } else if (!isPlaying && !activeVideo.paused) {
-        activeVideo.pause();
+      if (timeInClip >= fileDuration) {
+        if (!activeVideo.paused) activeVideo.pause();
+      } else {
+        const positionInClip = sourceOffset + timeInClip;
+        const seekThreshold = slipEdit?.active ? 0.05 : 0.3;
+        if (Math.abs(activeVideo.currentTime - positionInClip) > seekThreshold) {
+          activeVideo.currentTime = positionInClip;
+        }
+        if (isPlaying && activeVideo.paused) {
+          activeVideo.play().catch(() => {});
+        } else if (!isPlaying && !activeVideo.paused) {
+          activeVideo.pause();
+        }
       }
     }
   }, [currentClip, currentTime, isPlaying, clips, slipEdit?.active]);
 
+  // Canvas rendering loop — draw active video frame to canvas every animation frame
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let rafId;
+    const drawFrame = () => {
+      const activeVideo = activeVideoRef.current === 'A' ? videoRef.current : videoRefB.current;
+      const parent = canvas.parentElement;
+      if (parent) {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = parent.getBoundingClientRect();
+        const w = Math.round(rect.width);
+        const h = Math.round(rect.height);
+        if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+          canvas.width = w * dpr;
+          canvas.height = h * dpr;
+          canvas.style.width = w + 'px';
+          canvas.style.height = h + 'px';
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+      }
+      const cw = canvas.width / (window.devicePixelRatio || 1);
+      const ch = canvas.height / (window.devicePixelRatio || 1);
+
+      if (!currentClip || !activeVideo || activeVideo.readyState < 2) {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, cw, ch);
+      } else {
+        // All clips have explicit startTime (free-positioned)
+        const clipStartTime = currentClip.startTime || 0;
+        const timeInClip = Math.max(0, currentTime - clipStartTime);
+        const fileDuration =
+          activeVideo.duration && isFinite(activeVideo.duration)
+            ? activeVideo.duration
+            : currentClip.duration || 1;
+
+        if (timeInClip >= fileDuration) {
+          ctx.fillStyle = '#000';
+          ctx.fillRect(0, 0, cw, ch);
+        } else {
+          // Draw with object-fit: cover
+          const vw = activeVideo.videoWidth || cw;
+          const vh = activeVideo.videoHeight || ch;
+          const canvasAspect = cw / ch;
+          const videoAspect = vw / vh;
+          let sx, sy, sw, sh;
+          if (videoAspect > canvasAspect) {
+            sh = vh;
+            sw = vh * canvasAspect;
+            sx = (vw - sw) / 2;
+            sy = 0;
+          } else {
+            sw = vw;
+            sh = vw / canvasAspect;
+            sx = 0;
+            sy = (vh - sh) / 2;
+          }
+          try {
+            ctx.drawImage(activeVideo, sx, sy, sw, sh, 0, 0, cw, ch);
+          } catch {}
+        }
+      }
+      rafId = requestAnimationFrame(drawFrame);
+    };
+    rafId = requestAnimationFrame(drawFrame);
+    return () => cancelAnimationFrame(rafId);
+  }, [currentClip, currentTime, clips]);
+
   // Handlers - MUST be defined before useEffect that references them (TDZ fix)
   const handleSeek = useCallback(
     (time) => {
-      // Use trimmed duration for clamping
-      const effectiveDuration =
+      // Clamp to the larger of audio duration or total clip duration
+      const audioDur =
         (selectedAudio?.endTime || selectedAudio?.duration || duration) -
         (selectedAudio?.startTime || 0);
-      const clampedTime = Math.max(0, Math.min(time, effectiveDuration));
+      const maxSeek = Math.max(audioDur, totalClipDuration) || duration;
+      const clampedTime = Math.max(0, Math.min(time, maxSeek));
       setCurrentTime(clampedTime);
       if (audioRef.current) {
         // Add audio start boundary offset for trimmed audio
@@ -1130,7 +1280,7 @@ const VideoEditorModal = ({
       }
       // Video sync will happen via the useEffect
     },
-    [duration, selectedAudio],
+    [duration, selectedAudio, totalClipDuration],
   );
 
   // Progress bar dragging
@@ -1222,32 +1372,40 @@ const VideoEditorModal = ({
     const activeVideo = activeVideoRef.current === 'A' ? videoRef.current : videoRefB.current;
     const inactiveVideo = activeVideoRef.current === 'A' ? videoRefB.current : videoRef.current;
 
-    if (activeVideo && activeVideo.src !== clipUrl) {
-      // Check if inactive video already has this clip loaded
-      if (inactiveVideo && inactiveVideo.src === clipUrl && inactiveVideo.readyState >= 3) {
-        activeVideoRef.current = activeVideoRef.current === 'A' ? 'B' : 'A';
-        if (isPlaying) {
-          inactiveVideo.play().catch(() => {});
-        }
-        activeVideo.pause();
+    if (activeVideo) {
+      const activeSrc = activeVideo.src || '';
+      const activeHasClip = activeSrc === clipUrl || activeSrc === rawUrl;
+
+      if (activeHasClip && activeVideo.readyState >= 2) {
+        // Active video already has the right source — just seek (handled by sync effect)
       } else {
-        activeVideo.src = clipUrl;
-        activeVideo.load();
-        if (isPlaying) {
-          activeVideo.play().catch(() => {});
+        // Check if inactive video has it ready for instant swap
+        const inactiveSrc = inactiveVideo?.src || '';
+        const inactiveHasClip = inactiveSrc === clipUrl || inactiveSrc === rawUrl;
+        if (inactiveVideo && inactiveHasClip && inactiveVideo.readyState >= 3) {
+          activeVideoRef.current = activeVideoRef.current === 'A' ? 'B' : 'A';
+          if (isPlaying) inactiveVideo.play().catch(() => {});
+          activeVideo.pause();
+        } else {
+          // Load into active video
+          activeVideo.src = clipUrl;
+          activeVideo.load();
+          if (isPlaying) activeVideo.play().catch(() => {});
         }
       }
     }
 
-    // Preload NEXT clip into inactive video
+    // Preload NEXT clip into inactive video (only if different source)
     const currentIndex = clips.findIndex((c) => c.id === currentClip?.id);
     if (currentIndex >= 0 && currentIndex < clips.length - 1) {
       const nextClip = clips[currentIndex + 1];
       const nextRaw = getClipUrl(nextClip);
       const nextUrl = nextRaw ? videoCache.current.get(nextRaw) || nextRaw : null;
-      if (inactiveVideo && nextUrl && inactiveVideo.src !== nextUrl) {
-        inactiveVideo.src = nextUrl;
-        inactiveVideo.load();
+      const newActive = activeVideoRef.current === 'A' ? videoRef.current : videoRefB.current;
+      const newInactive = activeVideoRef.current === 'A' ? videoRefB.current : videoRef.current;
+      if (newInactive && nextUrl && newInactive.src !== nextUrl) {
+        newInactive.src = nextUrl;
+        newInactive.load();
       }
     }
   }, [
@@ -1352,6 +1510,7 @@ const VideoEditorModal = ({
       clipResize?.active ||
       cutLineDrag?.active ||
       wordCutDrag?.active ||
+      freeMoveDrag?.active ||
       playheadDragging
     )
       return;
@@ -1367,6 +1526,7 @@ const VideoEditorModal = ({
     clipResize?.active,
     cutLineDrag?.active,
     wordCutDrag?.active,
+    freeMoveDrag?.active,
     playheadDragging,
   ]);
 
@@ -1386,10 +1546,47 @@ const VideoEditorModal = ({
 
   // handleSave - MUST be defined before keyboard shortcuts useEffect
   const handleSave = useCallback(
-    (skipLyricsPrompt = false) => {
+    async (skipLyricsPrompt = false) => {
+      // Persist audio file locally if it's a blob URL (so it survives reload)
+      let persistedAudio = selectedAudio;
+      if (selectedAudio?.file && window.electronAPI?.isElectron) {
+        const isBlobUrl =
+          selectedAudio.url?.startsWith('blob:') || selectedAudio.localUrl?.startsWith('blob:');
+        if (isBlobUrl) {
+          try {
+            const buf = await selectedAudio.file.arrayBuffer();
+            const safeName = (selectedAudio.name || 'audio.mp3').replace(/[^a-zA-Z0-9._-]/g, '_');
+            const relativePath = `StickToMusic/audio/${safeName}`;
+            const fullPath = await window.electronAPI.saveFileLocally(buf, relativePath);
+            if (fullPath) {
+              const mediaFolder = await window.electronAPI.getMediaFolder();
+              const rel = fullPath.startsWith(mediaFolder)
+                ? fullPath.slice(mediaFolder.length).replace(/^\//, '')
+                : relativePath;
+              const localUrl = `${window.location.origin}/local-media/${encodeURIComponent(rel).replace(/%2F/g, '/')}`;
+              persistedAudio = {
+                ...selectedAudio,
+                url: localUrl,
+                localUrl,
+                file: undefined,
+              };
+              setSelectedAudio(persistedAudio);
+              console.log('[Save] Audio persisted locally:', localUrl);
+            }
+          } catch (err) {
+            console.warn('[Save] Failed to persist audio locally:', err);
+          }
+        }
+      }
+      // Always strip non-serializable File object
+      if (persistedAudio?.file) {
+        const { file, ...cleanAudio } = persistedAudio;
+        persistedAudio = cleanAudio;
+      }
+
       const videoData = {
         id: existingVideo?.id,
-        audio: selectedAudio,
+        audio: persistedAudio,
         clips,
         words,
         textOverlays,
@@ -1468,6 +1665,8 @@ const VideoEditorModal = ({
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Don't handle keys when audio trimmer is open — it has its own handler
+      if (showAudioTrimmer) return;
       // ESC to close modal (with confirmation if there's work)
       if (e.code === 'Escape') {
         e.preventDefault();
@@ -1707,7 +1906,7 @@ const VideoEditorModal = ({
         localUrl: v.localUrl || v.url || v.src,
         thumbnail: v.thumbnailUrl || v.thumbnail,
         startTime: 0,
-        duration: 2,
+        duration: v.duration || v.videoDuration || 2,
         locked: false,
       }));
 
@@ -1967,7 +2166,7 @@ const VideoEditorModal = ({
   // Handle when user selects beats from the BeatSelector modal
   // Note: selectedBeatTimes are now in LOCAL time (0 to trimmedDuration)
   const handleBeatSelectionApply = useCallback(
-    (selectedBeatTimes) => {
+    async (selectedBeatTimes) => {
       if (!selectedBeatTimes.length) {
         setShowBeatSelector(false);
         return;
@@ -1991,26 +2190,64 @@ const VideoEditorModal = ({
         setShowBeatSelector(false);
         return;
       }
+
+      // Probe durations for available clips if not already known
+      if (window.electronAPI?.probeDurations) {
+        const urlsToProbe = [
+          ...new Set(
+            availableClips
+              .filter((c) => !c.duration && (c.localUrl || c.url))
+              .map((c) => c.localUrl || c.url),
+          ),
+        ];
+        if (urlsToProbe.length > 0) {
+          try {
+            const durMap = await window.electronAPI.probeDurations(urlsToProbe);
+            for (const c of availableClips) {
+              const url = c.localUrl || c.url;
+              if (!c.duration && durMap[url]) c.duration = durMap[url];
+            }
+          } catch {}
+        }
+      }
+
       const newClips = [];
 
-      // Create clips for each selected beat (cut points) - all times are LOCAL
+      // Create clips for each selected beat — only pick clips long enough for the gap
       for (let i = 0; i < selectedBeatTimes.length; i++) {
         const startTime = selectedBeatTimes[i];
-        const endTime = selectedBeatTimes[i + 1] || effectiveDuration; // Use next beat or end of trimmed audio
+        const endTime = selectedBeatTimes[i + 1] || effectiveDuration;
         const clipDuration = endTime - startTime;
 
-        const randomClip = availableClips[Math.floor(Math.random() * availableClips.length)];
+        // Filter to clips that are at least as long as the beat gap
+        const longEnough = availableClips.filter((c) => {
+          const srcDur = c.duration || c.videoDuration || 0;
+          return srcDur >= clipDuration;
+        });
+        // Fallback: use longest available if none fit
+        const pool =
+          longEnough.length > 0
+            ? longEnough
+            : [...availableClips]
+                .sort((a, b) => (b.duration || 0) - (a.duration || 0))
+                .slice(0, Math.max(1, Math.ceil(availableClips.length / 3)));
+
+        const randomClip = pool[Math.floor(Math.random() * pool.length)];
+        const srcDur = randomClip.duration || randomClip.videoDuration || clipDuration;
+        const maxOffset = Math.max(0, srcDur - clipDuration);
+        const randomOffset = maxOffset > 0 ? Math.random() * maxOffset : 0;
 
         newClips.push({
           id: `clip_${Date.now()}_${i}`,
           sourceId: randomClip.id,
           url: randomClip.url,
-          localUrl: randomClip.localUrl, // Include localUrl for CORS fallback
+          localUrl: randomClip.localUrl,
           thumbnail: randomClip.thumbnail,
           startTime: startTime,
           duration: clipDuration,
           locked: false,
-          sourceOffset: 0,
+          sourceOffset: randomOffset,
+          beatSpaced: true,
         });
       }
 
@@ -2087,16 +2324,15 @@ const VideoEditorModal = ({
     if (selectedClips.length > 0) {
       indicesToReroll = selectedClips;
     } else {
-      // Find clip at current playhead position
-      let cumTime = 0;
+      // Find clip at current playhead position (use explicit startTime)
       let playheadClip = -1;
       for (let i = 0; i < clips.length; i++) {
-        const clipEnd = cumTime + (clips[i].duration || 0.5);
-        if (currentTime >= cumTime && currentTime < clipEnd) {
+        const start = clips[i].startTime || 0;
+        const clipEnd = start + (clips[i].duration || 0.5);
+        if (currentTime >= start && currentTime < clipEnd) {
           playheadClip = i;
           break;
         }
-        cumTime = clipEnd;
       }
       indicesToReroll = playheadClip >= 0 ? [playheadClip] : clips.map((_, i) => i);
     }
@@ -2105,14 +2341,20 @@ const VideoEditorModal = ({
     setClips((prev) =>
       prev.map((clip, i) => {
         if (!indicesToReroll.includes(i) || clip.locked) return clip;
-        // Exclude current source from pool so reroll always picks a different clip
-        const pool = availableClips.filter((c) => c.id !== clip.sourceId);
-        const randomClip =
-          pool.length > 0
-            ? pool[Math.floor(Math.random() * pool.length)]
-            : availableClips[Math.floor(Math.random() * availableClips.length)];
-        // Pick a random sourceOffset within the source video
-        const sourceDuration = randomClip.duration || randomClip.videoDuration || 10;
+        // Filter to clips that are different AND long enough for this cell
+        const clipDur = clip.duration || 0.5;
+        const differentClips = availableClips.filter((c) => c.id !== clip.sourceId);
+        const longEnough = differentClips.filter(
+          (c) => (c.duration || c.videoDuration || 0) >= clipDur,
+        );
+        const pool =
+          longEnough.length > 0
+            ? longEnough
+            : differentClips.length > 0
+              ? differentClips
+              : availableClips;
+        const randomClip = pool[Math.floor(Math.random() * pool.length)];
+        const sourceDuration = randomClip.duration || randomClip.videoDuration || clipDur;
         const maxOffset = Math.max(0, sourceDuration - (clip.duration || 0.5));
         const randomOffset = maxOffset > 0 ? Math.random() * maxOffset : 0;
         return {
@@ -2172,13 +2414,12 @@ const VideoEditorModal = ({
 
   // Get the clip at the current playhead position
   const getClipAtPlayhead = useCallback(() => {
-    let cumTime = 0;
     for (let i = 0; i < clips.length; i++) {
-      const clipEnd = cumTime + (clips[i].duration || 0.5);
-      if (currentTime >= cumTime && currentTime < clipEnd) {
+      const start = clips[i].startTime || 0;
+      const clipEnd = start + (clips[i].duration || 0.5);
+      if (currentTime >= start && currentTime < clipEnd) {
         return i;
       }
-      cumTime = clipEnd;
     }
     return -1;
   }, [clips, currentTime]);
@@ -2255,12 +2496,8 @@ const VideoEditorModal = ({
     }
 
     // Calculate where in the clip the playhead is
-    let cumTime = 0;
-    for (let i = 0; i < clipIndex; i++) {
-      cumTime += clips[i].duration || 0.5;
-    }
-    const clipStartTime = cumTime;
     const clip = clips[clipIndex];
+    const clipStartTime = clip.startTime || 0;
     const clipDuration = clip.duration || 0.5;
     const splitPoint = currentTime - clipStartTime;
 
@@ -2309,16 +2546,8 @@ const VideoEditorModal = ({
     }
 
     setClips((prev) => {
-      // Remove clips at specified indices (in reverse order to maintain indices)
-      const newClips = prev.filter((_, index) => !indices.includes(index));
-
-      // Recalculate cumulative start times
-      let cumTime = 0;
-      return newClips.map((clip) => {
-        const updated = { ...clip, startTime: cumTime };
-        cumTime += clip.duration || 0.5;
-        return updated;
-      });
+      // Remove clips at specified indices — preserve startTimes of remaining clips
+      return prev.filter((_, index) => !indices.includes(index));
     });
 
     setSelectedClips([]);
@@ -2342,55 +2571,158 @@ const VideoEditorModal = ({
           ...newClips[clipIndex],
           duration: duration,
         };
-
-        // Recalculate cumulative start times for clips after this one
-        let cumTime = 0;
-        return newClips.map((clip) => {
-          const updated = { ...clip, startTime: cumTime };
-          cumTime += clip.duration || 0.5;
-          return updated;
-        });
+        return newClips;
       });
     },
     [clips],
   );
 
-  // Clip drag reorder handlers
-  const handleClipDragStart = useCallback((index) => {
-    setClipDrag({ dragging: true, fromIndex: index, toIndex: index });
-  }, []);
-
-  const handleClipDragOver = useCallback(
-    (index) => {
-      if (clipDrag.dragging && index !== clipDrag.toIndex) {
-        setClipDrag((prev) => ({ ...prev, toIndex: index }));
-      }
+  // Free-move drag start handler (replaces HTML5 DnD)
+  const handleFreeMoveDragStart = useCallback(
+    (e, index) => {
+      const clip = clips[index];
+      if (!clip || clip.locked || clipResize.active || slipEdit?.active) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setFreeMoveDrag({
+        active: true,
+        clipIndex: index,
+        startMouseX: e.clientX,
+        originalStartTime: clip.startTime || 0,
+        snapLine: null,
+      });
     },
-    [clipDrag.dragging, clipDrag.toIndex],
+    [clips, clipResize.active, slipEdit?.active],
   );
 
-  const handleClipDragEnd = useCallback(() => {
-    if (
-      clipDrag.dragging &&
-      clipDrag.fromIndex !== clipDrag.toIndex &&
-      clipDrag.fromIndex >= 0 &&
-      clipDrag.toIndex >= 0
-    ) {
+  // Free-move drag effect — window-level pointermove/pointerup
+  useEffect(() => {
+    if (!freeMoveDrag?.active) return;
+    const pxPerSec = 40 * timelineScale;
+    const { clipIndex, startMouseX, originalStartTime } = freeMoveDrag;
+    const SNAP_THRESHOLD = 0.05; // seconds
+
+    const handleMove = (e) => {
+      const deltaX = e.clientX - startMouseX;
+      const deltaSec = deltaX / pxPerSec;
+      let newStartTime = Math.max(0, originalStartTime + deltaSec);
+
+      // Build snap targets: beat markers, other clip edges, timeline start (0)
+      const snapTargets = [0]; // always snap to timeline start
+      // Beat markers
+      for (const beat of filteredBeats) {
+        snapTargets.push(beat);
+      }
+      // Other clip edges (start and end)
+      const movingClipDuration = clips[clipIndex]?.duration || 1;
+      for (let i = 0; i < clips.length; i++) {
+        if (i === clipIndex) continue;
+        const otherStart = clips[i].startTime || 0;
+        const otherEnd = otherStart + (clips[i].duration || 1);
+        snapTargets.push(otherStart);
+        snapTargets.push(otherEnd);
+      }
+
+      // Check snap for leading edge (startTime)
+      let snapped = false;
+      let snapLineSec = null;
+      for (const target of snapTargets) {
+        if (Math.abs(newStartTime - target) < SNAP_THRESHOLD) {
+          newStartTime = target;
+          snapLineSec = target;
+          snapped = true;
+          break;
+        }
+        // Snap trailing edge (endTime) to target
+        const newEndTime = newStartTime + movingClipDuration;
+        if (Math.abs(newEndTime - target) < SNAP_THRESHOLD) {
+          newStartTime = target - movingClipDuration;
+          snapLineSec = target;
+          snapped = true;
+          break;
+        }
+      }
+
+      newStartTime = Math.max(0, newStartTime);
+
+      setFreeMoveDrag((prev) => ({
+        ...prev,
+        snapLine: snapped ? snapLineSec : null,
+      }));
+
       setClips((prev) => {
-        const newClips = [...prev];
-        const [movedClip] = newClips.splice(clipDrag.fromIndex, 1);
-        newClips.splice(clipDrag.toIndex, 0, movedClip);
-        // Recalculate start times
-        let cumTime = 0;
-        return newClips.map((clip) => {
-          const updated = { ...clip, startTime: cumTime };
-          cumTime += clip.duration || 0.5;
-          return updated;
-        });
+        const updated = [...prev];
+        updated[clipIndex] = {
+          ...updated[clipIndex],
+          startTime: newStartTime,
+          freePositioned: true,
+        };
+        return updated;
       });
-    }
-    setClipDrag({ dragging: false, fromIndex: -1, toIndex: -1 });
-  }, [clipDrag]);
+    };
+
+    const handleUp = () => {
+      // Overlap resolution: push overlapped clips right
+      setClips((prev) => {
+        const updated = [...prev];
+        const movedClip = updated[clipIndex];
+        const movedStart = movedClip.startTime || 0;
+        const movedEnd = movedStart + (movedClip.duration || 1);
+
+        // Sort other clips by startTime for overlap resolution
+        const otherIndices = [];
+        for (let i = 0; i < updated.length; i++) {
+          if (i !== clipIndex) otherIndices.push(i);
+        }
+        otherIndices.sort((a, b) => (updated[a].startTime || 0) - (updated[b].startTime || 0));
+
+        // Push overlapping clips right
+        for (const i of otherIndices) {
+          const otherStart = updated[i].startTime || 0;
+          const otherEnd = otherStart + (updated[i].duration || 1);
+          // Check overlap
+          if (movedEnd > otherStart && movedStart < otherEnd) {
+            // Push this clip to after the moved clip
+            const pushAmount = movedEnd - otherStart;
+            updated[i] = { ...updated[i], startTime: otherStart + pushAmount };
+            // Cascade: push any clips after this one that now overlap
+            for (const j of otherIndices) {
+              if (j === i) continue;
+              const jStart = updated[j].startTime || 0;
+              const iEnd = (updated[i].startTime || 0) + (updated[i].duration || 1);
+              if (jStart >= otherStart && jStart < iEnd && j !== clipIndex) {
+                updated[j] = { ...updated[j], startTime: iEnd };
+              }
+            }
+          }
+        }
+        return updated;
+      });
+
+      setFreeMoveDrag(null);
+      document.body.style.cursor = '';
+    };
+
+    document.body.style.cursor = 'grabbing';
+    document.addEventListener('pointermove', handleMove);
+    document.addEventListener('pointerup', handleUp);
+    document.addEventListener('pointercancel', handleUp);
+    return () => {
+      document.removeEventListener('pointermove', handleMove);
+      document.removeEventListener('pointerup', handleUp);
+      document.removeEventListener('pointercancel', handleUp);
+      document.body.style.cursor = '';
+    };
+  }, [
+    freeMoveDrag?.active,
+    freeMoveDrag?.clipIndex,
+    freeMoveDrag?.startMouseX,
+    freeMoveDrag?.originalStartTime,
+    timelineScale,
+    filteredBeats,
+    clips,
+    setClips,
+  ]);
 
   // Clip resize handlers (drag edges to change duration)
   const handleResizeStart = useCallback(
@@ -2424,7 +2756,9 @@ const VideoEditorModal = ({
       } else {
         newDuration = clipResize.startDuration - deltaSec;
       }
-      newDuration = Math.max(0.1, Math.min(300, newDuration));
+      // Clamp to actual file duration (can't extend beyond source content)
+      const maxDur = getMaxClipDuration(clips[clipResize.clipIndex]);
+      newDuration = Math.max(0.1, Math.min(maxDur, newDuration));
       handleUpdateClipDuration(clipResize.clipIndex, newDuration);
     };
 
@@ -2458,7 +2792,10 @@ const VideoEditorModal = ({
     const handleCutLineMove = (e) => {
       const deltaX = e.clientX - startX;
       const deltaSec = deltaX / pxPerSec;
-      const newPrevDur = Math.max(0.1, Math.min(300, originalPrevDuration + deltaSec));
+      // Clamp to actual file duration of the previous clip
+      const prevClip = clips[clipIndex - 1];
+      const maxPrevDur = prevClip ? getMaxClipDuration(prevClip) : 300;
+      const newPrevDur = Math.max(0.1, Math.min(maxPrevDur, originalPrevDuration + deltaSec));
 
       setClips((prev) => {
         const updated = [...prev];
@@ -3088,7 +3425,7 @@ const VideoEditorModal = ({
 
   // ── Montage mode (existing editor) ──
   return (
-    <EditorShell onBackdropClick={handleCloseRequest} isMobile={isMobile}>
+    <EditorShell isMobile={isMobile}>
       <EditorTopBar
         title={videoName}
         onTitleChange={setVideoName}
@@ -3127,23 +3464,18 @@ const VideoEditorModal = ({
               category?.videos?.[0]?.url ||
               category?.videos?.[0]?.localUrl ? (
                 <>
-                  {/* Primary video element (A) — src managed imperatively by clip swap useEffect */}
+                  {/* Hidden video elements — decode sources only, canvas handles display */}
                   <video
                     ref={videoRef}
                     style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      display: videoError ? 'none' : 'block',
-                      opacity: activeVideoRef.current === 'A' ? 1 : 0,
                       position: 'absolute',
-                      top: 0,
-                      left: 0,
+                      width: 0,
+                      height: 0,
+                      opacity: 0,
+                      pointerEvents: 'none',
                     }}
-                    loop
                     playsInline
                     preload="auto"
-                    autoPlay={isPlaying && activeVideoRef.current === 'A'}
                     crossOrigin="anonymous"
                     onLoadStart={() => {
                       if (activeVideoRef.current === 'A') {
@@ -3169,23 +3501,17 @@ const VideoEditorModal = ({
                       }
                     }}
                   />
-                  {/* Secondary video element (B) - for preloading next clip */}
                   <video
                     ref={videoRefB}
                     style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      display: videoError ? 'none' : 'block',
-                      opacity: activeVideoRef.current === 'B' ? 1 : 0,
                       position: 'absolute',
-                      top: 0,
-                      left: 0,
+                      width: 0,
+                      height: 0,
+                      opacity: 0,
+                      pointerEvents: 'none',
                     }}
-                    loop
                     playsInline
                     preload="auto"
-                    autoPlay={isPlaying && activeVideoRef.current === 'B'}
                     crossOrigin="anonymous"
                     onLoadStart={() => {
                       if (activeVideoRef.current === 'B') {
@@ -3209,6 +3535,19 @@ const VideoEditorModal = ({
                         );
                         setVideoLoading(false);
                       }
+                    }}
+                  />
+                  {/* Canvas preview — renders decoded video frames */}
+                  <canvas
+                    ref={canvasRef}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      display: videoError ? 'none' : 'block',
+                      borderRadius: '8px',
                     }}
                   />
                   {videoLoading && !videoError && (
@@ -3517,15 +3856,23 @@ const VideoEditorModal = ({
                 <Button variant="neutral-secondary" size="small" onClick={handleCutByWord}>
                   Cut by word
                 </Button>
-                <Button variant="neutral-secondary" size="small" onClick={handleCutByBeat}>
-                  Cut by beat
+                <Button
+                  variant="neutral-secondary"
+                  size="small"
+                  onClick={handleCutByBeat}
+                  disabled={isAnalyzing || !filteredBeats.length}
+                  style={isAnalyzing ? { opacity: 0.5, cursor: 'wait' } : undefined}
+                >
+                  {isAnalyzing ? 'Analyzing...' : 'Cut by beat'}
                 </Button>
                 <Button
                   variant="neutral-secondary"
                   size="small"
                   onClick={() => setShowMomentumSelector(true)}
+                  disabled={isAnalyzing || !filteredBeats.length}
+                  style={isAnalyzing ? { opacity: 0.5, cursor: 'wait' } : undefined}
                 >
-                  Cut to music
+                  {isAnalyzing ? 'Analyzing...' : 'Cut to music'}
                 </Button>
               </div>
               <div className="flex items-center gap-2">
@@ -4035,43 +4382,41 @@ const VideoEditorModal = ({
                         />
                       )}
 
-                      {/* Clips row — always spans full timelinePx so empty area is visible */}
+                      {/* Clips row — absolute positioning for free-move (DaVinci-style) */}
                       <div style={{ height: '48px', position: 'relative', width: '100%' }}>
                         {clips.length === 0 ? (
                           <div className="text-center py-3 text-neutral-500 text-[13px]">
                             <p>Click clips above to add, or use Cut by beat</p>
                           </div>
                         ) : (
-                          <div className="flex" style={{ height: '100%', minWidth: '100%' }}>
+                          <div style={{ position: 'relative', height: '100%', minWidth: '100%' }}>
                             {clips.map((clip, index) => {
                               const clipWidth = Math.max(4, (clip.duration || 1) * pxPerSec);
+                              const clipLeftPx = (clip.startTime || 0) * pxPerSec;
                               const thumbWidth = Math.min(68, clipWidth - 2);
+                              const isDraggingThis =
+                                freeMoveDrag?.active && freeMoveDrag.clipIndex === index;
                               return (
                                 <div
                                   key={clip.id}
                                   data-clip-block="true"
-                                  draggable={
-                                    !clip.locked && !clipResize.active && !slipEdit?.active
-                                  }
-                                  onDragStart={() =>
-                                    !clipResize.active &&
-                                    !slipEdit?.active &&
-                                    handleClipDragStart(index)
-                                  }
-                                  onDragOver={(e) => {
-                                    e.preventDefault();
-                                    handleClipDragOver(index);
+                                  draggable={false}
+                                  onPointerDown={(e) => {
+                                    // Only start free-move on primary button, not on resize/slip handles
+                                    if (e.button !== 0) return;
+                                    if (e.target.closest('[data-no-freemove]')) return;
+                                    handleFreeMoveDragStart(e, index);
                                   }}
-                                  onDragEnd={handleClipDragEnd}
                                   onPointerUp={handleClipPointerUp}
                                   onPointerLeave={handleClipPointerUp}
                                   style={{
-                                    position: 'relative',
+                                    position: 'absolute',
+                                    left: `${clipLeftPx}px`,
+                                    top: 0,
                                     height: '48px',
                                     backgroundColor: '#8b5cf6',
                                     borderRadius: '6px',
                                     overflow: 'hidden',
-                                    flexShrink: 0,
                                     boxSizing: 'border-box',
                                     width: `${clipWidth}px`,
                                     minWidth: '4px',
@@ -4089,26 +4434,21 @@ const VideoEditorModal = ({
                                     filter: selectedClips.includes(index)
                                       ? 'brightness(1.15)'
                                       : 'none',
-                                    zIndex: selectedClips.includes(index) ? 5 : 1,
-                                    ...(clipDrag.dragging && clipDrag.fromIndex === index
-                                      ? { opacity: 0.5 }
-                                      : {}),
-                                    ...(clipDrag.dragging &&
-                                    clipDrag.toIndex === index &&
-                                    clipDrag.fromIndex !== index
-                                      ? {
-                                          borderLeft: '3px solid #22c55e',
-                                          marginLeft: '-3px',
-                                        }
-                                      : {}),
-                                    cursor: clip.locked ? 'not-allowed' : 'grab',
-                                    transition: clipResize.active
-                                      ? 'none'
-                                      : 'width 0.15s ease-out, box-shadow 0.15s ease-out, filter 0.15s ease-out',
-                                    borderRight:
-                                      index < clips.length - 1
-                                        ? '1px solid rgba(0,0,0,0.6)'
-                                        : 'none',
+                                    zIndex: isDraggingThis
+                                      ? 20
+                                      : selectedClips.includes(index)
+                                        ? 5
+                                        : 1,
+                                    opacity: isDraggingThis ? 0.85 : 1,
+                                    cursor: clip.locked
+                                      ? 'not-allowed'
+                                      : isDraggingThis
+                                        ? 'grabbing'
+                                        : 'grab',
+                                    transition:
+                                      isDraggingThis || clipResize.active
+                                        ? 'none'
+                                        : 'left 0.1s ease-out, width 0.15s ease-out, box-shadow 0.15s ease-out, filter 0.15s ease-out',
                                   }}
                                   onClick={(e) => handleClipSelect(index, e)}
                                 >
@@ -4130,6 +4470,7 @@ const VideoEditorModal = ({
                                   {/* Slip edit bar — drag to shift source offset */}
                                   {!clip.locked && (
                                     <div
+                                      data-no-freemove="true"
                                       onPointerDown={(e) => {
                                         e.stopPropagation();
                                         e.preventDefault();
@@ -4287,6 +4628,7 @@ const VideoEditorModal = ({
                                   {/* Right-edge resize handle */}
                                   {!clip.locked && (
                                     <div
+                                      data-no-freemove="true"
                                       onPointerDown={(e) => handleResizeStart(e, index, 'right')}
                                       style={{
                                         position: 'absolute',
@@ -4308,11 +4650,44 @@ const VideoEditorModal = ({
                                 </div>
                               );
                             })}
+                            {/* Snap indicator line during free-move drag */}
+                            {freeMoveDrag?.active && freeMoveDrag.snapLine != null && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  left: `${freeMoveDrag.snapLine * pxPerSec}px`,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: '1px',
+                                  backgroundColor: '#22c55e',
+                                  zIndex: 30,
+                                  pointerEvents: 'none',
+                                  boxShadow: '0 0 4px rgba(34, 197, 94, 0.6)',
+                                }}
+                              />
+                            )}
                           </div>
                         )}
                       </div>
 
                       {/* Audio waveform row (external) — continuous strip, height scales with volume */}
+                      {hasAudioTrack && isAnalyzing && waveformData.length === 0 && (
+                        <div
+                          style={{
+                            height: '24px',
+                            borderTop: '1px solid #333',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '0 8px',
+                          }}
+                        >
+                          <div className="w-3 h-3 border-2 border-neutral-600 border-t-indigo-400 rounded-full animate-spin" />
+                          <span className="text-[10px] text-neutral-500">
+                            Loading audio waveform...
+                          </span>
+                        </div>
+                      )}
                       {hasAudioTrack &&
                         (() => {
                           const audioPx = trimmedDuration * pxPerSec;
@@ -4362,11 +4737,33 @@ const VideoEditorModal = ({
                                   ))}
                                 </div>
                               </div>
+                              {/* Beat markers on audio waveform */}
+                              {filteredBeats.length > 0 &&
+                                filteredBeats.length <= 500 &&
+                                filteredBeats.map((beatTime, bi) => {
+                                  const xPx = beatTime * pxPerSec;
+                                  if (xPx < 0 || xPx > audioPx) return null;
+                                  return (
+                                    <div
+                                      key={`beat-${bi}`}
+                                      style={{
+                                        position: 'absolute',
+                                        left: `${xPx}px`,
+                                        top: 0,
+                                        bottom: 0,
+                                        width: '1px',
+                                        backgroundColor: 'rgba(251, 191, 36, 0.45)',
+                                        pointerEvents: 'none',
+                                        zIndex: 2,
+                                      }}
+                                    />
+                                  );
+                                })}
                             </div>
                           );
                         })()}
 
-                      {/* Source audio waveform row — per-clip segments, height scales with volume */}
+                      {/* Source audio waveform row — per-clip segments, absolute positioned to match clips */}
                       {hasSourceTrack &&
                         (() => {
                           const srcVol = sourceVideoMuted ? 0 : sourceVideoVolume;
@@ -4377,19 +4774,21 @@ const VideoEditorModal = ({
                                 height: `${trackH}px`,
                                 borderTop: '1px solid #333',
                                 position: 'relative',
-                                display: 'flex',
                                 transition: 'height 0.15s ease-out',
                               }}
                             >
                               {clips.map((clip, idx) => {
                                 const segWidth = Math.max(4, (clip.duration || 1) * pxPerSec);
+                                const segLeftPx = (clip.startTime || 0) * pxPerSec;
                                 const bars = perClipSourceWaveforms[idx] || [];
                                 return (
                                   <div
                                     key={`src-seg-${idx}`}
                                     style={{
+                                      position: 'absolute',
+                                      left: `${segLeftPx}px`,
+                                      top: 0,
                                       width: `${segWidth}px`,
-                                      flexShrink: 0,
                                       display: 'flex',
                                       alignItems: 'center',
                                       height: '100%',
@@ -4433,14 +4832,24 @@ const VideoEditorModal = ({
                       {clips.length > 1 &&
                         activeTimelineRow === 'clips' &&
                         (() => {
-                          let cumPx = 0;
+                          // Build boundaries from clip endTimes (absolute positioning)
                           const boundaries = [];
-                          clips.forEach((clip, idx) => {
-                            cumPx += Math.max(4, (clip.duration || 1) * pxPerSec);
-                            if (idx < clips.length - 1) {
-                              boundaries.push({ px: cumPx, idx });
+                          // Sort clips by startTime for sequential boundary detection
+                          const sortedClips = clips
+                            .map((c, i) => ({ ...c, _origIdx: i }))
+                            .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+                          for (let si = 0; si < sortedClips.length - 1; si++) {
+                            const thisEnd =
+                              (sortedClips[si].startTime || 0) + (sortedClips[si].duration || 1);
+                            const nextStart = sortedClips[si + 1].startTime || 0;
+                            // Only show cut line if clips are adjacent (touching or very close)
+                            if (Math.abs(thisEnd - nextStart) < 0.01) {
+                              boundaries.push({
+                                px: thisEnd * pxPerSec,
+                                idx: sortedClips[si]._origIdx,
+                              });
                             }
-                          });
+                          }
                           // Calculate top offset: skip ruler + text overlays + words row
                           const cutLineTop =
                             24 +
@@ -4770,18 +5179,25 @@ const VideoEditorModal = ({
                         variant="neutral-tertiary"
                         size="small"
                         onClick={() => {
-                          const newClips = visibleVideos.map((v, i) => ({
-                            id: `clip_${Date.now()}_${i}`,
-                            sourceId: v.id,
-                            url: v.url || v.localUrl,
-                            localUrl: v.localUrl || v.url,
-                            thumbnail: v.thumbnailUrl || v.thumbnail,
-                            startTime: i * 2,
-                            duration: 2,
-                            locked: false,
-                            sourceOffset: 0,
-                          }));
+                          let cumStart = 0;
+                          const newClips = visibleVideos.map((v, i) => {
+                            const dur = v.duration || v.videoDuration || 2;
+                            const clip = {
+                              id: `clip_${Date.now()}_${i}`,
+                              sourceId: v.id,
+                              url: v.url || v.localUrl,
+                              localUrl: v.localUrl || v.url,
+                              thumbnail: v.thumbnailUrl || v.thumbnail,
+                              startTime: cumStart,
+                              duration: dur,
+                              locked: false,
+                              sourceOffset: 0,
+                            };
+                            cumStart += dur;
+                            return clip;
+                          });
                           setClips(newClips);
+                          // Auto-probe batch will handle any clips missing duration metadata
                         }}
                       >
                         Add All
@@ -4803,20 +5219,31 @@ const VideoEditorModal = ({
                               key={video.id || i}
                               className={`cursor-pointer p-1 rounded-md border-2 transition-colors relative ${isInTimeline ? 'border-green-500/40' : 'border-transparent'}`}
                               onClick={() => {
-                                setClips((prev) => [
-                                  ...prev,
-                                  {
-                                    id: `clip_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                                    sourceId: video.id,
-                                    url: video.url || video.localUrl,
-                                    localUrl: video.localUrl || video.url,
-                                    thumbnail: video.thumbnailUrl || video.thumbnail,
-                                    startTime: prev.length * 2,
-                                    duration: 2,
-                                    locked: false,
-                                    sourceOffset: 0,
-                                  },
-                                ]);
+                                {
+                                  const dur = video.duration || video.videoDuration || 2;
+                                  setClips((prev) => {
+                                    // Place new clip at the end of the furthest clip
+                                    let maxEnd = 0;
+                                    for (const c of prev) {
+                                      const end = (c.startTime || 0) + (c.duration || 1);
+                                      if (end > maxEnd) maxEnd = end;
+                                    }
+                                    return [
+                                      ...prev,
+                                      {
+                                        id: `clip_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                                        sourceId: video.id,
+                                        url: video.url || video.localUrl,
+                                        localUrl: video.localUrl || video.url,
+                                        thumbnail: video.thumbnailUrl || video.thumbnail,
+                                        startTime: maxEnd,
+                                        duration: dur,
+                                        locked: false,
+                                        sourceOffset: 0,
+                                      },
+                                    ];
+                                  });
+                                }
                                 if (video.id && category?.artistId)
                                   incrementUseCount(category.artistId, video.id);
                               }}

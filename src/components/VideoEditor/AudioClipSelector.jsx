@@ -61,6 +61,8 @@ const AudioClipSelector = ({
   const [trimmedClipName, setTrimmedClipName] = useState('');
   const [isTrimming, setIsTrimming] = useState(false);
   const [trimProgress, setTrimProgress] = useState('');
+  const [zoomLevel, setZoomLevel] = useState(1); // 1 = full view, up to 20x
+  const [scrollOffset, setScrollOffset] = useState(0); // seconds, left edge of visible window
 
   const audioRef = useRef(null);
   const canvasRef = useRef(null);
@@ -152,119 +154,154 @@ const AudioClipSelector = ({
     ctx.fillStyle = '#1a1a2e';
     ctx.fillRect(0, 0, width, height);
 
+    // Zoom-aware time <-> pixel mapping
+    const visibleDuration = duration / zoomLevel;
+    const visibleStart = scrollOffset;
+    const visibleEnd = scrollOffset + visibleDuration;
+    const timeToX = (t) => ((t - visibleStart) / visibleDuration) * width;
+
     // Calculate positions
-    const inX = (inPoint / duration) * width;
-    const outX = (outPoint / duration) * width;
-    const playheadX = (playheadTime / duration) * width;
+    const inX = timeToX(inPoint);
+    const outX = timeToX(outPoint);
+    const playheadX = timeToX(playheadTime);
 
-    // Draw dimmed regions (outside selection)
+    // Draw dimmed regions (outside selection), clamped to canvas
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.fillRect(0, 0, inX, height);
-    ctx.fillRect(outX, 0, width - outX, height);
-
-    // Draw selected region background
-    ctx.fillStyle = 'rgba(124, 58, 237, 0.15)';
-    ctx.fillRect(inX, 0, outX - inX, height);
-
-    // Draw waveform
-    const barWidth = width / waveformData.length;
-    const barGap = 1;
-
-    waveformData.forEach((value, index) => {
-      const x = index * barWidth;
-      const barHeight = value * (height - 30);
-      const y = (height - barHeight) / 2;
-
-      const barTime = (index / waveformData.length) * duration;
-      const inSelection = barTime >= inPoint && barTime <= outPoint;
-
-      ctx.fillStyle = inSelection ? '#7c3aed' : '#4b5563';
-      ctx.fillRect(x + barGap / 2, y, barWidth - barGap, barHeight);
-    });
-
-    // Draw time markers
-    ctx.fillStyle = '#6b7280';
-    ctx.font = '10px monospace';
-    for (let t = 0; t <= duration; t += Math.max(5, Math.floor(duration / 10))) {
-      const x = (t / duration) * width;
-      ctx.fillText(formatTimeShort(t), x + 2, height - 4);
-      ctx.fillRect(x, height - 15, 1, 5);
+    const dimLeftEnd = Math.max(0, Math.min(width, inX));
+    const dimRightStart = Math.max(0, Math.min(width, outX));
+    ctx.fillRect(0, 0, dimLeftEnd, height);
+    if (dimRightStart < width) {
+      ctx.fillRect(dimRightStart, 0, width - dimRightStart, height);
     }
 
-    // Draw scrub playhead (white)
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(playheadX, 0);
-    ctx.lineTo(playheadX, height);
-    ctx.stroke();
+    // Draw selected region background (clamped)
+    const selLeft = Math.max(0, inX);
+    const selRight = Math.min(width, outX);
+    if (selRight > selLeft) {
+      ctx.fillStyle = 'rgba(124, 58, 237, 0.15)';
+      ctx.fillRect(selLeft, 0, selRight - selLeft, height);
+    }
 
-    // Draw IN marker (green)
-    ctx.fillStyle = '#22c55e';
-    ctx.strokeStyle = '#22c55e';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(inX, 0);
-    ctx.lineTo(inX, height);
-    ctx.stroke();
+    // Draw waveform bars (only those visible)
+    const barGap = 1;
+    const totalBars = waveformData.length;
+    const barDuration = duration / totalBars;
+    // Determine which bar indices are visible
+    const firstBar = Math.max(0, Math.floor((visibleStart / duration) * totalBars) - 1);
+    const lastBar = Math.min(totalBars - 1, Math.ceil((visibleEnd / duration) * totalBars) + 1);
 
-    // IN handle (triangle pointing right)
-    ctx.beginPath();
-    ctx.moveTo(inX, 0);
-    ctx.lineTo(inX + 14, 0);
-    ctx.lineTo(inX + 14, 20);
-    ctx.lineTo(inX, 30);
-    ctx.closePath();
-    ctx.fill();
+    for (let i = firstBar; i <= lastBar; i++) {
+      const barTime = (i / totalBars) * duration;
+      const x = timeToX(barTime);
+      const barWidth = (barDuration / visibleDuration) * width;
+      const barHeight = waveformData[i] * (height - 30);
+      const y = (height - barHeight) / 2;
 
-    // "I" label
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 11px sans-serif';
-    ctx.fillText('I', inX + 4, 16);
+      const inSelection = barTime >= inPoint && barTime <= outPoint;
+      ctx.fillStyle = inSelection ? '#7c3aed' : '#4b5563';
+      ctx.fillRect(x + barGap / 2, y, Math.max(1, barWidth - barGap), barHeight);
+    }
 
-    // Draw OUT marker (orange)
-    ctx.fillStyle = '#f97316';
-    ctx.strokeStyle = '#f97316';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(outX, 0);
-    ctx.lineTo(outX, height);
-    ctx.stroke();
+    // Draw time markers (adaptive interval based on visible duration)
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '10px monospace';
+    const rawInterval = visibleDuration / 10;
+    // Snap to nice intervals: 1, 2, 5, 10, 15, 30, 60, 120...
+    const niceIntervals = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
+    let interval = niceIntervals.find((n) => n >= rawInterval) || rawInterval;
+    const markerStart = Math.ceil(visibleStart / interval) * interval;
+    for (let t = markerStart; t <= visibleEnd; t += interval) {
+      const x = timeToX(t);
+      if (x >= -20 && x <= width + 20) {
+        ctx.fillText(formatTimeShort(t), x + 2, height - 4);
+        ctx.fillRect(x, height - 15, 1, 5);
+      }
+    }
 
-    // OUT handle (triangle pointing left)
-    ctx.beginPath();
-    ctx.moveTo(outX, 0);
-    ctx.lineTo(outX - 14, 0);
-    ctx.lineTo(outX - 14, 20);
-    ctx.lineTo(outX, 30);
-    ctx.closePath();
-    ctx.fill();
+    // Draw scrub playhead (white) — only if visible
+    if (playheadX >= -2 && playheadX <= width + 2) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(playheadX, 0);
+      ctx.lineTo(playheadX, height);
+      ctx.stroke();
+    }
 
-    // "O" label
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 11px sans-serif';
-    ctx.fillText('O', outX - 11, 16);
-  }, [waveformData, inPoint, outPoint, playheadTime, duration]);
+    // Draw IN marker (green) — only if visible
+    if (inX >= -20 && inX <= width + 20) {
+      ctx.fillStyle = '#22c55e';
+      ctx.strokeStyle = '#22c55e';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(inX, 0);
+      ctx.lineTo(inX, height);
+      ctx.stroke();
 
-  // Get time from X position
+      // IN handle (triangle pointing right)
+      ctx.beginPath();
+      ctx.moveTo(inX, 0);
+      ctx.lineTo(inX + 14, 0);
+      ctx.lineTo(inX + 14, 20);
+      ctx.lineTo(inX, 30);
+      ctx.closePath();
+      ctx.fill();
+
+      // "I" label
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('I', inX + 4, 16);
+    }
+
+    // Draw OUT marker (orange) — only if visible
+    if (outX >= -20 && outX <= width + 20) {
+      ctx.fillStyle = '#f97316';
+      ctx.strokeStyle = '#f97316';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(outX, 0);
+      ctx.lineTo(outX, height);
+      ctx.stroke();
+
+      // OUT handle (triangle pointing left)
+      ctx.beginPath();
+      ctx.moveTo(outX, 0);
+      ctx.lineTo(outX - 14, 0);
+      ctx.lineTo(outX - 14, 20);
+      ctx.lineTo(outX, 30);
+      ctx.closePath();
+      ctx.fill();
+
+      // "O" label
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('O', outX - 11, 16);
+    }
+  }, [waveformData, inPoint, outPoint, playheadTime, duration, zoomLevel, scrollOffset]);
+
+  // Get time from X position (zoom-aware)
   const getTimeFromX = useCallback(
     (clientX) => {
       if (!containerRef.current || duration === 0) return 0;
       const rect = containerRef.current.getBoundingClientRect();
       const x = clientX - rect.left;
-      return Math.max(0, Math.min(duration, (x / rect.width) * duration));
+      const visibleDuration = duration / zoomLevel;
+      const time = scrollOffset + (x / rect.width) * visibleDuration;
+      return Math.max(0, Math.min(duration, time));
     },
-    [duration],
+    [duration, zoomLevel, scrollOffset],
   );
 
-  // Determine what was clicked
+  // Determine what was clicked (zoom-aware)
   const getClickTarget = useCallback(
     (clientX) => {
       if (!containerRef.current || duration === 0) return 'none';
       const rect = containerRef.current.getBoundingClientRect();
       const x = clientX - rect.left;
-      const inX = (inPoint / duration) * rect.width;
-      const outX = (outPoint / duration) * rect.width;
+      const visibleDuration = duration / zoomLevel;
+      const timeToPixel = (t) => ((t - scrollOffset) / visibleDuration) * rect.width;
+      const inX = timeToPixel(inPoint);
+      const outX = timeToPixel(outPoint);
 
       // Larger hit zone on mobile for 44px touch targets
       const hitZone = isMobile ? 22 : 15;
@@ -276,7 +313,7 @@ const AudioClipSelector = ({
       if (x > inX && x < outX) return 'region';
       return 'none';
     },
-    [inPoint, outPoint, duration, isMobile],
+    [inPoint, outPoint, duration, isMobile, zoomLevel, scrollOffset],
   );
 
   // Track if pointer actually moved during a pointerdown (to distinguish click from drag)
@@ -396,19 +433,31 @@ const AudioClipSelector = ({
           break;
         case ' ':
           e.preventDefault();
+          e.stopImmediatePropagation();
           togglePlayback();
           break;
         case 'arrowleft':
           e.preventDefault();
+          e.stopImmediatePropagation();
           const newTimeL = Math.max(0, playheadTime - (e.shiftKey ? 1 : 0.1));
           setPlayheadTime(newTimeL);
           if (audioRef.current) audioRef.current.currentTime = newTimeL;
           break;
         case 'arrowright':
           e.preventDefault();
+          e.stopImmediatePropagation();
           const newTimeR = Math.min(duration, playheadTime + (e.shiftKey ? 1 : 0.1));
           setPlayheadTime(newTimeR);
           if (audioRef.current) audioRef.current.currentTime = newTimeR;
+          break;
+        case '+':
+        case '=':
+          e.preventDefault();
+          setZoomLevel((z) => Math.min(20, z * 1.5));
+          break;
+        case '-':
+          e.preventDefault();
+          setZoomLevel((z) => Math.max(1, z / 1.5));
           break;
         default:
           break;
@@ -418,6 +467,25 @@ const AudioClipSelector = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [playheadTime, inPoint, outPoint, duration, editingTime]);
+
+  // Auto-scroll during playback when zoomed in
+  useEffect(() => {
+    if (!isPlaying || zoomLevel <= 1) return;
+    const visibleDuration = duration / zoomLevel;
+    if (playheadTime < scrollOffset || playheadTime > scrollOffset + visibleDuration) {
+      setScrollOffset(
+        Math.max(0, Math.min(duration - visibleDuration, playheadTime - visibleDuration * 0.1)),
+      );
+    }
+  }, [playheadTime, isPlaying, zoomLevel, scrollOffset, duration]);
+
+  // Clamp scrollOffset when zoom changes
+  useEffect(() => {
+    if (duration <= 0) return;
+    const visibleDuration = duration / zoomLevel;
+    const maxOffset = Math.max(0, duration - visibleDuration);
+    setScrollOffset((prev) => Math.min(prev, maxOffset));
+  }, [zoomLevel, duration]);
 
   // Playback
   const togglePlayback = useCallback(() => {
@@ -751,6 +819,33 @@ const AudioClipSelector = ({
           >
             Full
           </button>
+
+          {/* Zoom controls */}
+          <div style={styles.zoomControls}>
+            <button
+              style={{
+                ...styles.zoomButton,
+                ...(zoomLevel <= 1 ? { opacity: 0.4, cursor: 'default' } : {}),
+              }}
+              onClick={() => setZoomLevel((z) => Math.max(1, z / 1.5))}
+              disabled={zoomLevel <= 1}
+              title="Zoom out (-)"
+            >
+              −
+            </button>
+            <span style={styles.zoomLabel}>{Math.round(zoomLevel * 100)}%</span>
+            <button
+              style={{
+                ...styles.zoomButton,
+                ...(zoomLevel >= 20 ? { opacity: 0.4, cursor: 'default' } : {}),
+              }}
+              onClick={() => setZoomLevel((z) => Math.min(20, z * 1.5))}
+              disabled={zoomLevel >= 20}
+              title="Zoom in (+)"
+            >
+              +
+            </button>
+          </div>
         </div>
 
         {/* Waveform */}
@@ -778,6 +873,15 @@ const AudioClipSelector = ({
                 ...styles.canvasContainer,
               }}
               {...getWaveformPointerProps()}
+              onWheel={(e) => {
+                if (zoomLevel <= 1) return;
+                e.preventDefault();
+                const visibleDuration = duration / zoomLevel;
+                const delta = (e.deltaX || e.deltaY) * 0.001 * visibleDuration;
+                setScrollOffset((o) =>
+                  Math.max(0, Math.min(duration - visibleDuration, o + delta)),
+                );
+              }}
             >
               <canvas
                 ref={canvasRef}
@@ -984,6 +1088,9 @@ const AudioClipSelector = ({
               </span>
               <span style={styles.shortcut}>
                 <kbd>←→</kbd> Scrub
+              </span>
+              <span style={styles.shortcut}>
+                <kbd>+/−</kbd> Zoom
               </span>
             </div>
           )}
@@ -1347,6 +1454,37 @@ const getStyles = (theme) => ({
     fontSize: '13px',
     cursor: 'pointer',
     marginLeft: 'auto',
+  },
+  zoomControls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    marginLeft: '8px',
+    borderLeft: `1px solid ${theme.bg.elevated}`,
+    paddingLeft: '12px',
+  },
+  zoomButton: {
+    width: '28px',
+    height: '28px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
+    borderRadius: '6px',
+    color: theme.text.primary,
+    fontSize: '16px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    lineHeight: 1,
+  },
+  zoomLabel: {
+    fontSize: '12px',
+    fontWeight: '600',
+    color: theme.text.secondary,
+    fontFamily: 'monospace',
+    minWidth: '44px',
+    textAlign: 'center',
   },
   waveformSection: {
     padding: '24px',
