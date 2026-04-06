@@ -42,9 +42,12 @@ import {
   getRecentCollectionRemovals,
   trackCollectionWrite,
   removeFromProjectPool,
+  removeFromLibraryAsync,
   assignToMediaBank,
   migrateToMediaBanks,
+  updateCollectionAsync,
 } from '../../services/libraryService';
+import { indexMedia } from '../../services/mediaSearchService';
 import {
   migrateThumbnails,
   THUMB_MAX_SIZE,
@@ -91,7 +94,11 @@ import {
   createNicheFolder,
   getMediaPath,
 } from '../../services/localProjectService';
-import { isElectronApp } from '../../services/localMediaService';
+import {
+  isElectronApp,
+  saveMediaLocally,
+  getLocalMediaUrl,
+} from '../../services/localMediaService';
 import log from '../../utils/logger';
 
 const FORMAT_TO_EDITOR = {
@@ -157,6 +164,10 @@ const ProjectWorkspace = ({
   // All Media tab
   const [showAllMedia, setShowAllMediaRaw] = useState(false);
 
+  // Niche tab rename
+  const [renamingNicheId, setRenamingNicheId] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+
   // Show niche format picker
   const [showNichePicker, setShowNichePicker] = useState(false);
 
@@ -165,6 +176,8 @@ const ProjectWorkspace = ({
 
   // Selected media bank IDs for video niche editor filtering
   const [selectedMediaBankIds, setSelectedMediaBankIds] = useState(null);
+  // Selected clip IDs lifted from VideoNicheContent — used by Create button so it can pass them to the editor
+  const [selectedClipIdsForEditor, setSelectedClipIdsForEditor] = useState(null);
 
   // Dump and Generate modal
   const [showDumpModal, setShowDumpModal] = useState(false);
@@ -733,8 +746,8 @@ const ProjectWorkspace = ({
         byteProgressRef.current.files[fileKey] = Math.round((pct / 100) * actualSize);
       };
 
-      // Run upload + thumbnail + duration in parallel
-      const thumbPromise = (async () => {
+      // Generate thumbnail blob (used by both local and cloud paths)
+      const thumbBlobPromise = (async () => {
         if (isVideo) {
           try {
             const video = document.createElement('video');
@@ -760,13 +773,9 @@ const ProjectWorkspace = ({
             canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
             const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', THUMB_QUALITY));
             URL.revokeObjectURL(objUrl);
-            if (blob) {
-              const tf = new File([blob], `thumb_${file.name}.jpg`, { type: 'image/jpeg' });
-              const tr = await uploadFile(tf, 'thumbnails');
-              return tr.url;
-            }
+            return blob || null;
           } catch (e) {
-            /* skip video thumb */
+            return null;
           }
         } else if (!isAudio) {
           try {
@@ -786,13 +795,9 @@ const ProjectWorkspace = ({
             canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
             const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', THUMB_QUALITY));
             URL.revokeObjectURL(objUrl);
-            if (blob) {
-              const tf = new File([blob], `thumb_${file.name}`, { type: 'image/jpeg' });
-              const tr = await uploadFile(tf, 'thumbnails');
-              return tr.url;
-            }
+            return blob || null;
           } catch (e) {
-            /* skip thumb */
+            return null;
           }
         }
         return null;
@@ -811,19 +816,66 @@ const ProjectWorkspace = ({
         }
       })();
 
-      // Upload + thumbnail + duration all in parallel
-      const [uploadResult, thumbnailUrl, duration] = await Promise.all([
-        uploadFileWithQuota(file, folder, onFileProgress, {}, quotaCtx),
-        thumbPromise,
-        durationPromise,
-      ]);
-      const { url, path } = uploadResult;
+      const mediaType = isVideo
+        ? MEDIA_TYPES.VIDEO
+        : isAudio
+          ? MEDIA_TYPES.AUDIO
+          : MEDIA_TYPES.IMAGE;
 
-      // If duration still unknown, try from remote URL
-      let finalDuration = duration;
+      let url;
+      let path;
+      let thumbnailUrl = null;
+      let localPath = null;
+      let localUrl = null;
+      let syncStatus = null;
+      let finalDuration;
+
+      // === LOCAL-FIRST PATH (Electron) ===
+      if (isElectronApp() && artistName) {
+        const [localSavedPath, thumbBlob, duration] = await Promise.all([
+          saveMediaLocally(file, artistName, mediaType, file.name),
+          thumbBlobPromise,
+          durationPromise,
+        ]);
+        localPath = localSavedPath;
+        if (localPath) {
+          localUrl = await getLocalMediaUrl(artistName, mediaType, file.name);
+          // Save thumbnail locally if generated
+          if (thumbBlob) {
+            const thumbName = `thumb_${file.name}.jpg`;
+            const thumbFile = new File([thumbBlob], thumbName, { type: 'image/jpeg' });
+            await saveMediaLocally(thumbFile, artistName, 'image', thumbName);
+            thumbnailUrl = await getLocalMediaUrl(artistName, 'image', thumbName);
+          }
+          syncStatus = 'local';
+          // Mark file as fully "uploaded" in byte progress (it's saved locally)
+          byteProgressRef.current.files[fileKey] = actualSize;
+        }
+        finalDuration = duration;
+      }
+
+      // === CLOUD PATH (legacy / fallback) ===
+      if (!localPath) {
+        const [uploadResult, thumbBlob, duration] = await Promise.all([
+          uploadFileWithQuota(file, folder, onFileProgress, {}, quotaCtx),
+          thumbBlobPromise,
+          durationPromise,
+        ]);
+        url = uploadResult.url;
+        path = uploadResult.path;
+        if (thumbBlob) {
+          const tf = new File([thumbBlob], `thumb_${file.name}.jpg`, { type: 'image/jpeg' });
+          const tr = await uploadFile(tf, 'thumbnails');
+          thumbnailUrl = tr.url;
+        }
+        syncStatus = 'cloud';
+        finalDuration = duration;
+      }
+
+      // If duration still unknown, try from URL
       if (finalDuration === undefined && (isAudio || isVideo)) {
         try {
-          finalDuration = await getMediaDuration(url, isVideo ? 'video' : 'audio');
+          finalDuration = await getMediaDuration(url || localUrl, isVideo ? 'video' : 'audio');
         } catch (e) {
           /* skip */
         }
@@ -832,24 +884,24 @@ const ProjectWorkspace = ({
       // Target collection: active niche (if exists) or project root
       const targetCollectionId = activeNicheId || projectId;
 
-      const mediaType = isVideo
-        ? MEDIA_TYPES.VIDEO
-        : isAudio
-          ? MEDIA_TYPES.AUDIO
-          : MEDIA_TYPES.IMAGE;
       const item = {
         type: mediaType,
         name: file.name,
-        url,
+        ...(url ? { url } : {}),
         thumbnailUrl,
         thumbVersion: thumbnailUrl ? THUMB_VERSION : undefined,
-        storagePath: path,
+        ...(path ? { storagePath: path } : {}),
+        ...(localPath ? { localPath } : {}),
+        ...(localUrl ? { localUrl } : {}),
+        ...(syncStatus ? { syncStatus } : {}),
         collectionIds: [targetCollectionId],
         metadata: { fileSize: file.size, mimeType: file.type },
         ...(finalDuration ? { duration: finalDuration } : {}),
       };
 
       const savedItem = await addToLibraryAsync(db, artistId, item);
+      // Background: index for semantic search (non-blocking)
+      indexMedia(artistId, savedItem).catch(() => {});
       // Add to target collection
       await addToCollectionAsync(db, artistId, targetCollectionId, savedItem.id);
       // Also add to project pool if uploading in a niche
@@ -1490,7 +1542,8 @@ const ProjectWorkspace = ({
             }}
           >
             <FeatherImage style={{ width: 14, height: 14 }} />
-            {projectMedia.length} Assets
+            {projectMedia.filter((m) => ['image', 'video', 'audio'].includes(m.type)).length} All
+            Media
           </button>
           <IconButton
             variant={showCaptionPage ? 'brand-secondary' : 'neutral-tertiary'}
@@ -1528,8 +1581,38 @@ const ProjectWorkspace = ({
                   : 'border-transparent text-neutral-400 hover:text-neutral-200'
               }`}
               onClick={() => navigateTo({ nicheId: niche.id })}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                setRenamingNicheId(niche.id);
+                setRenameValue(niche.name);
+              }}
             >
-              <span className="text-body-bold font-body-bold">{niche.name}</span>
+              {renamingNicheId === niche.id ? (
+                <input
+                  autoFocus
+                  className="text-body-bold font-body-bold bg-transparent border-b border-indigo-500 outline-none text-white w-24"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={() => {
+                    if (renameValue.trim() && renameValue !== niche.name) {
+                      updateCollectionAsync(db, artistId, niche.id, { name: renameValue.trim() });
+                      setCollections((prev) =>
+                        prev.map((c) =>
+                          c.id === niche.id ? { ...c, name: renameValue.trim() } : c,
+                        ),
+                      );
+                    }
+                    setRenamingNicheId(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.target.blur();
+                    if (e.key === 'Escape') setRenamingNicheId(null);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span className="text-body-bold font-body-bold">{niche.name}</span>
+              )}
               {draftCount > 0 && (
                 <span
                   className={`text-caption font-caption px-1.5 py-0.5 rounded-full ${
@@ -1649,6 +1732,10 @@ const ProjectWorkspace = ({
                     selectedMediaBankIds && selectedMediaBankIds.size > 0
                       ? [...selectedMediaBankIds]
                       : null;
+                  const clipIds =
+                    selectedClipIdsForEditor && selectedClipIdsForEditor.length > 0
+                      ? selectedClipIdsForEditor
+                      : null;
                   onOpenVideoEditor?.(
                     activeFormat,
                     activeNiche.id,
@@ -1657,6 +1744,7 @@ const ProjectWorkspace = ({
                     null,
                     bankIds,
                     activeNiche,
+                    clipIds,
                   );
                 }
               }}
@@ -1789,9 +1877,14 @@ const ProjectWorkspace = ({
             }}
             onImportAudio={handleImportAudio}
             onWebImportAudio={handleWebImportAudio}
-            onRemoveAudio={(audioId) => {
+            onRemoveAudio={async (audioId) => {
               removeFromProjectPool(artistId, projectId, [audioId], db);
-              toastSuccess('Audio removed');
+              try {
+                await removeFromLibraryAsync(db, artistId, audioId);
+              } catch (err) {
+                log.warn('[ProjectWorkspace] Audio Firestore delete failed:', err.message);
+              }
+              toastSuccess('Audio deleted');
             }}
           />
         )}
@@ -1838,12 +1931,15 @@ const ProjectWorkspace = ({
               db={db}
               artistId={artistId}
               niche={activeNiche}
+              artistName={artistName}
               library={library}
+              collections={collections}
               createdContent={createdContent}
               projectAudio={projectAudio}
               selectedMediaBankIds={selectedMediaBankIds}
               onSelectedMediaBankIdsChange={setSelectedMediaBankIds}
-              onMakeVideo={(format, nicheId, existingDraft, bankIds) => {
+              onSelectedClipIdsChange={setSelectedClipIdsForEditor}
+              onMakeVideo={(format, nicheId, existingDraft, bankIds, clipIds) => {
                 onOpenVideoEditor?.(
                   format,
                   nicheId,
@@ -1852,6 +1948,7 @@ const ProjectWorkspace = ({
                   null,
                   bankIds,
                   activeNiche,
+                  clipIds,
                 );
               }}
               onUpload={() => {
@@ -1885,9 +1982,14 @@ const ProjectWorkspace = ({
               onAddLyrics={onAddLyrics}
               onUpdateLyrics={onUpdateLyrics}
               onDeleteLyrics={onDeleteLyrics}
-              onRemoveAudio={(audioId) => {
+              onRemoveAudio={async (audioId) => {
                 removeFromProjectPool(artistId, projectId, [audioId], db);
-                toastSuccess('Audio removed');
+                try {
+                  await removeFromLibraryAsync(db, artistId, audioId);
+                } catch (err) {
+                  log.warn('[ProjectWorkspace] Audio Firestore delete failed:', err.message);
+                }
+                toastSuccess('Audio deleted');
               }}
             />
           )}

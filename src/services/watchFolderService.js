@@ -23,6 +23,7 @@ import {
   addToCollection,
   assignToMediaBank,
 } from './libraryService';
+import { isElectronApp, saveMediaLocally, getLocalMediaUrl } from './localMediaService';
 import log from '../utils/logger';
 
 // ── Constants ──
@@ -221,6 +222,7 @@ export async function syncWatchFolder(
   targetBankId,
   db,
   onProgress,
+  artistName = '',
 ) {
   const { provider, folderId, lastSyncAt } = watchConfig;
   const errors = [];
@@ -264,15 +266,35 @@ export async function syncWatchFolder(
         continue;
       }
 
-      const folder = storageFolderForType(mediaType);
-      const { url, path: storagePath } = await uploadFile(fileObj, folder);
+      // c. Save the file: local-first if Electron + artistName, else cloud
+      let url;
+      let storagePath;
+      let localPath = null;
+      let localUrl = null;
+      let syncStatus = 'cloud';
+      if (isElectronApp() && artistName) {
+        localPath = await saveMediaLocally(fileObj, artistName, mediaType, file.name);
+        if (localPath) {
+          localUrl = await getLocalMediaUrl(artistName, mediaType, file.name);
+          syncStatus = 'local';
+        }
+      }
+      if (!localPath) {
+        const folder = storageFolderForType(mediaType);
+        const uploadResult = await uploadFile(fileObj, folder);
+        url = uploadResult.url;
+        storagePath = uploadResult.path;
+      }
 
-      // c. Create media item and add to library
+      // d. Create media item and add to library
       const mediaItem = createMediaItem({
         type: mediaType,
         name: file.name,
-        url,
-        storagePath,
+        ...(url ? { url } : {}),
+        ...(storagePath ? { storagePath } : {}),
+        ...(localPath ? { localPath } : {}),
+        ...(localUrl ? { localUrl } : {}),
+        syncStatus,
         metadata: {
           mimeType,
           fileSize: blob.size,
@@ -284,10 +306,10 @@ export async function syncWatchFolder(
 
       await addToLibraryAsync(db, artistId, mediaItem);
 
-      // d. Add to niche collection
+      // e. Add to niche collection
       addToCollection(artistId, nicheId, [mediaItem.id], db);
 
-      // e. If targetBankId, assign to media bank
+      // f. If targetBankId, assign to media bank
       if (targetBankId) {
         assignToMediaBank(artistId, nicheId, [mediaItem.id], targetBankId, db);
       }

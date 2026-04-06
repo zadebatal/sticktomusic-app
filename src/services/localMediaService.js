@@ -4,37 +4,61 @@
  * Only active in Electron (window.electronAPI?.isElectron).
  * Provides save/read/resolve functions that map to IPC handlers in electron/main.js.
  *
- * Folder structure on drive:
- *   {mediaFolder}/StickToMusic/{artistName}/{mediaType}/{filename}
+ * Folder structure on drive (flat per artist):
+ *   {mediaFolder}/StickToMusic/{artistName}/media/{filename}
  */
 
 import log from '../utils/logger';
 
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
 
-/**
- * Build the relative path for a media file on the local drive.
- * @param {string} artistName - Artist display name (folder-safe)
- * @param {string} mediaType - 'videos' | 'audio' | 'images' | 'exports'
- * @param {string} filename - File name with extension
- * @returns {string} Relative path from media folder root
- */
-function buildRelativePath(artistName, mediaType, filename) {
-  // Sanitize artist name for filesystem (replace slashes, colons, etc.)
-  const safeName = artistName.replace(/[/\\:*?"<>|]/g, '_').trim() || 'Unknown';
-  return `StickToMusic/${safeName}/${mediaType}/${filename}`;
+/** Sanitize a name for filesystem use */
+function safeName(name) {
+  return (name || 'Unknown').replace(/[/\\:*?"<>|]/g, '_').trim();
 }
 
 /**
- * Map media type string to folder name.
- * @param {'video'|'audio'|'image'|string} type - Media type from library item
- * @returns {string} Folder name
+ * Build the relative path for a media file on the local drive.
+ * New flat structure: StickToMusic/{artist}/media/{filename}
+ */
+function buildRelativePath(artistName, filename) {
+  return `StickToMusic/${safeName(artistName)}/media/${filename}`;
+}
+
+/**
+ * Legacy path builder for migration fallback.
+ * Old structure: StickToMusic/{artist}/{mediaType}/{filename}
+ */
+function buildRelativePathLegacy(artistName, mediaType, filename) {
+  return `StickToMusic/${safeName(artistName)}/${mediaType}/${filename}`;
+}
+
+/**
+ * Map media type string to legacy folder name.
  */
 function typeToFolder(type) {
   if (type === 'video') return 'videos';
   if (type === 'audio') return 'audio';
   if (type === 'image') return 'images';
   return 'other';
+}
+
+/**
+ * Ensure the artist's media folder exists.
+ * Creates StickToMusic/{artist}/media/ by writing a placeholder.
+ */
+export async function ensureArtistMediaFolder(artistName) {
+  if (!isElectron) return;
+  try {
+    const keepPath = buildRelativePath(artistName, '.stm-keep');
+    const exists = await window.electronAPI.checkFileExists(keepPath);
+    if (!exists) {
+      await window.electronAPI.saveFileLocally(new ArrayBuffer(0), keepPath);
+      log(`[LocalMedia] Created media folder for ${artistName}`);
+    }
+  } catch (err) {
+    log.warn(`[LocalMedia] Failed to create media folder: ${err.message}`);
+  }
 }
 
 /**
@@ -49,7 +73,7 @@ export async function saveMediaLocally(file, artistName, mediaType, filename) {
   if (!isElectron) return null;
   try {
     const name = filename || file.name || `media_${Date.now()}`;
-    const relativePath = buildRelativePath(artistName, typeToFolder(mediaType), name);
+    const relativePath = buildRelativePath(artistName, name);
     const arrayBuffer = await file.arrayBuffer();
     const fullPath = await window.electronAPI.saveFileLocally(arrayBuffer, relativePath);
     log(`[LocalMedia] Saved: ${relativePath}`);
@@ -70,10 +94,17 @@ export async function saveMediaLocally(file, artistName, mediaType, filename) {
 export async function getLocalMediaUrl(artistName, mediaType, filename) {
   if (!isElectron) return null;
   try {
-    const relativePath = buildRelativePath(artistName, typeToFolder(mediaType), filename);
+    // Try new flat path first
+    const relativePath = buildRelativePath(artistName, filename);
     const exists = await window.electronAPI.checkFileExists(relativePath);
-    if (!exists) return null;
-    return window.electronAPI.getLocalFileUrl(relativePath);
+    if (exists) return window.electronAPI.getLocalFileUrl(relativePath);
+
+    // Fallback to legacy path
+    const legacyPath = buildRelativePathLegacy(artistName, typeToFolder(mediaType), filename);
+    const legacyExists = await window.electronAPI.checkFileExists(legacyPath);
+    if (legacyExists) return window.electronAPI.getLocalFileUrl(legacyPath);
+
+    return null;
   } catch {
     return null;
   }
@@ -138,6 +169,56 @@ export async function selectMediaFolder() {
  */
 export function isElectronApp() {
   return isElectron;
+}
+
+/**
+ * Push a local-only library item to Firebase Storage. Updates the item with
+ * `url`, `storagePath`, `syncStatus: 'synced'`. Idempotent — returns early if
+ * already cloud or synced.
+ *
+ * @param {Object} db - Firestore
+ * @param {string} artistId
+ * @param {string} artistName
+ * @param {Object} item - Library item (must have type, name, localPath or localUrl)
+ * @returns {Promise<Object|null>} Updated item or null on failure
+ */
+export async function uploadLocalItemToCloud(db, artistId, artistName, item) {
+  if (!item || !item.id) return null;
+  if (item.url && item.syncStatus !== 'local') return item; // already cloud
+  if (!isElectron || !item.name) return null;
+
+  const { uploadFile } = await import('./firebaseStorage');
+  const { updateLibraryItemAsync } = await import('./libraryService');
+
+  try {
+    // Read the local file as a Blob
+    const localUrl = await getLocalMediaUrl(artistName, item.type, item.name);
+    if (!localUrl) {
+      log.warn(`[uploadLocalItemToCloud] No local URL for ${item.name}`);
+      return null;
+    }
+    const response = await fetch(localUrl);
+    if (!response.ok) throw new Error(`Failed to read local file: HTTP ${response.status}`);
+    const blob = await response.blob();
+    const file = new File([blob], item.name, { type: blob.type || 'application/octet-stream' });
+
+    // Upload to Firebase Storage
+    const folder = item.type === 'video' ? 'videos' : item.type === 'audio' ? 'audio' : 'images';
+    const { url, path } = await uploadFile(file, folder);
+
+    // Update the library item with cloud info
+    const updates = {
+      url,
+      storagePath: path,
+      syncStatus: 'synced', // both local + cloud now
+    };
+    await updateLibraryItemAsync(db, artistId, item.id, updates);
+    log(`[uploadLocalItemToCloud] Uploaded: ${item.name}`);
+    return { ...item, ...updates };
+  } catch (err) {
+    log.warn(`[uploadLocalItemToCloud] Failed for ${item.name}: ${err.message}`);
+    return null;
+  }
 }
 
 /**

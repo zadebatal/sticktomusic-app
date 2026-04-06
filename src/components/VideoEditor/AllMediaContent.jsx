@@ -7,6 +7,9 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { Button } from '../../ui/components/Button';
 import { Badge } from '../../ui/components/Badge';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import VideoPreviewLightbox from './shared/VideoPreviewLightbox';
+import QuickTrimPopover from './shared/QuickTrimPopover';
+import MediaStatusBadge from '../ui/MediaStatusBadge';
 import {
   FeatherUpload,
   FeatherDownloadCloud,
@@ -18,9 +21,23 @@ import {
   FeatherFilm,
   FeatherTrash2,
   FeatherCheck,
+  FeatherFolder,
 } from '@subframe/core';
-import { removeFromLibraryAsync } from '../../services/libraryService';
+import {
+  removeFromLibraryAsync,
+  createCollection,
+  getCollections,
+  saveCollections,
+  saveCollectionToFirestore,
+  addToCollectionAsync,
+  getUserCollections,
+  assignToMediaBank,
+  migrateToMediaBanks,
+  getBankColor,
+} from '../../services/libraryService';
 import { useToast, ConfirmDialog } from '../ui';
+import { bucketByDuration } from './shared/editorConstants';
+import { isSearchAvailable, searchMedia } from '../../services/mediaSearchService';
 import log from '../../utils/logger';
 
 const AllMediaContent = ({
@@ -39,7 +56,14 @@ const AllMediaContent = ({
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
   const [mediaScope, setMediaScope] = useState('all');
   const [mediaSearch, setMediaSearch] = useState('');
-  const [videoPreviewUrl, setVideoPreviewUrl] = useState(null);
+  const [previewItem, setPreviewItem] = useState(null);
+  const [trimItemId, setTrimItemId] = useState(null);
+  const [showDurationBuckets, setShowDurationBuckets] = useState(false);
+  const [searchMode, setSearchMode] = useState('name'); // 'name' | 'visual'
+  const [semanticResults, setSemanticResults] = useState(null); // null = no active search, [] = no results
+  const [isSearching, setIsSearching] = useState(false);
+  const [sortBy, setSortBy] = useState('date'); // 'name' | 'date' | 'duration' | 'type'
+  const [showMoveToBankModal, setShowMoveToBankModal] = useState(false);
 
   // ── Selection state ──
   const [selected, setSelected] = useState(new Set());
@@ -54,21 +78,40 @@ const AllMediaContent = ({
     setSelected(new Set());
   }, [mediaScope, mediaSearch]);
 
+  // ── Debounced semantic search ──
+  useEffect(() => {
+    if (searchMode !== 'visual' || !mediaSearch.trim()) {
+      setSemanticResults(null);
+      setIsSearching(false);
+      return;
+    }
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      const collectionIds =
+        mediaScope === 'niche' && activeNiche?.id ? [activeNiche.id] : undefined;
+      const results = await searchMedia(artistId, mediaSearch, { collectionIds });
+      setSemanticResults(results);
+      setIsSearching(false);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchMode, mediaSearch, artistId, activeNiche?.id, mediaScope]);
+
   // ── Rubber-band handlers ──
+  const cachedRectsRef = useRef(null);
+
   const getIdsInRect = useCallback((rect) => {
-    if (!gridRef.current) return [];
+    if (!cachedRectsRef.current) return [];
     const ids = [];
-    gridRef.current.querySelectorAll('[data-media-id]').forEach((el) => {
-      const r = el.getBoundingClientRect();
+    for (const { id, rect: r } of cachedRectsRef.current) {
       if (
         r.right > rect.left &&
         r.left < rect.right &&
         r.bottom > rect.top &&
         r.top < rect.bottom
       ) {
-        ids.push(el.getAttribute('data-media-id'));
+        ids.push(id);
       }
-    });
+    }
     return ids;
   }, []);
 
@@ -82,6 +125,12 @@ const AllMediaContent = ({
       return;
     const container = gridRef.current;
     if (!container) return;
+    // Cache all item rects on drag start (avoids getBoundingClientRect per item on every mousemove)
+    const rects = [];
+    container.querySelectorAll('[data-media-id]').forEach((el) => {
+      rects.push({ id: el.getAttribute('data-media-id'), rect: el.getBoundingClientRect() });
+    });
+    cachedRectsRef.current = rects;
     setDragStart({ x: e.clientX, y: e.clientY, scrollTop: container.scrollTop });
     setIsDragging(false);
   }, []);
@@ -157,6 +206,10 @@ const AllMediaContent = ({
           setIsDeleting(true);
           try {
             await removeFromLibraryAsync(db, artistId, item.id);
+            // Also delete local file from disk (Electron desktop)
+            if (window.electronAPI?.isElectron && (item.localPath || item.path)) {
+              window.electronAPI.trashFile(item.localPath || item.path).catch(() => {});
+            }
             setSelected((prev) => {
               const next = new Set(prev);
               next.delete(item.id);
@@ -187,9 +240,17 @@ const AllMediaContent = ({
         setIsDeleting(true);
         setConfirmDialog((prev) => ({ ...prev, isLoading: true }));
         let deleted = 0;
+        const allMedia = [...(projectMedia || []), ...(library || [])];
         for (const id of selected) {
           try {
             await removeFromLibraryAsync(db, artistId, id);
+            // Also delete local file from disk
+            if (window.electronAPI?.isElectron) {
+              const item = allMedia.find((m) => m.id === id);
+              if (item?.localPath || item?.path) {
+                window.electronAPI.trashFile(item.localPath || item.path).catch(() => {});
+              }
+            }
             deleted++;
           } catch (err) {
             log.error('[AllMedia] Delete failed:', id, err);
@@ -203,40 +264,191 @@ const AllMediaContent = ({
     });
   }, [selected, isDeleting, db, artistId, toastSuccess]);
 
+  const handleAddToFolder = useCallback(
+    async (folderName, mediaIds) => {
+      if (!artistId || !folderName || !mediaIds.length) return;
+      // Check if folder already exists
+      const cols = getCollections(artistId);
+      let folder = cols.find(
+        (c) => c.name?.toLowerCase() === folderName.toLowerCase() && c.type === 'user',
+      );
+      if (!folder) {
+        folder = createCollection({ name: folderName });
+        folder.mediaIds = mediaIds;
+        const updated = [...cols, folder];
+        saveCollections(artistId, updated);
+        if (db) saveCollectionToFirestore(db, artistId, folder).catch(() => {});
+      } else {
+        // Add to existing folder
+        const newIds = new Set([...(folder.mediaIds || []), ...mediaIds]);
+        folder.mediaIds = [...newIds];
+        saveCollections(
+          artistId,
+          cols.map((c) => (c.id === folder.id ? folder : c)),
+        );
+        if (db) saveCollectionToFirestore(db, artistId, folder).catch(() => {});
+      }
+      setSelected(new Set());
+      toastSuccess(`Added ${mediaIds.length} items to "${folderName}"`);
+    },
+    [artistId, db, toastSuccess],
+  );
+
   // ── Data ──
   const nicheMedia = useMemo(() => {
     if (!activeNiche) return [];
     return library.filter((item) => (activeNiche.mediaIds || []).includes(item.id));
   }, [activeNiche, library]);
 
-  const scopedMedia = mediaScope === 'niche' ? nicheMedia : library;
+  const scopedMedia = mediaScope === 'niche' ? nicheMedia : projectMedia;
   const scopedImages = useMemo(() => scopedMedia.filter((m) => m.type === 'image'), [scopedMedia]);
   const scopedVideos = useMemo(() => scopedMedia.filter((m) => m.type === 'video'), [scopedMedia]);
 
+  // Sort comparator
+  const sortItems = useCallback(
+    (items) => {
+      const arr = [...items];
+      switch (sortBy) {
+        case 'name':
+          arr.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+          break;
+        case 'duration':
+          arr.sort((a, b) => (b.duration || 0) - (a.duration || 0));
+          break;
+        case 'type':
+          arr.sort((a, b) => (a.type || '').localeCompare(b.type || ''));
+          break;
+        case 'date':
+        default:
+          arr.sort((a, b) => {
+            const at = new Date(a.createdAt || a.metadata?.importedAt || 0).getTime();
+            const bt = new Date(b.createdAt || b.metadata?.importedAt || 0).getTime();
+            return bt - at;
+          });
+          break;
+      }
+      return arr;
+    },
+    [sortBy],
+  );
+
   const filteredImages = useMemo(() => {
-    if (!mediaSearch.trim()) return scopedImages;
-    const q = mediaSearch.toLowerCase();
-    return scopedImages.filter((m) => (m.name || '').toLowerCase().includes(q));
-  }, [scopedImages, mediaSearch]);
+    let items;
+    if (searchMode === 'visual' && semanticResults) {
+      const matchIds = new Set(
+        semanticResults.filter((r) => r.type === 'image').map((r) => r.mediaId),
+      );
+      items = scopedImages.filter((m) => matchIds.has(m.id));
+    } else if (!mediaSearch.trim()) {
+      items = scopedImages;
+    } else {
+      const q = mediaSearch.toLowerCase();
+      items = scopedImages.filter((m) => (m.name || '').toLowerCase().includes(q));
+    }
+    return sortItems(items);
+  }, [scopedImages, mediaSearch, searchMode, semanticResults, sortItems]);
 
   const filteredVideos = useMemo(() => {
-    if (!mediaSearch.trim()) return scopedVideos;
-    const q = mediaSearch.toLowerCase();
-    return scopedVideos.filter((m) => (m.name || '').toLowerCase().includes(q));
-  }, [scopedVideos, mediaSearch]);
+    let items;
+    if (searchMode === 'visual' && semanticResults) {
+      const matchIds = new Set(
+        semanticResults.filter((r) => r.type === 'video').map((r) => r.mediaId),
+      );
+      items = scopedVideos.filter((m) => matchIds.has(m.id));
+    } else if (!mediaSearch.trim()) {
+      items = scopedVideos;
+    } else {
+      const q = mediaSearch.toLowerCase();
+      items = scopedVideos.filter((m) => (m.name || '').toLowerCase().includes(q));
+    }
+    return sortItems(items);
+  }, [scopedVideos, mediaSearch, searchMode, semanticResults, sortItems]);
 
   const scopedAudio = useMemo(() => scopedMedia.filter((m) => m.type === 'audio'), [scopedMedia]);
   const filteredAudio = useMemo(() => {
-    if (!mediaSearch.trim()) return scopedAudio;
-    const q = mediaSearch.toLowerCase();
-    return scopedAudio.filter((m) => (m.name || '').toLowerCase().includes(q));
-  }, [scopedAudio, mediaSearch]);
+    let items;
+    if (!mediaSearch.trim()) {
+      items = scopedAudio;
+    } else {
+      const q = mediaSearch.toLowerCase();
+      items = scopedAudio.filter((m) => (m.name || '').toLowerCase().includes(q));
+    }
+    return sortItems(items);
+  }, [scopedAudio, mediaSearch, sortItems]);
+
+  const durationBuckets = useMemo(() => bucketByDuration(filteredVideos), [filteredVideos]);
 
   const formatDuration = (seconds) => {
     if (!Number.isFinite(seconds)) return '';
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const renderVideoCard = (item) => {
+    const isSelected = selected.has(item.id);
+    return (
+      <div
+        key={item.id}
+        data-media-id={item.id}
+        role="checkbox"
+        aria-checked={isSelected}
+        aria-label={item.name || 'Video'}
+        className={`relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group border-2 ${
+          isSelected ? 'border-indigo-500' : 'border-transparent'
+        }`}
+        onClick={() => {
+          if (!isDragging) toggleItem(item.id);
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          setPreviewItem(item);
+        }}
+      >
+        {item.thumbnailUrl || item.thumbnail ? (
+          <img
+            src={item.thumbnailUrl || item.thumbnail}
+            alt={item.name}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            draggable={false}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <FeatherFilm className="text-neutral-600" style={{ width: 16, height: 16 }} />
+          </div>
+        )}
+        {/* Hover-only play affordance — pointer-events-none so it doesn't intercept clicks */}
+        <div className="absolute inset-0 z-[3] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-black/70 border border-white/30">
+            <FeatherPlay className="text-white" style={{ width: 8, height: 8 }} />
+          </div>
+        </div>
+        {item.duration && (
+          <div className="absolute top-0.5 left-0.5 bg-black/70 rounded px-1 py-px pointer-events-none">
+            <span className="text-[8px] text-neutral-300 font-mono">
+              {formatDuration(item.duration)}
+            </span>
+          </div>
+        )}
+        {isSelected && (
+          <div className="absolute inset-0 bg-indigo-500/25 pointer-events-none flex items-center justify-center">
+            <FeatherCheck className="text-white" style={{ width: 16, height: 16 }} />
+          </div>
+        )}
+        <MediaStatusBadge syncStatus={item.syncStatus} />
+        <button
+          className="absolute top-0.5 right-0.5 z-[4] flex h-6 w-6 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDelete(item);
+          }}
+          title="Delete"
+        >
+          <FeatherTrash2 className="text-white" style={{ width: 12, height: 12 }} />
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -250,11 +462,37 @@ const AllMediaContent = ({
           <Badge variant="neutral">{scopedAudio.length} audio</Badge>
         </div>
         <div className="flex items-center gap-2">
-          {selected.size > 0 && (
+          {selected.size > 0 ? (
             <>
               <span className="text-caption font-caption text-indigo-400">
-                {selected.size} selected
+                {selected.size} of {scopedMedia.length} selected
               </span>
+              <Button
+                variant="neutral-tertiary"
+                size="small"
+                onClick={() => setSelected(new Set(scopedMedia.map((m) => m.id)))}
+              >
+                Select All
+              </Button>
+              <Button
+                variant="brand-secondary"
+                size="small"
+                icon={<FeatherFolder />}
+                onClick={() => {
+                  const name = prompt('Folder name:');
+                  if (!name?.trim()) return;
+                  handleAddToFolder(name.trim(), [...selected]);
+                }}
+              >
+                Add to Folder
+              </Button>
+              <Button
+                variant="neutral-secondary"
+                size="small"
+                onClick={() => setShowMoveToBankModal(true)}
+              >
+                Move to Bank…
+              </Button>
               <Button
                 variant="destructive-secondary"
                 size="small"
@@ -272,6 +510,15 @@ const AllMediaContent = ({
                 Deselect
               </Button>
             </>
+          ) : (
+            <Button
+              variant="neutral-tertiary"
+              size="small"
+              icon={<FeatherCheck />}
+              onClick={() => setSelected(new Set(scopedMedia.map((m) => m.id)))}
+            >
+              Select All
+            </Button>
           )}
           <Button
             variant="neutral-secondary"
@@ -293,7 +540,7 @@ const AllMediaContent = ({
       </div>
 
       {/* Search + scope */}
-      <div className="flex w-full items-center gap-4 px-8 py-3">
+      <div className="flex w-full items-center gap-4 px-8 py-3 flex-wrap">
         <div className="flex items-center gap-2 flex-1 rounded-md border border-solid border-neutral-200 bg-black px-3 py-1.5">
           <FeatherSearch className="text-neutral-500 flex-none" style={{ width: 14, height: 14 }} />
           <input
@@ -320,6 +567,44 @@ const AllMediaContent = ({
               This Niche
             </ToggleGroup.Item>
           </ToggleGroup>
+        )}
+        <Button
+          variant={showDurationBuckets ? 'brand-secondary' : 'neutral-secondary'}
+          size="small"
+          onClick={() => setShowDurationBuckets((prev) => !prev)}
+        >
+          By Duration
+        </Button>
+        <select
+          className="rounded border border-solid border-neutral-200 bg-black px-2 py-1 text-caption font-caption text-white outline-none cursor-pointer"
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+          title="Sort media"
+        >
+          <option value="date">Sort: Newest</option>
+          <option value="name">Sort: Name</option>
+          <option value="duration">Sort: Duration</option>
+          <option value="type">Sort: Type</option>
+        </select>
+        {isSearchAvailable() && (
+          <ToggleGroup value={searchMode} onValueChange={(v) => v && setSearchMode(v)}>
+            <ToggleGroup.Item icon={null} value="name">
+              Name
+            </ToggleGroup.Item>
+            <ToggleGroup.Item icon={null} value="visual">
+              Visual
+            </ToggleGroup.Item>
+          </ToggleGroup>
+        )}
+        {isSearching && (
+          <span className="text-caption font-caption text-indigo-400 animate-pulse">
+            Searching...
+          </span>
+        )}
+        {searchMode === 'visual' && semanticResults && !isSearching && (
+          <Badge variant="brand">
+            {semanticResults.length} visual match{semanticResults.length !== 1 ? 'es' : ''}
+          </Badge>
         )}
       </div>
 
@@ -376,7 +661,7 @@ const AllMediaContent = ({
                     role="checkbox"
                     aria-checked={isSelected}
                     aria-label={item.name || 'Image'}
-                    className={`relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group border-2 transition-colors ${
+                    className={`relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group border-2 ${
                       isSelected ? 'border-indigo-500' : 'border-transparent'
                     }`}
                     onClick={() => toggleItem(item.id)}
@@ -393,6 +678,7 @@ const AllMediaContent = ({
                         <FeatherCheck className="text-white" style={{ width: 16, height: 16 }} />
                       </div>
                     )}
+                    <MediaStatusBadge syncStatus={item.syncStatus} />
                     <button
                       className="absolute top-0.5 right-0.5 z-[4] flex h-6 w-6 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
                       onClick={(e) => {
@@ -418,76 +704,40 @@ const AllMediaContent = ({
               <span className="text-body-bold font-body-bold text-white">Videos</span>
               <Badge variant="neutral">{filteredVideos.length}</Badge>
             </div>
-            <div className="grid w-full grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-1.5">
-              {filteredVideos.map((item) => {
-                const isSelected = selected.has(item.id);
-                return (
-                  <div
-                    key={item.id}
-                    data-media-id={item.id}
-                    role="checkbox"
-                    aria-checked={isSelected}
-                    aria-label={item.name || 'Video'}
-                    className={`relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group border-2 transition-colors ${
-                      isSelected ? 'border-indigo-500' : 'border-transparent'
-                    }`}
-                    onClick={() => {
-                      if (!isDragging) toggleItem(item.id);
-                    }}
-                  >
-                    {item.thumbnailUrl || item.thumbnail ? (
-                      <img
-                        src={item.thumbnailUrl || item.thumbnail}
-                        alt={item.name}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                        draggable={false}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <FeatherFilm
-                          className="text-neutral-600"
-                          style={{ width: 16, height: 16 }}
-                        />
-                      </div>
-                    )}
-                    <div
-                      className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-auto cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setVideoPreviewUrl(item.url);
-                      }}
-                    >
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-black/60 border border-white/20">
-                        <FeatherPlay className="text-white" style={{ width: 8, height: 8 }} />
-                      </div>
+            {showDurationBuckets ? (
+              <>
+                {durationBuckets.buckets.map((bucket) => (
+                  <div key={bucket.key} className="mb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-body-bold font-body-bold text-white">
+                        {bucket.label}
+                      </span>
+                      <Badge variant="neutral">{bucket.items.length} clips</Badge>
                     </div>
-                    {item.duration && (
-                      <div className="absolute top-0.5 left-0.5 bg-black/70 rounded px-1 py-px pointer-events-none">
-                        <span className="text-[8px] text-neutral-300 font-mono">
-                          {formatDuration(item.duration)}
-                        </span>
-                      </div>
-                    )}
-                    {isSelected && (
-                      <div className="absolute inset-0 bg-indigo-500/25 pointer-events-none flex items-center justify-center">
-                        <FeatherCheck className="text-white" style={{ width: 16, height: 16 }} />
-                      </div>
-                    )}
-                    <button
-                      className="absolute top-0.5 right-0.5 z-[4] flex h-6 w-6 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(item);
-                      }}
-                      title="Delete"
-                    >
-                      <FeatherTrash2 className="text-white" style={{ width: 12, height: 12 }} />
-                    </button>
+                    <div className="grid w-full grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-1.5">
+                      {bucket.items.map((item) => renderVideoCard(item))}
+                    </div>
                   </div>
-                );
-              })}
-            </div>
+                ))}
+                {durationBuckets.unknown.length > 0 && (
+                  <div className="mb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-body-bold font-body-bold text-white">
+                        Unknown Duration
+                      </span>
+                      <Badge variant="neutral">{durationBuckets.unknown.length} clips</Badge>
+                    </div>
+                    <div className="grid w-full grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-1.5">
+                      {durationBuckets.unknown.map((item) => renderVideoCard(item))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="grid w-full grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-1.5">
+                {filteredVideos.map((item) => renderVideoCard(item))}
+              </div>
+            )}
           </div>
         )}
 
@@ -506,7 +756,7 @@ const AllMediaContent = ({
                   <div
                     key={audio.id}
                     data-media-id={audio.id}
-                    className={`group flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${
+                    className={`group flex items-center gap-3 px-3 py-2 cursor-pointer ${
                       isSelected ? 'bg-indigo-500/15' : 'hover:bg-neutral-100/30'
                     }`}
                     onClick={() => toggleItem(audio.id)}
@@ -585,9 +835,16 @@ const AllMediaContent = ({
       {selected.size > 0 && (
         <div className="flex w-full items-center justify-between px-8 py-3 border-t border-neutral-200 bg-[#0a0a0f]">
           <span className="text-caption font-caption text-neutral-400">
-            {selected.size} item{selected.size !== 1 ? 's' : ''} selected — drag to select more
+            {selected.size} of {scopedMedia.length} selected
           </span>
           <div className="flex items-center gap-2">
+            <Button
+              variant="neutral-tertiary"
+              size="small"
+              onClick={() => setSelected(new Set(scopedMedia.map((m) => m.id)))}
+            >
+              Select All ({scopedMedia.length})
+            </Button>
             <Button variant="neutral-tertiary" size="small" onClick={() => setSelected(new Set())}>
               Deselect All
             </Button>
@@ -615,28 +872,162 @@ const AllMediaContent = ({
         onCancel={() => setConfirmDialog({ isOpen: false })}
       />
 
-      {/* Video preview lightbox */}
-      {videoPreviewUrl && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
-          onClick={() => setVideoPreviewUrl(null)}
-        >
-          <div className="relative max-w-2xl max-h-[80vh]" onClick={(e) => e.stopPropagation()}>
-            <video
-              src={videoPreviewUrl}
-              controls
-              autoPlay
-              className="max-w-full max-h-[80vh] rounded-lg"
-            />
-            <button
-              className="absolute top-2 right-2 h-8 w-8 rounded-full bg-black/80 flex items-center justify-center hover:bg-black transition-colors border-none cursor-pointer"
-              onClick={() => setVideoPreviewUrl(null)}
+      {/* Quick Trim Popover */}
+      {trimItemId &&
+        (() => {
+          const trimItem = [...(projectMedia || []), ...(library || [])].find(
+            (m) => m.id === trimItemId,
+          );
+          if (!trimItem) return null;
+          return (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+              onClick={() => setTrimItemId(null)}
             >
-              <FeatherX className="text-white" style={{ width: 16, height: 16 }} />
-            </button>
-          </div>
-        </div>
-      )}
+              <QuickTrimPopover
+                item={trimItem}
+                initialTrimStart={0}
+                initialTrimEnd={trimItem.duration}
+                onSave={async (trimStart, trimEnd) => {
+                  // Destructive trim if Electron + local file
+                  const localPath = trimItem.localPath || trimItem.metadata?.localPath;
+                  if (window.electronAPI?.trimVideoDestructive && localPath) {
+                    try {
+                      const mediaFolder = await window.electronAPI.getMediaFolder();
+                      const fullPath = `${mediaFolder}/${localPath}`;
+                      const result = await window.electronAPI.trimVideoDestructive(
+                        fullPath,
+                        trimStart,
+                        trimEnd,
+                      );
+                      if (result.success) {
+                        const { updateLibraryItemAsync } =
+                          await import('../../services/libraryService');
+                        await updateLibraryItemAsync(db, artistId, trimItemId, {
+                          duration: result.newDuration,
+                        });
+                        toastSuccess(`Trimmed to ${result.newDuration.toFixed(1)}s`);
+                      }
+                    } catch (err) {
+                      toastError(`Trim failed: ${err.message}`);
+                    }
+                  } else {
+                    toastSuccess('Trim saved (metadata only)');
+                  }
+                  setTrimItemId(null);
+                }}
+                onClose={() => setTrimItemId(null)}
+              />
+            </div>
+          );
+        })()}
+
+      {/* Move to Bank modal */}
+      {showMoveToBankModal &&
+        (() => {
+          const allCollections = getUserCollections(artistId);
+          const niches = allCollections.filter((c) => c.isPipeline);
+          const handleAssign = async (nicheId, bankId) => {
+            const ids = [...selected];
+            assignToMediaBank(artistId, nicheId, ids, bankId, db);
+            // Also ensure they're in the niche collection
+            for (const mediaId of ids) {
+              await addToCollectionAsync(db, artistId, nicheId, mediaId);
+            }
+            toastSuccess(`Moved ${ids.length} item${ids.length !== 1 ? 's' : ''} to bank`);
+            setShowMoveToBankModal(false);
+            setSelected(new Set());
+          };
+          return (
+            <div
+              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70"
+              onClick={() => setShowMoveToBankModal(false)}
+            >
+              <div
+                className="rounded-lg border border-solid border-neutral-200 bg-[#0f0f17] p-5 max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-heading-3 font-heading-3 text-white">
+                    Move {selected.size} item{selected.size !== 1 ? 's' : ''} to bank
+                  </span>
+                  <button
+                    className="text-neutral-400 hover:text-white bg-transparent border-none cursor-pointer"
+                    onClick={() => setShowMoveToBankModal(false)}
+                  >
+                    <FeatherX style={{ width: 18, height: 18 }} />
+                  </button>
+                </div>
+                {niches.length === 0 ? (
+                  <span className="text-body font-body text-neutral-500">
+                    No niches in this project. Create a niche first.
+                  </span>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    {niches.map((niche) => {
+                      const migrated = migrateToMediaBanks(niche);
+                      const banks = migrated.mediaBanks || [];
+                      return (
+                        <div key={niche.id} className="flex flex-col gap-2">
+                          <span className="text-caption-bold font-caption-bold text-neutral-400">
+                            {niche.name || 'Untitled Niche'}
+                          </span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {banks.length === 0 ? (
+                              <span className="text-caption font-caption text-neutral-600">
+                                No banks
+                              </span>
+                            ) : (
+                              banks.map((bank, idx) => {
+                                const color = getBankColor(idx);
+                                return (
+                                  <button
+                                    key={bank.id}
+                                    className="flex items-center gap-1.5 rounded-full px-3 py-1 text-caption-bold font-caption-bold border border-solid bg-transparent cursor-pointer hover:brightness-125 transition-colors"
+                                    style={{ borderColor: color.primary, color: color.light }}
+                                    onClick={() => handleAssign(niche.id, bank.id)}
+                                  >
+                                    <div
+                                      className="h-2 w-2 rounded-full"
+                                      style={{ backgroundColor: color.primary }}
+                                    />
+                                    {bank.name}
+                                  </button>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+      {/* Video preview lightbox */}
+      <VideoPreviewLightbox
+        item={previewItem}
+        onClose={() => setPreviewItem(null)}
+        onTrim={(item) => {
+          setPreviewItem(null);
+          setTrimItemId(item.id);
+        }}
+        onPrev={(() => {
+          if (!previewItem) return undefined;
+          const all = [...filteredImages, ...filteredVideos];
+          const idx = all.findIndex((m) => m.id === previewItem.id);
+          return idx > 0 ? () => setPreviewItem(all[idx - 1]) : undefined;
+        })()}
+        onNext={(() => {
+          if (!previewItem) return undefined;
+          const all = [...filteredImages, ...filteredVideos];
+          const idx = all.findIndex((m) => m.id === previewItem.id);
+          return idx >= 0 && idx < all.length - 1 ? () => setPreviewItem(all[idx + 1]) : undefined;
+        })()}
+      />
     </div>
   );
 };

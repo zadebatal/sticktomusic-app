@@ -85,7 +85,8 @@ import {
 // Items are auto-cleaned after 5 minutes (Firestore should have caught up by then).
 // ============================================================================
 const PENDING_DELETION_KEY = 'stm_pending_deletions';
-const PENDING_DELETION_TTL = 5 * 60 * 1000; // 5 minutes
+// No TTL — pending deletions persist until Firestore confirms the doc is gone.
+// Cleanup happens in subscribeToCollections when we see the doc is absent from a snapshot.
 
 // Hydrate from localStorage on module load
 const _loadPendingDeletions = () => {
@@ -93,13 +94,7 @@ const _loadPendingDeletions = () => {
     const raw = localStorage.getItem(PENDING_DELETION_KEY);
     if (!raw) return new Map();
     const entries = JSON.parse(raw);
-    const now = Date.now();
-    // Filter out expired entries
-    const valid = entries.filter(([, ts]) => now - ts < PENDING_DELETION_TTL);
-    if (valid.length !== entries.length) {
-      localStorage.setItem(PENDING_DELETION_KEY, JSON.stringify(valid));
-    }
-    return new Map(valid);
+    return new Map(entries);
   } catch {
     return new Map();
   }
@@ -569,22 +564,39 @@ export const removeFromLibrary = (artistId, mediaId, db = null) => {
 
   saveLibrary(artistId, filtered);
 
-  // Also remove from all collections
+  // Remove from ALL collection references: mediaIds, banks, mediaBanks
   const collections = getCollections(artistId);
-  const changedCollections = [];
-  collections.forEach((collection) => {
-    if (collection.mediaIds?.includes(mediaId)) {
-      collection.mediaIds = collection.mediaIds.filter((id) => id !== mediaId);
-      changedCollections.push(collection);
+  const changedCollections = new Set();
+  collections.forEach((col) => {
+    let changed = false;
+    // Remove from mediaIds
+    if (col.mediaIds?.includes(mediaId)) {
+      col.mediaIds = col.mediaIds.filter((id) => id !== mediaId);
+      changed = true;
     }
+    // Remove from slide banks (array of arrays)
+    if (Array.isArray(col.banks)) {
+      col.banks = col.banks.map((bank) => {
+        if (Array.isArray(bank) && bank.includes(mediaId)) {
+          changed = true;
+          return bank.filter((id) => id !== mediaId);
+        }
+        return bank;
+      });
+    }
+    // Remove from named media banks
+    if (Array.isArray(col.mediaBanks)) {
+      col.mediaBanks = col.mediaBanks.map((bank) => {
+        if (bank && Array.isArray(bank.mediaIds) && bank.mediaIds.includes(mediaId)) {
+          changed = true;
+          return { ...bank, mediaIds: bank.mediaIds.filter((id) => id !== mediaId) };
+        }
+        return bank;
+      });
+    }
+    if (changed) changedCollections.add(col);
   });
-  // Also remove from project pools
-  collections
-    .filter((c) => c.isProjectRoot && c.mediaIds?.includes(mediaId))
-    .forEach((project) => {
-      project.mediaIds = project.mediaIds.filter((id) => id !== mediaId);
-      changedCollections.push(project);
-    });
+
   saveCollections(artistId, collections);
   if (db) {
     changedCollections.forEach((col) =>
@@ -1155,18 +1167,20 @@ const syncMediaBankIds = (collection) => {
 export const addMediaBank = (artistId, collectionId, name, db = null) => {
   const collections = getUserCollections(artistId);
   const collection = collections.find((c) => c.id === collectionId);
-  if (!collection) return;
+  if (!collection) return null;
   const migrated = migrateToMediaBanks(collection);
   Object.assign(collection, migrated);
-  if ((collection.mediaBanks || []).length >= MAX_MEDIA_BANKS) return;
-  collection.mediaBanks.push({
+  if ((collection.mediaBanks || []).length >= MAX_MEDIA_BANKS) return null;
+  const newBank = {
     id: Date.now().toString(36),
     name: name || `Bank ${collection.mediaBanks.length + 1}`,
     mediaIds: [],
-  });
+  };
+  collection.mediaBanks.push(newBank);
   collection.updatedAt = new Date().toISOString();
   saveCollections(artistId, collections);
   if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
+  return newBank;
 };
 
 /**
@@ -3098,10 +3112,10 @@ export const updateLibraryItemAsync = async (db, artistId, mediaId, updates) => 
  * @returns {Promise<boolean>} Success
  */
 export const removeFromLibraryAsync = async (db, artistId, mediaId) => {
-  // Remove from localStorage first
-  const localResult = removeFromLibrary(artistId, mediaId);
+  // Remove from localStorage + update collections locally AND in Firestore
+  const localResult = removeFromLibrary(artistId, mediaId, db);
 
-  // Then remove from Firestore
+  // Then remove the media document itself from Firestore
   if (db && artistId) {
     try {
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'mediaItems', mediaId);
@@ -3208,6 +3222,15 @@ export const subscribeToCollections = (db, artistId, callback) => {
         const collections = firestoreCollections
           .filter((c) => !pendingDeletionIds.has(c.id))
           .map((col) => migrateCollectionBanks(col));
+
+        // Cleanup pending deletions: if a pending ID is absent from Firestore,
+        // Firestore has confirmed the delete — safe to clear the flag.
+        const snapshotIds = new Set(firestoreCollections.map((c) => c.id));
+        for (const [pendingId] of pendingDeletionMap) {
+          if (!snapshotIds.has(pendingId)) {
+            clearPendingDeletion(pendingId);
+          }
+        }
 
         // Cleanup: undo bad auto-migration that assigned legacy niches to wrong projects.
         // If a niche's createdAt predates its assigned project by >1 day, clear the projectId.
@@ -3418,16 +3441,19 @@ export const updateCollectionAsync = async (db, artistId, collectionId, updates)
  * @returns {Promise<boolean>} Success
  */
 export const deleteCollectionAsync = async (db, artistId, collectionId) => {
-  // Delete from localStorage
-  const result = deleteCollection(artistId, collectionId);
+  // Delete from localStorage (may be a no-op if collection isn't cached locally —
+  // e.g. when the project was loaded purely via Firestore subscription)
+  const localResult = deleteCollection(artistId, collectionId);
 
-  // Delete from Firestore
+  // ALWAYS delete from Firestore — don't gate on local result, otherwise projects
+  // that only exist in the Firestore subscription cache (never written to
+  // localStorage) cannot be deleted at all.
   let syncedToCloud = false;
-  if (db && artistId && result) {
+  if (db && artistId) {
     syncedToCloud = await deleteCollectionFromFirestore(db, artistId, collectionId);
   }
 
-  return { success: !!result, syncedToCloud };
+  return { success: localResult || syncedToCloud, syncedToCloud };
 };
 
 /**
