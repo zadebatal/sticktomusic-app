@@ -3203,6 +3203,106 @@ export const updateLibraryItemAsync = async (db, artistId, mediaId, updates) => 
 };
 
 /**
+ * Scan an artist's library for orphan local items and mark them as offline.
+ *
+ * The local-first architecture stores file references in Firestore that point
+ * at localhost:4321/local-media/... URLs. Those URLs only resolve on the
+ * device that originally generated the file. When that device is removed
+ * (e.g. Mac Mini returned to Apple), the Firestore metadata becomes orphan
+ * broken-link state on every other device. This sweep:
+ *
+ *   1. Iterates the artist's library
+ *   2. For each item with `syncStatus === 'local'` AND a `localUrl` pointing at
+ *      `localhost:4321/local-media/`, fires a HEAD request
+ *   3. On 404 (or any non-2xx), flips the item to `syncStatus: 'offline'` in
+ *      Firestore so the existing `MediaStatusBadge` shows the amber warning,
+ *      and so the item no longer counts as "available" anywhere
+ *   4. Returns a summary `{ scanned, offline, alreadyMarked, errors }`
+ *
+ * Designed to be invoked manually from DevTools console:
+ *   const { sweepOrphanLocalItems } = await import('./services/libraryService');
+ *   await sweepOrphanLocalItems(db, 'artist_id_here');
+ *
+ * Safe to re-run — already-offline items are skipped. Reversible — items are
+ * NOT deleted, just relabeled. User can later bulk-delete via the existing
+ * trash UI if they accept the files are gone.
+ *
+ * @param {Object} db - Firestore instance
+ * @param {string} artistId
+ * @param {Object} [options]
+ * @param {Function} [options.onProgress] - Called with `{ scanned, total, name }` per item
+ * @returns {Promise<{ scanned: number, offline: number, alreadyMarked: number, errors: number }>}
+ */
+export const sweepOrphanLocalItems = async (db, artistId, options = {}) => {
+  if (!db || !artistId) {
+    log.error('[Sweep] Missing db or artistId');
+    return { scanned: 0, offline: 0, alreadyMarked: 0, errors: 0 };
+  }
+  const { onProgress } = options;
+  const items = getLibrary(artistId);
+  const stats = { scanned: 0, offline: 0, alreadyMarked: 0, errors: 0 };
+
+  log(`[Sweep] Starting orphan scan for ${artistId} — ${items.length} items in library`);
+
+  for (const item of items) {
+    stats.scanned += 1;
+    if (onProgress) {
+      try {
+        onProgress({ scanned: stats.scanned, total: items.length, name: item.name });
+      } catch (_) {}
+    }
+
+    // Already marked offline — skip
+    if (item.syncStatus === 'offline') {
+      stats.alreadyMarked += 1;
+      continue;
+    }
+
+    // Only check items that claim to be local-first AND have a localhost URL
+    const candidateUrl = item.localUrl || item.thumbnailUrl;
+    const isLocalhost =
+      typeof candidateUrl === 'string' &&
+      (candidateUrl.startsWith('http://localhost') || candidateUrl.startsWith('https://localhost'));
+    if (!isLocalhost) continue;
+
+    // HEAD request — fast, no body transfer. The local Express server returns
+    // 404 if the file doesn't exist on disk.
+    let isOrphan = false;
+    try {
+      const resp = await fetch(candidateUrl, { method: 'HEAD' });
+      if (!resp.ok) isOrphan = true;
+    } catch (err) {
+      // Network error, server down, etc. — treat as orphan to be safe.
+      isOrphan = true;
+    }
+
+    if (!isOrphan) continue;
+
+    // Flip to offline. Use the existing updateLibraryItemAsync helper which
+    // already handles setDoc({merge:true}) for items that may not have a
+    // Firestore doc yet (which is exactly the local-first orphan case).
+    try {
+      await updateLibraryItemAsync(db, artistId, item.id, {
+        syncStatus: 'offline',
+        offlineMarkedAt: new Date().toISOString(),
+      });
+      stats.offline += 1;
+      if (stats.offline % 25 === 0) {
+        log(`[Sweep] Progress: ${stats.offline} marked offline of ${stats.scanned} scanned`);
+      }
+    } catch (err) {
+      log.error(`[Sweep] Failed to mark ${item.id} offline:`, err.message);
+      stats.errors += 1;
+    }
+  }
+
+  log(
+    `[Sweep] Done — scanned ${stats.scanned}, marked ${stats.offline} offline, ${stats.alreadyMarked} already-offline, ${stats.errors} errors`,
+  );
+  return stats;
+};
+
+/**
  * Remove item from library (Firestore + localStorage)
  * @param {Object} db - Firestore instance
  * @param {string} artistId
@@ -3811,6 +3911,7 @@ export default {
   addManyToLibraryAsync,
   updateLibraryItemAsync,
   removeFromLibraryAsync,
+  sweepOrphanLocalItems,
 
   // Collections (localStorage)
   getCollections,
