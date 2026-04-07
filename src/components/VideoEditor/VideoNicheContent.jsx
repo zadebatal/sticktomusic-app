@@ -127,6 +127,21 @@ const VideoNicheContent = ({
   const bankDragPriorRef = useRef(new Set());
   const bankGridRefs = useRef({});
 
+  // Broken thumbnails: tracks items whose thumbnailUrl 404s. Same mitigation as
+  // AllMediaContent — when an <img> errors out we add the ID here so the next
+  // render falls through to the Film/Image icon placeholder. The underlying
+  // problem is local-first orphan items (Firestore metadata referencing files
+  // that only existed on a since-deleted device) — see 94n session notes.
+  const [brokenThumbs, setBrokenThumbs] = useState(() => new Set());
+  const markThumbBroken = useCallback((id) => {
+    setBrokenThumbs((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }, []);
+
   // Audio preview playback
   const [playingAudioId, setPlayingAudioId] = useState(null);
   const audioPreviewRef = useRef(null);
@@ -1144,13 +1159,14 @@ const VideoNicheContent = ({
       >
         {item.type === 'video' ? (
           <>
-            {item.thumbnailUrl ? (
+            {item.thumbnailUrl && !brokenThumbs.has(item.id) ? (
               <img
                 src={item.thumbnailUrl}
                 alt={item.name}
                 className="w-full h-full object-cover"
                 loading="lazy"
                 draggable={false}
+                onError={() => markThumbBroken(item.id)}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
@@ -1179,14 +1195,19 @@ const VideoNicheContent = ({
             )}
             <MediaStatusBadge syncStatus={item.syncStatus} />
           </>
-        ) : (
+        ) : !brokenThumbs.has(item.id) ? (
           <img
             src={item.thumbnailUrl || item.url}
             alt={item.name}
             className="w-full h-full object-cover"
             loading="lazy"
             draggable={false}
+            onError={() => markThumbBroken(item.id)}
           />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <FeatherImage className="text-neutral-600" style={{ width: 16, height: 16 }} />
+          </div>
         )}
         <div className="absolute top-0.5 left-0.5 z-[3] rounded bg-black/60 px-1 py-px">
           <span className="text-[9px] font-mono text-white/70">{idx + 1}</span>

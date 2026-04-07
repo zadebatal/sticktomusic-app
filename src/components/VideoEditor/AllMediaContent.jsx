@@ -77,6 +77,25 @@ const AllMediaContent = ({
   const [isDragging, setIsDragging] = useState(false);
   const [rubberBand, setRubberBand] = useState(null);
 
+  // ── Broken thumbnails ──
+  // Tracks media items whose thumbnailUrl points to a file that doesn't exist
+  // (404 from the local Express server, broken Firebase Storage URL, etc.).
+  // When the <img> errors out we add the item ID here so the next render falls
+  // through to the Film icon placeholder instead of showing a transparent
+  // broken-image box. This is a renderer-only mitigation for the broader
+  // local-first orphan problem — see 94n session notes for the underlying issue
+  // (Firestore items reference local files that only exist on a since-deleted
+  // device's disk).
+  const [brokenThumbs, setBrokenThumbs] = useState(() => new Set());
+  const markThumbBroken = useCallback((id) => {
+    setBrokenThumbs((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }, []);
+
   // Clear selection when scope/search changes
   useEffect(() => {
     setSelected(new Set());
@@ -441,13 +460,14 @@ const AllMediaContent = ({
           setPreviewItem(item);
         }}
       >
-        {item.thumbnailUrl || item.thumbnail ? (
+        {(item.thumbnailUrl || item.thumbnail) && !brokenThumbs.has(item.id) ? (
           <img
             src={item.thumbnailUrl || item.thumbnail}
             alt={item.name}
             className="w-full h-full object-cover"
             loading="lazy"
             draggable={false}
+            onError={() => markThumbBroken(item.id)}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
@@ -716,13 +736,23 @@ const AllMediaContent = ({
                     }`}
                     onClick={() => toggleItem(item.id)}
                   >
-                    <img
-                      src={item.thumbnailUrl || item.url}
-                      alt={item.name}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                      draggable={false}
-                    />
+                    {!brokenThumbs.has(item.id) ? (
+                      <img
+                        src={item.thumbnailUrl || item.url}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        draggable={false}
+                        onError={() => markThumbBroken(item.id)}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <FeatherImage
+                          className="text-neutral-600"
+                          style={{ width: 16, height: 16 }}
+                        />
+                      </div>
+                    )}
                     {isSelected && (
                       <div className="absolute inset-0 bg-indigo-500/25 pointer-events-none flex items-center justify-center">
                         <FeatherCheck className="text-white" style={{ width: 16, height: 16 }} />
