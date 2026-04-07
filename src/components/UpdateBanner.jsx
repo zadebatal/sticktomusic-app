@@ -6,13 +6,17 @@
  * - available: "Version X.Y.Z available" with Update/Dismiss buttons
  * - downloading: progress bar
  * - ready: "Restart to apply" button
+ * - installing: spinner + "swap in progress" message (covers the ~30s dead
+ *   air between clicking Restart and the app actually relaunching). Without
+ *   this, ShipIt does its thing in a background process while the user
+ *   stares at an unchanged UI and assumes the click did nothing.
  *
  * Only renders when running in Electron (window.electronAPI?.isElectron).
  */
 import React, { useState, useEffect, useCallback } from 'react';
 
 const UpdateBanner = () => {
-  const [state, setState] = useState('hidden'); // hidden | available | downloading | ready
+  const [state, setState] = useState('hidden'); // hidden | available | downloading | ready | installing
   const [version, setVersion] = useState('');
   const [progress, setProgress] = useState(0);
 
@@ -40,6 +44,13 @@ const UpdateBanner = () => {
   }, []);
 
   const handleInstall = useCallback(() => {
+    // Flip into 'installing' state IMMEDIATELY so the user gets visible
+    // feedback. ShipIt then does the bundle swap in a background process
+    // (~20-40 sec depending on bundle size) and relaunches the app, which
+    // unmounts this whole React tree — so we don't need a timeout to clear
+    // the state. If quitAndInstall errors out, the main process falls back
+    // to app.relaunch() which also unmounts us.
+    setState('installing');
     window.electronAPI?.installUpdate();
   }, []);
 
@@ -161,6 +172,37 @@ const UpdateBanner = () => {
           >
             Later
           </button>
+        </>
+      )}
+
+      {state === 'installing' && (
+        <>
+          <div
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: '50%',
+              border: '2px solid #2d2d44',
+              borderTopColor: '#22c55e',
+              animation: 'stm-update-spin 0.9s linear infinite',
+              flex: 'none',
+            }}
+          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+            <span style={{ fontSize: 13, color: '#22c55e', fontWeight: 600 }}>
+              Installing update…
+            </span>
+            <span style={{ fontSize: 11, color: '#888' }}>
+              This takes 20–40 seconds. The app will restart automatically — please don&apos;t quit
+              it.
+            </span>
+          </div>
+          <style>{`
+            @keyframes stm-update-spin {
+              from { transform: rotate(0deg); }
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
         </>
       )}
     </div>
