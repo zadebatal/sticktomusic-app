@@ -821,18 +821,34 @@ ipcMain.handle('ytdlp-download', async (_event, url, outputDir, options = {}) =>
 
   return new Promise((resolve, reject) => {
     const { spawn } = require('child_process');
-    const proc = spawn(ytdlp, args, { cwd: targetDir });
+    // --newline forces yt-dlp to emit one progress line at a time (no \r
+    // overwrites) so the parser can pick up every update.
+    const proc = spawn(ytdlp, ['--newline', ...args], { cwd: targetDir });
     let stderr = '';
 
-    proc.stderr.on('data', (data) => { stderr += data.toString(); });
-    proc.stdout.on('data', (data) => {
-      // Parse progress from yt-dlp output
-      const line = data.toString();
-      const match = line.match(/(\d+\.?\d*)%/);
-      if (match && mainWindow) {
-        mainWindow.webContents.send('ytdlp-progress', { percent: parseFloat(match[1]), line: line.trim() });
+    // yt-dlp writes [download] progress to stdout AND some informational
+    // messages to stderr. Parse both for percent so the renderer's progress
+    // bar always updates regardless of which stream the line landed on.
+    // (Without parsing both, the modal would stay on "Downloading to your
+    // drive..." for the entire 5-8 minute HLS fragment download.)
+    const parseProgress = (chunk) => {
+      const lines = chunk.toString().split(/\r?\n/);
+      for (const line of lines) {
+        const match = line.match(/(\d+\.?\d*)%/);
+        if (match && mainWindow) {
+          mainWindow.webContents.send('ytdlp-progress', {
+            percent: parseFloat(match[1]),
+            line: line.trim(),
+          });
+        }
       }
+    };
+
+    proc.stderr.on('data', (data) => {
+      stderr += data.toString();
+      parseProgress(data);
     });
+    proc.stdout.on('data', parseProgress);
 
     proc.on('close', (code) => {
       if (code !== 0) {
