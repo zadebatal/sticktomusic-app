@@ -1492,6 +1492,90 @@ const StickToMusicInner = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Command Palette items — defined ONCE here so the same list is used by every
+  // page render branch that includes <CommandPalette>. Without this extraction,
+  // duplicating the items inline in each branch would drift over time. Note: the
+  // arrow functions reference current closure of setCurrentPage/setOperatorTab/etc
+  // so they always do the right thing even though the array itself isn't memoized.
+  const paletteItems = [
+    { label: 'Home', action: () => setCurrentPage('home'), icon: '🏠', category: 'Pages' },
+    { label: 'Pricing', action: () => setCurrentPage('pricing'), icon: '💰', category: 'Pages' },
+    {
+      label: 'How It Works',
+      action: () => setCurrentPage('how-it-works'),
+      icon: '📖',
+      category: 'Pages',
+    },
+    {
+      label: 'Apply / Intake Form',
+      action: () => setCurrentPage('intake'),
+      icon: '📝',
+      category: 'Pages',
+    },
+    {
+      label: isConductor(user) ? 'Conductor Dashboard' : 'Operator Dashboard',
+      action: () => setCurrentPage('operator'),
+      icon: '⚙️',
+      category: 'Dashboards',
+    },
+    {
+      label: 'Artist Portal',
+      action: () => setCurrentPage('artist-portal'),
+      icon: '🎵',
+      category: 'Dashboards',
+    },
+    {
+      label: 'Artists Tab',
+      action: () => {
+        setOperatorTab('artists');
+        setCurrentPage('operator');
+      },
+      icon: '👥',
+      category: 'Operator',
+      shortcut: '⌘1',
+    },
+    {
+      label: 'Pages Tab',
+      action: () => {
+        setOperatorTab('pages');
+        setCurrentPage('operator');
+      },
+      icon: '📱',
+      category: 'Operator',
+      shortcut: '⌘2',
+    },
+    {
+      label: 'Content / Schedule',
+      action: () => {
+        setOperatorTab('content');
+        setCurrentPage('operator');
+      },
+      icon: '📅',
+      category: 'Operator',
+      shortcut: '⌘3',
+    },
+    {
+      label: 'Applications',
+      action: () => {
+        setOperatorTab('applications');
+        setCurrentPage('operator');
+      },
+      icon: '📋',
+      category: 'Operator',
+    },
+    {
+      label: 'New Schedule',
+      action: () => {
+        setShowScheduleModal(true);
+        setCurrentPage('operator');
+        setOperatorTab('content');
+      },
+      icon: '➕',
+      category: 'Actions',
+    },
+    { label: 'Login', action: () => setShowLoginModal(true), icon: '🔑', category: 'Actions' },
+  ];
+
   // NOTE: Auth state listener has been consolidated into the master auth listener above (around line 193)
   // The user state is now set by the useEffect at line 238 which handles auth + Firestore data together
 
@@ -2594,6 +2678,15 @@ const StickToMusicInner = () => {
             onComplete={completeOnboarding}
             onSetTab={setOperatorTab}
           />
+          {/* Cmd+K Command Palette — was previously only rendered on the home page,
+              which meant it was unreachable for operators/conductors who never
+              touch the home route. Adding it here makes Cmd+K work in the operator
+              flow (the main daily-use surface). */}
+          <CommandPalette
+            isOpen={showQuickSearch}
+            onClose={() => setShowQuickSearch(false)}
+            items={paletteItems}
+          />
         </ToastProvider>
       </ThemeProvider>
     );
@@ -2940,98 +3033,15 @@ const StickToMusicInner = () => {
         )}
       </AnimatePresence>
 
-      {/* Command Palette (Cmd+K) */}
+      {/* Command Palette (Cmd+K) — only renders on the home/landing page since
+          this code is past all the early-return branches. The operator/artist/intake
+          pages each render their own <CommandPalette items={paletteItems} ...> in
+          their own return blocks. Items are extracted to the paletteItems const
+          above so all render sites stay in sync. */}
       <CommandPalette
         isOpen={showQuickSearch}
         onClose={() => setShowQuickSearch(false)}
-        items={[
-          { label: 'Home', action: () => setCurrentPage('home'), icon: '🏠', category: 'Pages' },
-          {
-            label: 'Pricing',
-            action: () => setCurrentPage('pricing'),
-            icon: '💰',
-            category: 'Pages',
-          },
-          {
-            label: 'How It Works',
-            action: () => setCurrentPage('how-it-works'),
-            icon: '📖',
-            category: 'Pages',
-          },
-          {
-            label: 'Apply / Intake Form',
-            action: () => setCurrentPage('intake'),
-            icon: '📝',
-            category: 'Pages',
-          },
-          {
-            label: isConductor(user) ? 'Conductor Dashboard' : 'Operator Dashboard',
-            action: () => setCurrentPage('operator'),
-            icon: '⚙️',
-            category: 'Dashboards',
-          },
-          {
-            label: 'Artist Portal',
-            action: () => setCurrentPage('artist-portal'),
-            icon: '🎵',
-            category: 'Dashboards',
-          },
-          {
-            label: 'Artists Tab',
-            action: () => {
-              setOperatorTab('artists');
-              setCurrentPage('operator');
-            },
-            icon: '👥',
-            category: 'Operator',
-            shortcut: '⌘1',
-          },
-          {
-            label: 'Pages Tab',
-            action: () => {
-              setOperatorTab('pages');
-              setCurrentPage('operator');
-            },
-            icon: '📱',
-            category: 'Operator',
-            shortcut: '⌘2',
-          },
-          {
-            label: 'Content / Schedule',
-            action: () => {
-              setOperatorTab('content');
-              setCurrentPage('operator');
-            },
-            icon: '📅',
-            category: 'Operator',
-            shortcut: '⌘3',
-          },
-          {
-            label: 'Applications',
-            action: () => {
-              setOperatorTab('applications');
-              setCurrentPage('operator');
-            },
-            icon: '📋',
-            category: 'Operator',
-          },
-          {
-            label: 'New Schedule',
-            action: () => {
-              setShowScheduleModal(true);
-              setCurrentPage('operator');
-              setOperatorTab('content');
-            },
-            icon: '➕',
-            category: 'Actions',
-          },
-          {
-            label: 'Login',
-            action: () => setShowLoginModal(true),
-            icon: '🔑',
-            category: 'Actions',
-          },
-        ]}
+        items={paletteItems}
       />
 
       {/* Generic Confirm Dialog - for other destructive actions */}
