@@ -35,6 +35,7 @@ import {
   migrateToMediaBanks,
   getBankColor,
 } from '../../services/libraryService';
+import { uploadLocalItemToCloud } from '../../services/localMediaService';
 import { useToast, ConfirmDialog } from '../ui';
 import { bucketByDuration } from './shared/editorConstants';
 import { isSearchAvailable, searchMedia } from '../../services/mediaSearchService';
@@ -42,13 +43,16 @@ import log from '../../utils/logger';
 
 const AllMediaContent = ({
   db,
+  user = null,
   artistId,
+  artistName = '',
   projectMedia,
   library,
   activeNicheId,
   activeNiche,
   onUpload,
   onImport,
+  onRefreshLibrary,
   isUploading,
   uploadProgress,
 }) => {
@@ -191,6 +195,31 @@ const AllMediaContent = ({
       });
     },
     [isDragging],
+  );
+
+  // ── Upload-to-Cloud (per-item) ──
+  const handleUploadToCloud = useCallback(
+    async (item) => {
+      if (!item || !item.id) return;
+      if (item.url && item.syncStatus !== 'local') {
+        toastSuccess('Already in the cloud');
+        return;
+      }
+      try {
+        const quotaCtx = { userData: user, userEmail: user?.email };
+        const result = await uploadLocalItemToCloud(db, artistId, artistName, item, quotaCtx);
+        if (result) {
+          toastSuccess(`Uploaded "${item.name}" to cloud`);
+          onRefreshLibrary?.();
+        } else {
+          toastError(`Could not upload "${item.name}"`);
+        }
+      } catch (err) {
+        log.error('[AllMedia] Upload to cloud failed:', err);
+        toastError(err?.message || 'Upload failed');
+      }
+    },
+    [db, user, artistId, artistName, toastSuccess, toastError, onRefreshLibrary],
   );
 
   // ── Delete handlers ──
@@ -376,6 +405,13 @@ const AllMediaContent = ({
     return sortItems(items);
   }, [scopedAudio, mediaSearch, sortItems]);
 
+  // Union of everything currently visible in the grid (after scope + search + sort).
+  // Counts/Select-All read from this so they always reflect what the user can actually see.
+  const visibleMedia = useMemo(
+    () => [...filteredImages, ...filteredVideos, ...filteredAudio],
+    [filteredImages, filteredVideos, filteredAudio],
+  );
+
   const durationBuckets = useMemo(() => bucketByDuration(filteredVideos), [filteredVideos]);
 
   const formatDuration = (seconds) => {
@@ -437,6 +473,20 @@ const AllMediaContent = ({
           </div>
         )}
         <MediaStatusBadge syncStatus={item.syncStatus} />
+        {/* Upload to Cloud — only for local-only items */}
+        {(!item.url || item.syncStatus === 'local') && (
+          <button
+            className="absolute top-0.5 left-0.5 z-[4] flex h-6 w-6 items-center justify-center rounded-full bg-blue-600/80 border-none cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:bg-blue-500"
+            style={{ marginLeft: 18 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleUploadToCloud(item);
+            }}
+            title="Upload to cloud"
+          >
+            <FeatherUpload className="text-white" style={{ width: 12, height: 12 }} />
+          </button>
+        )}
         <button
           className="absolute top-0.5 right-0.5 z-[4] flex h-6 w-6 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
           onClick={(e) => {
@@ -457,20 +507,20 @@ const AllMediaContent = ({
       <div className="flex w-full items-center justify-between px-4 sm:px-8 py-4 border-b border-solid border-neutral-200">
         <div className="flex items-center gap-3">
           <span className="text-heading-2 font-heading-2 text-white">All Media</span>
-          <Badge variant="neutral">{scopedImages.length} images</Badge>
-          <Badge variant="neutral">{scopedVideos.length} videos</Badge>
-          <Badge variant="neutral">{scopedAudio.length} audio</Badge>
+          <Badge variant="neutral">{filteredImages.length} images</Badge>
+          <Badge variant="neutral">{filteredVideos.length} videos</Badge>
+          <Badge variant="neutral">{filteredAudio.length} audio</Badge>
         </div>
         <div className="flex items-center gap-2">
           {selected.size > 0 ? (
             <>
               <span className="text-caption font-caption text-indigo-400">
-                {selected.size} of {scopedMedia.length} selected
+                {selected.size} of {visibleMedia.length} selected
               </span>
               <Button
                 variant="neutral-tertiary"
                 size="small"
-                onClick={() => setSelected(new Set(scopedMedia.map((m) => m.id)))}
+                onClick={() => setSelected(new Set(visibleMedia.map((m) => m.id)))}
               >
                 Select All
               </Button>
@@ -515,7 +565,7 @@ const AllMediaContent = ({
               variant="neutral-tertiary"
               size="small"
               icon={<FeatherCheck />}
-              onClick={() => setSelected(new Set(scopedMedia.map((m) => m.id)))}
+              onClick={() => setSelected(new Set(visibleMedia.map((m) => m.id)))}
             >
               Select All
             </Button>
@@ -835,15 +885,15 @@ const AllMediaContent = ({
       {selected.size > 0 && (
         <div className="flex w-full items-center justify-between px-8 py-3 border-t border-neutral-200 bg-[#0a0a0f]">
           <span className="text-caption font-caption text-neutral-400">
-            {selected.size} of {scopedMedia.length} selected
+            {selected.size} of {visibleMedia.length} selected
           </span>
           <div className="flex items-center gap-2">
             <Button
               variant="neutral-tertiary"
               size="small"
-              onClick={() => setSelected(new Set(scopedMedia.map((m) => m.id)))}
+              onClick={() => setSelected(new Set(visibleMedia.map((m) => m.id)))}
             >
-              Select All ({scopedMedia.length})
+              Select All ({visibleMedia.length})
             </Button>
             <Button variant="neutral-tertiary" size="small" onClick={() => setSelected(new Set())}>
               Deselect All

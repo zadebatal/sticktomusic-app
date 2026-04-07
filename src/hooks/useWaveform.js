@@ -104,12 +104,13 @@ export default function useWaveform({ selectedAudio, clips = [], getClipUrl }) {
           const key = clip.id || clip.sourceId || (typeof source === 'string' ? source : 'blob');
           const clipDur = clip.duration || 0;
           let data;
+          const offset = clip.sourceOffset || 0;
           if (source instanceof Blob) {
             data = await generateWaveformData(source, 400);
           } else {
             data =
               clipDur > 0
-                ? await generateWaveformForClip(source, clipDur, 400)
+                ? await generateWaveformForClip(source, clipDur, 400, offset)
                 : await generateWaveformData(source, 400);
           }
           if (data.length > 0) {

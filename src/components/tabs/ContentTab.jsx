@@ -10,6 +10,7 @@ import { EmptyState as SharedEmptyState } from '../ui';
 import log from '../../utils/logger';
 
 export default function ContentTab({
+  user = null,
   contentQueue,
   visibleArtists,
   artistLateConnected,
@@ -266,6 +267,7 @@ export default function ContentTab({
           videoUrl: post.videoUrl,
           scheduledFor,
           artistId: schedulingArtistId,
+          user,
         });
 
         if (result.success) {
@@ -312,6 +314,7 @@ export default function ContentTab({
         videoUrl: post.videoUrl,
         scheduledFor,
         artistId: schedulingArtistId,
+        user,
       });
 
       if (result.success) {

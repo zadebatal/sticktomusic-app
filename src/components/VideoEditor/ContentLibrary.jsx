@@ -58,6 +58,8 @@ import {
   FeatherX,
   FeatherSend,
   FeatherUploadCloud,
+  FeatherCheck,
+  FeatherRotateCcw,
   FeatherFilm,
 } from '@subframe/core';
 import ApprovalQueue from './ApprovalQueue';
@@ -366,6 +368,58 @@ const ContentLibrary = ({
       .catch(() => {});
   }, [isDraftsView, db, artistId]);
 
+  // ── Mark as Ready / Back to Draft status handlers ──
+  const handleMarkReady = useCallback(
+    async (itemId) => {
+      if (!db || !artistId) return;
+      try {
+        const content = getCreatedContent(artistId);
+        const isSlide = contentType === 'slideshows';
+        const list = isSlide ? content.slideshows : content.videos;
+        const item = list?.find((v) => v.id === itemId);
+        if (item) {
+          item.status = 'ready';
+          item.updatedAt = new Date().toISOString();
+          await saveCreatedContentAsync(
+            db,
+            artistId,
+            isSlide ? { slideshows: list } : { videos: list },
+          );
+          // Force re-render by updating parent
+          if (onUpdateVideo) onUpdateVideo(itemId, { status: 'ready' });
+        }
+      } catch (err) {
+        log.error('[ContentLibrary] Failed to mark ready:', err);
+      }
+    },
+    [db, artistId, contentType, onUpdateVideo],
+  );
+
+  const handleBackToDraft = useCallback(
+    async (itemId) => {
+      if (!db || !artistId) return;
+      try {
+        const content = getCreatedContent(artistId);
+        const isSlide = contentType === 'slideshows';
+        const list = isSlide ? content.slideshows : content.videos;
+        const item = list?.find((v) => v.id === itemId);
+        if (item) {
+          item.status = 'draft';
+          item.updatedAt = new Date().toISOString();
+          await saveCreatedContentAsync(
+            db,
+            artistId,
+            isSlide ? { slideshows: list } : { videos: list },
+          );
+          if (onUpdateVideo) onUpdateVideo(itemId, { status: 'draft' });
+        }
+      } catch (err) {
+        log.error('[ContentLibrary] Failed to revert to draft:', err);
+      }
+    },
+    [db, artistId, contentType, onUpdateVideo],
+  );
+
   // Handle rendering a video recipe into a real video
   // Returns the cloudUrl when called from PostingModule
   const handleRenderVideo = useCallback(
@@ -563,7 +617,7 @@ const ContentLibrary = ({
   }, [scheduledPosts]);
 
   // Split items into posted, scheduled, and unposted
-  const [draftTab, setDraftTab] = useState('drafts'); // 'drafts' | 'scheduled' | 'posted' | 'review'
+  const [draftTab, setDraftTab] = useState('drafts'); // 'drafts' | 'ready' | 'scheduled' | 'posted'
 
   const { unpostedItems, scheduledItems, postedItems } = useMemo(() => {
     const posted = [];
@@ -603,6 +657,8 @@ const ContentLibrary = ({
   );
 
   const filteredItems = unpostedItems.filter((item) => {
+    // Exclude 'ready' items from Drafts tab — they appear in the Ready tab
+    if (item.status === 'ready') return false;
     if (filter !== 'all' && item.status !== filter) return false;
     if (dateRange !== 'all') {
       const created = new Date(item.createdAt);
@@ -624,8 +680,8 @@ const ContentLibrary = ({
     [postedItems, applyProjectNicheFilter],
   );
 
-  const reviewItems = useMemo(
-    () => items.filter((item) => item.status === 'pending_review').filter(applyProjectNicheFilter),
+  const readyItems = useMemo(
+    () => items.filter((item) => item.status === 'ready').filter(applyProjectNicheFilter),
     [items, applyProjectNicheFilter],
   );
 
@@ -731,7 +787,7 @@ const ContentLibrary = ({
         <div className="flex items-center border-b border-neutral-200">
           {[
             { key: 'drafts', label: 'Drafts', count: filteredItems.length },
-            { key: 'review', label: 'Review', count: reviewItems.length },
+            { key: 'ready', label: 'Ready', count: readyItems.length },
             { key: 'scheduled', label: 'Scheduled', count: filteredScheduledItems.length },
             { key: 'posted', label: 'Posted', count: filteredPostedItems.length },
           ].map((tab) => (
@@ -1000,6 +1056,7 @@ const ContentLibrary = ({
                         onPreview={() => setPreviewingSlideshow(item)}
                         onEdit={() => onEditSlideshow?.(item)}
                         onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
+                        onMarkReady={db && artistId ? () => handleMarkReady(item.id) : undefined}
                         onExportToDrive={driveConfigured ? () => handleExportToDrive(item) : null}
                         isDriveExporting={driveExporting === item.id}
                         onExportToDropbox={
@@ -1076,6 +1133,7 @@ const ContentLibrary = ({
                         onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
                         isMobile={isMobile}
                         onApprove={() => onApproveVideo(item.id)}
+                        onMarkReady={db && artistId ? () => handleMarkReady(item.id) : undefined}
                         onExportToDrive={driveConfigured ? () => handleExportToDrive(item) : null}
                         isDriveExporting={driveExporting === item.id}
                         onExportToDropbox={
@@ -1235,28 +1293,85 @@ const ContentLibrary = ({
         </div>
       )}
 
-      {/* ═══ Review Queue Tab ═══ */}
-      {draftTab === 'review' && (
-        <ApprovalQueue
-          drafts={items}
-          onApprove={(draftId) => {
-            onApproveVideo?.(draftId);
-          }}
-          onReject={(draftId, reason) => {
-            // Update draft status to rejected with reason
-            const content = getCreatedContent(artistId);
-            const video = content.videos?.find((v) => v.id === draftId);
-            if (video) {
-              video.status = 'rejected';
-              video.rejectionReason = reason;
-              video.updatedAt = new Date().toISOString();
-              saveCreatedContentAsync(db, artistId, content);
-            }
-          }}
-          onBack={() => setDraftTab('drafts')}
-          onEdit={(draft) => onEditVideo?.(draft)}
-          artistId={artistId}
-        />
+      {/* ═══ Ready Tab Content ═══ */}
+      {draftTab === 'ready' && (
+        <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? '12px' : '16px 24px' }}>
+          {readyItems.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-neutral-500">
+              <svg
+                width="48"
+                height="48"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#4b5563"
+                strokeWidth="1.5"
+              >
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+              <p className="mt-3 text-body font-body">No content marked as ready</p>
+              <p className="text-xs text-neutral-600 mt-1">
+                Mark drafts as "Ready" to move them here for scheduling
+              </p>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: isMobile
+                  ? 'repeat(2, 1fr)'
+                  : 'repeat(auto-fill, minmax(200px, 1fr))',
+                gap: isMobile ? '10px' : '16px',
+              }}
+            >
+              {readyItems.map((item) =>
+                isSlideshow ? (
+                  <div key={item.id} style={{ position: 'relative' }}>
+                    <SlideshowCard
+                      slideshow={item}
+                      isSelected={false}
+                      onToggleSelect={() => {}}
+                      onPreview={() => setPreviewingSlideshow(item)}
+                      onEdit={() => onEditSlideshow?.(item)}
+                      isMobile={isMobile}
+                      thumbMap={thumbMap}
+                    />
+                    <Button
+                      variant="neutral-secondary"
+                      size="small"
+                      className="w-full mt-1"
+                      icon={<FeatherRotateCcw />}
+                      onClick={() => handleBackToDraft(item.id)}
+                    >
+                      Back to Draft
+                    </Button>
+                  </div>
+                ) : (
+                  <div key={item.id} style={{ position: 'relative' }}>
+                    <VideoCard
+                      video={item}
+                      isSelected={false}
+                      onToggleSelect={() => {}}
+                      onEdit={() => onEditVideo?.(item)}
+                      onPreview={() => setPreviewingVideo(item)}
+                      isMobile={isMobile}
+                      thumbMap={thumbMap}
+                    />
+                    <Button
+                      variant="neutral-secondary"
+                      size="small"
+                      className="w-full mt-1"
+                      icon={<FeatherRotateCcw />}
+                      onClick={() => handleBackToDraft(item.id)}
+                    >
+                      Back to Draft
+                    </Button>
+                  </div>
+                ),
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ═══ Posted Tab Content ═══ */}
@@ -2096,6 +2211,7 @@ const VideoCard = ({
   onEdit,
   onDelete,
   onApprove,
+  onMarkReady,
   onPost,
   onRender,
   isRendering,
@@ -2298,6 +2414,21 @@ const VideoCard = ({
       {/* UI-31: Use StatusPill instead of custom badge */}
       <div className="px-3 py-2.5 bg-[#171717] flex items-center justify-between gap-2">
         <StatusPill status={video.status || VIDEO_STATUS.DRAFT} />
+        <div className="flex items-center gap-1.5">
+          {onMarkReady && video.status !== 'ready' && (
+            <button
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-green-900/40 text-green-400 border-none cursor-pointer hover:bg-green-900/60 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMarkReady();
+              }}
+              title="Mark as Ready for scheduling"
+            >
+              <FeatherCheck style={{ width: 10, height: 10 }} />
+              Ready
+            </button>
+          )}
+        </div>
         {video.qcResult && (
           <span
             className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${video.qcResult.passed ? 'bg-green-900/30 text-green-400' : 'bg-yellow-900/30 text-yellow-400'}`}
@@ -2356,6 +2487,7 @@ const SlideshowCard = ({
   onEdit,
   onDelete,
   onPost,
+  onMarkReady,
   onExportToDrive,
   isDriveExporting,
   onExportToDropbox,
@@ -2581,7 +2713,22 @@ const SlideshowCard = ({
             )}
           </div>
         </div>
-        <StatusPill status={slideshow.status || VIDEO_STATUS.DRAFT} />
+        <div className="flex items-center gap-1.5">
+          {onMarkReady && slideshow.status !== 'ready' && (
+            <button
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-green-900/40 text-green-400 border-none cursor-pointer hover:bg-green-900/60 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMarkReady();
+              }}
+              title="Mark as Ready for scheduling"
+            >
+              <FeatherCheck style={{ width: 10, height: 10 }} />
+              Ready
+            </button>
+          )}
+          <StatusPill status={slideshow.status || VIDEO_STATUS.DRAFT} />
+        </div>
       </div>
     </div>
   );

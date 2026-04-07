@@ -24,7 +24,7 @@ import {
   MAX_BANKS,
   MIN_BANKS,
 } from '../../services/libraryService';
-import { uploadFile } from '../../services/firebaseStorage';
+import { uploadFile, uploadFileWithQuota } from '../../services/firebaseStorage';
 import { renderPhotoMontage } from '../../services/photoMontageExportService';
 import { quickQC } from '../../services/qcService';
 import { useBeatDetection } from '../../hooks/useBeatDetection';
@@ -84,7 +84,8 @@ import LyricBankSection from './shared/LyricBankSection';
 import {
   parseStroke,
   buildStroke,
-  AVAILABLE_FONTS,
+  getAvailableFonts,
+  saveCustomFont,
   makeFieldSetter,
 } from './shared/editorConstants';
 import CloseConfirmOverlay from './shared/CloseConfirmOverlay';
@@ -109,6 +110,7 @@ const PhotoMontageEditor = ({
   onClose,
   artistId = null,
   db = null,
+  user = null,
   onSaveLyrics,
   onAddLyrics,
   onUpdateLyrics,
@@ -1391,7 +1393,11 @@ const PhotoMontageEditor = ({
     if (hasUnsavedWork) {
       setShowCloseConfirm(true);
     } else {
-      clearSession();
+      try {
+        clearSession();
+      } catch (err) {
+        console.warn('Editor cleanup error:', err);
+      }
       onClose();
     }
   }, [hasUnsavedWork, onClose, clearSession]);
@@ -1437,10 +1443,11 @@ const PhotoMontageEditor = ({
     stopPlayback();
 
     try {
+      const quotaCtx = { userData: user, userEmail: user?.email };
       const uploadedPhotos = await Promise.all(
         photos.map(async (photo) => {
           if (photo.isLocal && photo.file) {
-            const { url } = await uploadFile(photo.file, 'images');
+            const { url } = await uploadFileWithQuota(photo.file, 'images', null, {}, quotaCtx);
             return { ...photo, url, isLocal: false };
           }
           return photo;
@@ -1449,7 +1456,7 @@ const PhotoMontageEditor = ({
 
       let audioForExport = selectedAudio;
       if (selectedAudio?.file) {
-        const { url } = await uploadFile(selectedAudio.file, 'audio');
+        const { url } = await uploadFileWithQuota(selectedAudio.file, 'audio', null, {}, quotaCtx);
         audioForExport = { ...selectedAudio, url };
       }
 
@@ -1472,9 +1479,12 @@ const PhotoMontageEditor = ({
       );
 
       setExportProgress(95);
-      const { url: cloudUrl } = await uploadFile(
+      const { url: cloudUrl } = await uploadFileWithQuota(
         new File([blob], `montage_${Date.now()}.mp4`, { type: 'video/mp4' }),
         'videos',
+        null,
+        {},
+        quotaCtx,
       );
 
       // Run quick QC check on exported video
@@ -3394,13 +3404,35 @@ const PhotoMontageEditor = ({
 
                     {/* Font Family */}
                     <div>
-                      <div className="text-[13px] text-neutral-500 mb-1.5">Font Family</div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[13px] text-neutral-500">Font Family</span>
+                        <label className="text-[11px] text-indigo-400 hover:text-indigo-300 cursor-pointer">
+                          + Upload
+                          <input
+                            type="file"
+                            accept=".ttf,.otf,.woff,.woff2"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const name = file.name.replace(/\.(ttf|otf|woff2?)$/i, '');
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                saveCustomFont(name, reader.result);
+                                handleStyleChange({ fontFamily: `'${name}', sans-serif` });
+                              };
+                              reader.readAsDataURL(file);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      </div>
                       <select
                         value={activeStyle.fontFamily || "'Inter', sans-serif"}
                         onChange={(e) => handleStyleChange({ fontFamily: e.target.value })}
                         className="w-full px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-50 text-white text-[13px] outline-none cursor-pointer"
                       >
-                        {AVAILABLE_FONTS.map((f) => (
+                        {getAvailableFonts().map((f) => (
                           <option key={f.name} value={f.value}>
                             {f.name}
                           </option>
@@ -3531,6 +3563,17 @@ const PhotoMontageEditor = ({
                             bold: true,
                           },
                           {
+                            key: 'italic',
+                            label: 'I',
+                            ariaLabel: 'Italic',
+                            active: activeStyle.fontStyle === 'italic',
+                            toggle: () =>
+                              handleStyleChange({
+                                fontStyle: activeStyle.fontStyle === 'italic' ? 'normal' : 'italic',
+                              }),
+                            italic: true,
+                          },
+                          {
                             key: 'caps',
                             label: 'AA',
                             ariaLabel: 'All caps',
@@ -3568,6 +3611,7 @@ const PhotoMontageEditor = ({
                             icon={
                               <span
                                 className={`text-xs ${btn.bold ? 'font-bold' : 'font-semibold'}`}
+                                style={btn.italic ? { fontStyle: 'italic' } : undefined}
                               >
                                 {btn.label}
                               </span>
@@ -3734,7 +3778,7 @@ const PhotoMontageEditor = ({
 
       <EditorFooter
         lastSaved={lastSaved}
-        onCancel={onClose}
+        onCancel={handleCloseRequest}
         onSaveAll={allVideos.length > 1 ? handleSaveAllAndClose : handleSaveDraft}
         isSavingAll={isSavingAll}
         saveAllCount={allVideos.length}

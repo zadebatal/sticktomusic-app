@@ -10,7 +10,14 @@
 
 import log from '../utils/logger';
 
-const isElectron = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
+// Evaluate lazily on every call instead of at module-load time. If this module
+// were captured statically (the original behavior), then a renderer that loaded
+// the bundle BEFORE preload's contextBridge had a chance to inject electronAPI
+// would have `isElectron === false` for the entire session — silently breaking
+// every desktop feature gated on this check. Lazy is safer and free.
+function isElectron() {
+  return typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
+}
 
 /** Sanitize a name for filesystem use */
 function safeName(name) {
@@ -48,7 +55,7 @@ function typeToFolder(type) {
  * Creates StickToMusic/{artist}/media/ by writing a placeholder.
  */
 export async function ensureArtistMediaFolder(artistName) {
-  if (!isElectron) return;
+  if (!isElectron()) return;
   try {
     const keepPath = buildRelativePath(artistName, '.stm-keep');
     const exists = await window.electronAPI.checkFileExists(keepPath);
@@ -70,7 +77,7 @@ export async function ensureArtistMediaFolder(artistName) {
  * @returns {Promise<string|null>} Full local path, or null if not in Electron
  */
 export async function saveMediaLocally(file, artistName, mediaType, filename) {
-  if (!isElectron) return null;
+  if (!isElectron()) return null;
   try {
     const name = filename || file.name || `media_${Date.now()}`;
     const relativePath = buildRelativePath(artistName, name);
@@ -92,7 +99,7 @@ export async function saveMediaLocally(file, artistName, mediaType, filename) {
  * @returns {Promise<string|null>} file:// URL or null
  */
 export async function getLocalMediaUrl(artistName, mediaType, filename) {
-  if (!isElectron) return null;
+  if (!isElectron()) return null;
   try {
     // Try new flat path first
     const relativePath = buildRelativePath(artistName, filename);
@@ -117,7 +124,7 @@ export async function getLocalMediaUrl(artistName, mediaType, filename) {
  * @returns {Promise<string>} Best available URL
  */
 export async function resolveMediaUrl(item, artistName) {
-  if (isElectron && item.name) {
+  if (isElectron() && item.name) {
     const localUrl = await getLocalMediaUrl(artistName, item.type, item.name);
     if (localUrl) return localUrl;
   }
@@ -129,7 +136,7 @@ export async function resolveMediaUrl(item, artistName) {
  * @returns {Promise<boolean>}
  */
 export async function isDriveConnected() {
-  if (!isElectron) return false;
+  if (!isElectron()) return false;
   try {
     return await window.electronAPI.isDriveConnected();
   } catch {
@@ -142,7 +149,7 @@ export async function isDriveConnected() {
  * @returns {Promise<string|null>}
  */
 export async function getMediaFolder() {
-  if (!isElectron) return null;
+  if (!isElectron()) return null;
   try {
     return await window.electronAPI.getMediaFolder();
   } catch {
@@ -155,7 +162,7 @@ export async function getMediaFolder() {
  * @returns {Promise<string|null>} Selected path or null if cancelled
  */
 export async function selectMediaFolder() {
-  if (!isElectron) return null;
+  if (!isElectron()) return null;
   try {
     return await window.electronAPI.selectMediaFolder();
   } catch {
@@ -168,7 +175,7 @@ export async function selectMediaFolder() {
  * @returns {boolean}
  */
 export function isElectronApp() {
-  return isElectron;
+  return isElectron();
 }
 
 /**
@@ -182,12 +189,12 @@ export function isElectronApp() {
  * @param {Object} item - Library item (must have type, name, localPath or localUrl)
  * @returns {Promise<Object|null>} Updated item or null on failure
  */
-export async function uploadLocalItemToCloud(db, artistId, artistName, item) {
+export async function uploadLocalItemToCloud(db, artistId, artistName, item, quotaCtx = {}) {
   if (!item || !item.id) return null;
   if (item.url && item.syncStatus !== 'local') return item; // already cloud
-  if (!isElectron || !item.name) return null;
+  if (!isElectron() || !item.name) return null;
 
-  const { uploadFile } = await import('./firebaseStorage');
+  const { uploadFileWithQuota } = await import('./firebaseStorage');
   const { updateLibraryItemAsync } = await import('./libraryService');
 
   try {
@@ -202,9 +209,9 @@ export async function uploadLocalItemToCloud(db, artistId, artistName, item) {
     const blob = await response.blob();
     const file = new File([blob], item.name, { type: blob.type || 'application/octet-stream' });
 
-    // Upload to Firebase Storage
+    // Upload to Firebase Storage with quota enforcement
     const folder = item.type === 'video' ? 'videos' : item.type === 'audio' ? 'audio' : 'images';
-    const { url, path } = await uploadFile(file, folder);
+    const { url, path } = await uploadFileWithQuota(file, folder, null, {}, quotaCtx);
 
     // Update the library item with cloud info
     const updates = {
@@ -229,7 +236,7 @@ export async function uploadLocalItemToCloud(db, artistId, artistName, item) {
  * @returns {Promise<{ found: number, notFound: number, matches: Object }>}
  */
 export async function relocateOfflineFiles(offlineItems) {
-  if (!isElectron) return { found: 0, notFound: 0, matches: {} };
+  if (!isElectron()) return { found: 0, notFound: 0, matches: {} };
   try {
     const root = await window.electronAPI.getMediaFolder();
     if (!root) return { found: 0, notFound: 0, matches: {} };
@@ -263,7 +270,7 @@ export async function relocateOfflineFiles(offlineItems) {
  * @returns {Promise<{ used: number, free: number } | null>}
  */
 export async function getDiskUsage() {
-  if (!isElectron) return null;
+  if (!isElectron()) return null;
   try {
     return await window.electronAPI.getDiskUsage();
   } catch {
@@ -276,7 +283,7 @@ export async function getDiskUsage() {
  * @param {string} filePath - Full path to the file
  */
 export async function openInFinder(filePath) {
-  if (!isElectron) return;
+  if (!isElectron()) return;
   try {
     await window.electronAPI.openInFinder(filePath);
   } catch {
@@ -289,7 +296,7 @@ export async function openInFinder(filePath) {
  * @param {string} folderPath - Full path to watch
  */
 export async function startWatching(folderPath) {
-  if (!isElectron) return;
+  if (!isElectron()) return;
   try {
     await window.electronAPI.startWatching(folderPath);
   } catch {
@@ -302,7 +309,7 @@ export async function startWatching(folderPath) {
  * @param {string} folderPath
  */
 export async function stopWatching(folderPath) {
-  if (!isElectron) return;
+  if (!isElectron()) return;
   try {
     await window.electronAPI.stopWatching(folderPath);
   } catch {
@@ -315,7 +322,7 @@ export async function stopWatching(folderPath) {
  * @param {(data: { folder: string, filename: string, eventType: string }) => void} cb
  */
 export function onFileChanged(cb) {
-  if (!isElectron) return;
+  if (!isElectron()) return;
   window.electronAPI.onFileChanged(cb);
 }
 
@@ -324,7 +331,7 @@ export function onFileChanged(cb) {
  * @returns {Promise<boolean>}
  */
 export async function isOnboardingComplete() {
-  if (!isElectron) return true; // web app doesn't need onboarding
+  if (!isElectron()) return true; // web app doesn't need onboarding
   try {
     return await window.electronAPI.isOnboardingComplete();
   } catch {
@@ -337,7 +344,7 @@ export async function isOnboardingComplete() {
  * @param {boolean} value
  */
 export async function setOnboardingComplete(value) {
-  if (!isElectron) return;
+  if (!isElectron()) return;
   try {
     await window.electronAPI.setOnboardingComplete(value);
   } catch {

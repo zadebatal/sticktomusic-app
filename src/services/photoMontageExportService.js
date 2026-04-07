@@ -207,9 +207,21 @@ export const renderPhotoMontage = async (
   const CROSSFADE_DURATION = 0.3; // seconds
   const { width: canvasW, height: canvasH } = getCanvasSize(aspectRatio);
 
-  // Phase 1: Load unique images (0-20%) — dedupe URLs for cycling sequences
+  // Phase 1: Load unique images (0-20%) — dedupe URLs for cycling sequences.
+  // Filter out stale blob: URLs FIRST — they're guaranteed unloadable across
+  // page reloads and would just produce broken slides. Mirror the same gate
+  // that videoExportService.js uses for clip URLs.
   onProgress(safeProgress(5));
-  const uniqueUrls = [...new Set(photos.map((p) => p.url))];
+  const allUniqueUrls = [...new Set(photos.map((p) => p.url))];
+  const staleBlobs = allUniqueUrls.filter((u) => typeof u === 'string' && u.startsWith('blob:'));
+  if (staleBlobs.length > 0) {
+    log.warn(
+      '[PhotoMontage] Skipping',
+      staleBlobs.length,
+      'stale blob: URL(s) — re-import these photos to include them',
+    );
+  }
+  const uniqueUrls = allUniqueUrls.filter((u) => typeof u === 'string' && !u.startsWith('blob:'));
   log('[PhotoMontage] Loading', uniqueUrls.length, 'unique images (', photos.length, 'slots)...');
   const imageCache = {};
   const imageResults = await Promise.allSettled(

@@ -37,18 +37,29 @@ const ArtistsManagement = ({
   isConductor = false,
   latePages = [],
   loadingLatePages = false,
+  manualAccountsByArtist = {},
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [tierFilter, setTierFilter] = useState('all');
 
-  // Determine Late.co connection status per artist
+  // Determine Late.co connection status per artist.
+  // An artist is "Connected" if EITHER:
+  //  - they have at least one Late page (per-artist API key path), OR
+  //  - they have at least one manual account stored on their artist doc, OR
+  //  - their artist doc itself carries a non-empty manualAccounts array.
+  // The latter two are needed because operator-shared and manually-entered
+  // accounts don't show up in latePages (which only contains entries for
+  // artists with their own configured Late API key).
   const artistLateStatus = useMemo(() => {
     const map = {};
     artists.forEach((a) => {
-      map[a.id] = latePages.some((p) => p.artistId === a.id);
+      const hasLatePages = latePages.some((p) => p.artistId === a.id);
+      const hasManualFromMap = (manualAccountsByArtist[a.id] || []).length > 0;
+      const hasManualFromDoc = (a.manualAccounts || []).length > 0;
+      map[a.id] = hasLatePages || hasManualFromMap || hasManualFromDoc;
     });
     return map;
-  }, [artists, latePages]);
+  }, [artists, latePages, manualAccountsByArtist]);
 
   // Get tier badge variant
   const getTierBadge = (artist) => {

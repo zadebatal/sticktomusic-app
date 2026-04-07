@@ -1224,20 +1224,58 @@ const ProjectWorkspace = ({
             log.warn('Could not get audio duration, using fallback:', e);
           }
 
+          // Mirror handleWebImportComplete: detect local-first state and set syncStatus
+          const hasLocalPath = !!file.localUrl || !!file.path;
           const item = {
             id: `web_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
             name: file.name,
-            url: file.url,
-            storagePath: file.storagePath,
+            url: file.url || file.localUrl || null,
+            ...(file.localUrl
+              ? { localUrl: file.localUrl }
+              : file.path
+                ? {
+                    localUrl: `file://${encodeURI(file.path).replace(/#/g, '%23')}`,
+                  }
+                : {}),
+            ...(file.path ? { localPath: file.path } : {}),
+            storagePath: file.storagePath || null,
             type: 'audio',
             size: file.size,
             duration: duration || 60, // Fallback to 60s if duration fetch fails
             source: 'web-import',
+            syncStatus: hasLocalPath ? 'local' : 'cloud',
             createdAt: new Date().toISOString(),
           };
 
           await addToLibraryAsync(db, artistId, item);
           importedIds.push(item.id);
+
+          // Background: download cloud-only audio to local drive (Electron desktop)
+          if (
+            isElectronApp() &&
+            artistName &&
+            project?.name &&
+            file.url &&
+            !file.path &&
+            !file.localUrl
+          ) {
+            const activeNiche = niches.find((n) => n.id === activeNicheId);
+            const nicheName = activeNiche?.name || 'Untitled';
+            getMediaPath(artistName, project.name, nicheName, 'audio', file.name)
+              .then(async (localPath) => {
+                if (!localPath) return;
+                try {
+                  const resp = await fetch(file.url);
+                  const buf = await resp.arrayBuffer();
+                  const relativePath = localPath.replace(/^.*?StickToMusic/, 'StickToMusic');
+                  await window.electronAPI.saveFileLocally(buf, relativePath);
+                  log(`[WebImportAudio] Saved to drive: ${file.name}`);
+                } catch (err) {
+                  log.warn(`[WebImportAudio] Local save failed for ${file.name}: ${err.message}`);
+                }
+              })
+              .catch(() => {});
+          }
         }
 
         // Add to project pool (audio goes to pool, not banks)
@@ -1258,7 +1296,7 @@ const ProjectWorkspace = ({
 
       setShowAudioWebImport(false);
     },
-    [artistId, projectId, db, toastSuccess, toastError],
+    [artistId, projectId, db, toastSuccess, toastError, activeNicheId, artistName, niches, project],
   );
 
   // Named media bank upload/import handlers (for VideoNicheContent)
@@ -1823,7 +1861,9 @@ const ProjectWorkspace = ({
         {showAllMedia && (
           <AllMediaContent
             db={db}
+            user={user}
             artistId={artistId}
+            artistName={artistName}
             projectMedia={projectMedia}
             library={library}
             activeNicheId={activeNicheId}
@@ -1839,6 +1879,7 @@ const ProjectWorkspace = ({
               pendingImportBankRef.current = null;
               setShowImportModal(true);
             }}
+            onRefreshLibrary={() => setLibrary(getLibrary(artistId))}
             isUploading={isUploading}
             uploadProgress={uploadProgress}
           />
@@ -1929,6 +1970,7 @@ const ProjectWorkspace = ({
           activeFormat?.id !== 'clipper' && (
             <VideoNicheContent
               db={db}
+              user={user}
               artistId={artistId}
               niche={activeNiche}
               artistName={artistName}

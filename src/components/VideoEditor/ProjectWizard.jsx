@@ -25,6 +25,7 @@ import useIsMobile from '../../hooks/useIsMobile';
 import WizardStepName from './wizard/WizardStepName';
 import WizardStepNiches from './wizard/WizardStepNiches';
 import WizardStepBanks from './wizard/WizardStepBanks';
+import { createProjectFolder, createNicheFolder } from '../../services/localProjectService';
 
 const STEPS = [
   { label: 'Name', stepNumber: '1' },
@@ -35,6 +36,7 @@ const STEPS = [
 const ProjectWizard = ({
   db,
   artistId,
+  artistName = 'Unknown',
   latePages = [],
   manualAccounts = [],
   onComplete,
@@ -69,6 +71,8 @@ const ProjectWizard = ({
       );
       setProjectId(project.id);
       hasCreatedDataRef.current = true;
+      // Create project folder on disk (Electron only, non-blocking)
+      createProjectFolder(artistName, projectName.trim()).catch(() => {});
       setStep(2);
     } catch (err) {
       toastError('Failed to create project');
@@ -86,6 +90,8 @@ const ProjectWizard = ({
         if (!newMap[fmt.id]) {
           const niche = createNiche(artistId, { projectId, format: fmt }, db);
           newMap[fmt.id] = niche.id;
+          // Create niche folder on disk (Electron only, non-blocking)
+          createNicheFolder(artistName, projectName, fmt.name).catch(() => {});
         }
       }
 

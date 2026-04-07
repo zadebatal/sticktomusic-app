@@ -711,14 +711,20 @@ const StickToMusicInner = () => {
     if (artistsLoaded && authChecked && currentAuthUser && firestoreArtists.length > 0) {
       loadLatePages();
     }
-  }, [artistsLoaded, authChecked, currentAuthUser]);
+  }, [artistsLoaded, authChecked, currentAuthUser, firestoreArtists.length]);
 
   // Load Late pages (connected accounts) for all artists with Late configured
   const loadLatePages = async () => {
     // Only load pages for artists this user can see
     const artistsToLoad = firestoreArtists.filter((a) => visibleArtists.some((v) => v.id === a.id));
-    if (!artistsToLoad.length || loadingLatePages) return;
+    if (!artistsToLoad.length) return;
 
+    // Race-safe: increment sequence and remember our own. Concurrent calls
+    // each pull a fresh snapshot of `firestoreArtists` from closure; only the
+    // latest call commits its results. Earlier calls discard their results
+    // when they finish, preventing the partial-results-overwrite bug that
+    // made the Artists tab show "0 Sets" for some artists on first launch.
+    const mySeq = ++loadLatePagesSeqRef.current;
     setLoadingLatePages(true);
     const allPages = [];
     const unconfigured = [];
@@ -777,21 +783,35 @@ const StickToMusicInner = () => {
         }
       }
 
-      setLatePages(allPages);
-      setUnconfiguredLateArtists(unconfigured);
-      log(
-        '📱 Loaded',
-        allPages.length,
-        'Late pages from',
-        artistsToLoad.length,
-        'artists,',
-        unconfigured.length,
-        'unconfigured',
-      );
+      // Only commit if no newer call has started since we began.
+      if (mySeq === loadLatePagesSeqRef.current) {
+        setLatePages(allPages);
+        setUnconfiguredLateArtists(unconfigured);
+        log(
+          '📱 Loaded',
+          allPages.length,
+          'Late pages from',
+          artistsToLoad.length,
+          'artists,',
+          unconfigured.length,
+          'unconfigured',
+        );
+      } else {
+        log.debug(
+          '[Late] Discarding stale loadLatePages result (seq',
+          mySeq,
+          'vs',
+          loadLatePagesSeqRef.current,
+          ')',
+        );
+      }
     } catch (error) {
       log.error('Error loading Late pages:', error);
     } finally {
-      setLoadingLatePages(false);
+      // Only the latest call clears the loading flag.
+      if (mySeq === loadLatePagesSeqRef.current) {
+        setLoadingLatePages(false);
+      }
     }
   };
 
@@ -1284,6 +1304,12 @@ const StickToMusicInner = () => {
   const latePages = useContentStore((s) => s.latePages);
   const setLatePages = useContentStore((s) => s.setLatePages);
   const [loadingLatePages, setLoadingLatePages] = useState(false);
+  // Sequence number for loadLatePages — when firestoreArtists changes mid-load,
+  // a second call would previously bail via `if (loadingLatePages) return` and
+  // the partial-result first call would commit stale data permanently. Now
+  // every call increments this seq and only the latest call's results are
+  // committed; older in-flight calls discard their results.
+  const loadLatePagesSeqRef = useRef(0);
   const [unconfiguredLateArtists, setUnconfiguredLateArtists] = useState([]); // Artists without Late API keys
   const showLateConnectModal = useUIStore((s) => s.showLateConnectModal);
   const setShowLateConnectModal = useUIStore((s) => s.setShowLateConnectModal);
@@ -1445,7 +1471,7 @@ const StickToMusicInner = () => {
       // Cmd+K or Ctrl+K to open quick search
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        setShowQuickSearch(true);
+        setShowQuickSearch((prev) => !prev);
       }
       // Escape to close modals
       if (e.key === 'Escape') {
@@ -1455,6 +1481,14 @@ const StickToMusicInner = () => {
       }
     };
     window.addEventListener('keydown', handleKeyDown);
+
+    // Electron: listen for Cmd+K from native menu accelerator
+    if (window.electronAPI?.onToggleCommandPalette) {
+      window.electronAPI.onToggleCommandPalette(() => {
+        setShowQuickSearch((prev) => !prev);
+      });
+    }
+
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
@@ -2153,7 +2187,7 @@ const StickToMusicInner = () => {
                   latePages={latePages.filter((p) => p.artistId === effectiveArtistId)}
                   manualAccounts={manualAccountsByArtist[effectiveArtistId] || EMPTY_ARRAY}
                   onSchedulePost={(params) =>
-                    lateApi.schedulePost({ ...params, artistId: effectiveArtistId })
+                    lateApi.schedulePost({ ...params, artistId: effectiveArtistId, user })
                   }
                   onDeleteLatePost={(latePostId) =>
                     lateApi.deletePost(latePostId, effectiveArtistId)
@@ -2164,12 +2198,13 @@ const StickToMusicInner = () => {
               ) : artistTab === 'schedule' ? (
                 <SchedulingPage
                   db={db}
+                  user={user}
                   artistId={effectiveArtistId}
                   accounts={latePages.filter((p) => p.artistId === effectiveArtistId)}
                   lateAccountIds={derivedLateAccountIds}
                   initialStatusFilter={artistScheduleFilter}
                   onSchedulePost={(params) =>
-                    lateApi.schedulePost({ ...params, artistId: effectiveArtistId })
+                    lateApi.schedulePost({ ...params, artistId: effectiveArtistId, user })
                   }
                   onDeleteLatePost={(latePostId) =>
                     lateApi.deletePost(latePostId, effectiveArtistId)
@@ -2281,7 +2316,12 @@ const StickToMusicInner = () => {
       setShowLateConnectModal(false);
       setShowLateAccounts(false);
       setOperatorTab(tab);
-      if ((tab === 'pages' || tab === 'content') && !loadingLatePages) loadLatePages();
+      // Refresh Late pages whenever the user navigates to a tab that displays
+      // them. This is now race-safe (see loadLatePagesSeqRef) so concurrent
+      // calls don't lose data — we drop the `!loadingLatePages` guard.
+      if (tab === 'pages' || tab === 'content' || tab === 'artists') {
+        loadLatePages();
+      }
     };
 
     return (
@@ -2315,7 +2355,7 @@ const StickToMusicInner = () => {
                   latePages={latePages.filter((p) => p.artistId === currentArtistId)}
                   manualAccounts={manualAccountsByArtist[currentArtistId] || EMPTY_ARRAY}
                   onSchedulePost={(params) =>
-                    lateApi.schedulePost({ ...params, artistId: currentArtistId })
+                    lateApi.schedulePost({ ...params, artistId: currentArtistId, user })
                   }
                   onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, currentArtistId)}
                   pendingEditDraft={pendingEditDraft}
@@ -2372,7 +2412,13 @@ const StickToMusicInner = () => {
                             (artist) => currentUserId && artist.ownerOperatorId === currentUserId,
                           );
                         }
-                        return displayArtists.map(enrichArtist);
+                        // Don't strip with enrichArtist here — ArtistsManagement reads
+                        // tier/status/manualAccounts off each artist record. Just merge in
+                        // the photoURL from the lookup map and keep the full object.
+                        return displayArtists.map((a) => ({
+                          ...a,
+                          photoURL: a.photoURL || artistPhotoMap[a.id] || null,
+                        }));
                       })()}
                       user={user}
                       currentArtistId={currentArtistId}
@@ -2384,12 +2430,14 @@ const StickToMusicInner = () => {
                       isConductor={isConductor(user)}
                       latePages={latePages}
                       loadingLatePages={loadingLatePages}
+                      manualAccountsByArtist={manualAccountsByArtist}
                     />
                   )}
 
                   {/* Content Tab */}
                   {operatorTab === 'content' && (
                     <ContentTab
+                      user={user}
                       contentQueue={contentQueue}
                       visibleArtists={visibleArtists}
                       artistLateConnected={artistLateConnected}
@@ -2454,11 +2502,12 @@ const StickToMusicInner = () => {
               {!showVideoEditor && operatorTab === 'schedule' && (
                 <SchedulingPage
                   db={db}
+                  user={user}
                   artistId={currentArtistId}
                   accounts={latePages}
                   lateAccountIds={derivedLateAccountIds}
                   onSchedulePost={(params) =>
-                    lateApi.schedulePost({ ...params, artistId: currentArtistId })
+                    lateApi.schedulePost({ ...params, artistId: currentArtistId, user })
                   }
                   onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, currentArtistId)}
                   onEditDraft={(post) => {

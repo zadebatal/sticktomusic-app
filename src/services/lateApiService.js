@@ -1,4 +1,6 @@
 import { getFirebaseToken } from '../config/firebase';
+import { getFirestore } from 'firebase/firestore';
+import ensurePublicUrl from '../utils/ensurePublicUrl';
 import log from '../utils/logger';
 
 const LATE_API_PROXY = '/api/late';
@@ -32,6 +34,7 @@ const lateApi = {
     type = 'video',
     images = null,
     audioUrl = null,
+    user = null,
   }) {
     try {
       const token = await getFirebaseToken();
@@ -50,10 +53,62 @@ const lateApi = {
         throw new Error('No schedule time provided');
       }
 
+      // Auto-upload local files before scheduling (Late.co needs public URLs).
+      // Late's servers fetch the media themselves, so file:// or
+      // http://localhost:4321/local-media/ URLs won't work.
+      const db = getFirestore();
+      const isStaleBlob = (u) => typeof u === 'string' && u.startsWith('blob:');
+
+      let publicVideoUrl = videoUrl;
+      if (type !== 'carousel' && videoUrl) {
+        if (isStaleBlob(videoUrl)) {
+          throw new Error('Video URL is a stale blob — re-render before scheduling');
+        }
+        try {
+          publicVideoUrl = await ensurePublicUrl(videoUrl, db, artistId, 'video', null, user);
+        } catch (uploadErr) {
+          log.error('[Late] Auto-upload (video) failed:', uploadErr.message);
+          throw new Error(`Failed to upload video for scheduling: ${uploadErr.message}`);
+        }
+      }
+
+      // Convert local audio URLs (slideshow carousels with audio overlay)
+      let publicAudioUrl = audioUrl;
+      if (audioUrl) {
+        if (isStaleBlob(audioUrl)) {
+          log.warn('[Late] Dropping stale blob: audio URL — slideshow will be silent');
+          publicAudioUrl = null;
+        } else {
+          try {
+            publicAudioUrl = await ensurePublicUrl(audioUrl, db, artistId, 'audio', null, user);
+          } catch (uploadErr) {
+            log.error('[Late] Auto-upload (audio) failed:', uploadErr.message);
+            throw new Error(`Failed to upload audio for scheduling: ${uploadErr.message}`);
+          }
+        }
+      }
+
+      // Convert local image URLs (carousel posts)
+      let publicImages = images;
+      if (type === 'carousel' && Array.isArray(images)) {
+        publicImages = await Promise.all(
+          images.map(async (img) => {
+            if (!img?.url || isStaleBlob(img.url)) return img;
+            try {
+              const publicUrl = await ensurePublicUrl(img.url, db, artistId, 'image', null, user);
+              return { ...img, url: publicUrl };
+            } catch (uploadErr) {
+              log.error('[Late] Auto-upload (image) failed:', uploadErr.message);
+              throw new Error(`Failed to upload carousel image: ${uploadErr.message}`);
+            }
+          }),
+        );
+      }
+
       const mediaItems =
         type === 'carousel'
-          ? images.map((img) => ({ type: 'image', url: img.url }))
-          : [{ type: 'video', url: videoUrl }];
+          ? publicImages.map((img) => ({ type: 'image', url: img.url }))
+          : [{ type: 'video', url: publicVideoUrl }];
 
       const hasTikTok = platforms.some((p) => p.platform === 'tiktok');
       const isCarousel = type === 'carousel';

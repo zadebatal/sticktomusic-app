@@ -106,7 +106,7 @@ const MediaLibrarySection = ({ db, firestoreArtists }) => {
   const diskPercent = diskUsage ? (diskUsage.used / (diskUsage.used + diskUsage.free)) * 100 : 0;
 
   return (
-    <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-neutral-50 p-6">
+    <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-100 bg-neutral-50 p-6">
       <div className="flex w-full items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600/20">
           <span style={{ fontSize: 18 }}>💾</span>
@@ -550,7 +550,7 @@ const SettingsTab = ({
       <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* ── TEAM ── */}
         {isConductor ? (
-          <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-neutral-50 p-6 col-span-2">
+          <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-100 bg-neutral-50 p-6 col-span-2">
             <div className="flex w-full items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600/20">
                 <FeatherUsers style={{ width: 18, height: 18, color: '#818cf8' }} />
@@ -572,7 +572,7 @@ const SettingsTab = ({
               <select
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value)}
-                className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-500/50"
+                className="rounded-lg border border-neutral-100 bg-neutral-50 px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-500/50"
               >
                 <option value="operator">Operator</option>
                 <option value="artist">Artist</option>
@@ -600,7 +600,7 @@ const SettingsTab = ({
             <div className="w-full overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-neutral-200 text-left text-neutral-400">
+                  <tr className="border-b border-neutral-100 text-left text-neutral-400">
                     <th className="py-2 pr-4 font-medium">Name</th>
                     <th className="py-2 pr-4 font-medium">Email</th>
                     <th className="py-2 pr-4 font-medium">Role</th>
@@ -614,7 +614,7 @@ const SettingsTab = ({
                     const isMe = u.email?.toLowerCase() === user?.email?.toLowerCase();
                     const linkedName = getLinkedArtistName(u);
                     return (
-                      <tr key={u.email || u.id} className="border-b border-neutral-200/50">
+                      <tr key={u.email || u.id} className="border-b border-neutral-100/50">
                         <td className="py-3 pr-4 text-white">
                           {u.name || u.email?.split('@')[0] || '—'}
                         </td>
@@ -626,7 +626,7 @@ const SettingsTab = ({
                                 value={editRole}
                                 onChange={(e) => setEditRole(e.target.value)}
                                 autoFocus
-                                className="rounded border border-neutral-200 bg-neutral-50 px-2 py-1 text-sm text-white outline-none focus:border-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-500/50"
+                                className="rounded border border-neutral-100 bg-neutral-50 px-2 py-1 text-sm text-white outline-none focus:border-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-500/50"
                               >
                                 <option value="conductor">Conductor</option>
                                 <option value="operator">Operator</option>
@@ -729,7 +729,7 @@ const SettingsTab = ({
             </div>
           </div>
         ) : user?.role !== 'collaborator' ? (
-          <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-neutral-50 p-6">
+          <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-100 bg-neutral-50 p-6">
             <div className="flex w-full items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600/20">
                 <FeatherUsers style={{ width: 18, height: 18, color: '#818cf8' }} />
@@ -769,7 +769,7 @@ const SettingsTab = ({
         ) : null}
 
         {/* ── CLOUD STORAGE ── */}
-        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-neutral-50 p-6">
+        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-100 bg-neutral-50 p-6">
           <div className="flex w-full items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-600/20">
               <FeatherCloud style={{ width: 18, height: 18, color: '#06b6d4' }} />
@@ -845,7 +845,7 @@ const SettingsTab = ({
         </div>
 
         {/* ── STORAGE USAGE ── */}
-        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-neutral-50 p-6">
+        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-100 bg-neutral-50 p-6">
           <div className="flex w-full items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-600/20">
               <FeatherHardDrive style={{ width: 18, height: 18, color: '#8b5cf6' }} />
@@ -897,7 +897,7 @@ const SettingsTab = ({
         {isElectronApp() && <MediaLibrarySection db={db} firestoreArtists={firestoreArtists} />}
 
         {/* ── SUBSCRIPTION / ACCOUNT ── */}
-        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-200 bg-neutral-50 p-6">
+        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-100 bg-neutral-50 p-6">
           <div className="flex w-full items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-600/20">
               <FeatherCreditCard style={{ width: 18, height: 18, color: '#f59e0b' }} />

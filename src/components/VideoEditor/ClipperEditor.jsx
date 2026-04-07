@@ -2508,7 +2508,11 @@ const ClipperEditor = ({
         </div>
       )}
 
-      <EditorFooter onCancel={onClose} onSaveAll={handleSaveSession} saveLabel="Save Session" />
+      <EditorFooter
+        onCancel={handleCloseRequest}
+        onSaveAll={handleSaveSession}
+        saveLabel="Save Session"
+      />
     </EditorShell>
   );
 };

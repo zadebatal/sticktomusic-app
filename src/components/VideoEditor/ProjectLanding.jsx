@@ -161,6 +161,30 @@ const ProjectLanding = ({
     });
   }, [db, artistId, scheduledPosts, toastSuccess, toastError]);
 
+  // Clean orphaned project pool mediaIds (ghost media fix)
+  const orphanCleanRef = useRef(false);
+  useEffect(() => {
+    if (!db || !artistId || orphanCleanRef.current) return;
+    const libIds = new Set(library.map((m) => m.id));
+    const projectRoots = collections.filter((c) => c.isProjectRoot);
+    let cleaned = 0;
+    for (const p of projectRoots) {
+      if (!p.mediaIds?.length) continue;
+      const valid = p.mediaIds.filter((id) => libIds.has(id));
+      if (valid.length < p.mediaIds.length) {
+        cleaned += p.mediaIds.length - valid.length;
+        p.mediaIds = valid;
+        saveCollectionToFirestore(db, artistId, p).catch(() => {});
+      }
+    }
+    if (cleaned > 0) {
+      saveCollections(artistId, collections);
+      setCollections([...collections]);
+      log(`[ProjectLanding] Cleaned ${cleaned} orphaned project pool mediaIds`);
+    }
+    orphanCleanRef.current = true;
+  }, [db, artistId, library, collections]);
+
   // All accounts (Late + manual)
   const allAccounts = useMemo(() => {
     const accounts = [...latePages.filter((p) => p.artistId === artistId)];
@@ -210,6 +234,7 @@ const ProjectLanding = ({
   const hasSelection = selectedProjectIds.size > 0;
 
   // Stats per project — computed from component state (not localStorage)
+  const libraryIds = useMemo(() => new Set(library.map((m) => m.id)), [library]);
   const projectStats = useMemo(() => {
     const userCols = collections.filter((c) => c.type !== 'smart' && !c.id?.startsWith('smart_'));
     const stats = {};
@@ -230,7 +255,9 @@ const ProjectLanding = ({
         nicheCount: niches.length,
         nicheFormats,
         draftCount,
-        mediaCount: (p.mediaIds || []).length,
+        mediaCount: libraryIds
+          ? (p.mediaIds || []).filter((id) => libraryIds.has(id)).length
+          : (p.mediaIds || []).length,
       };
     });
     return stats;
@@ -588,10 +615,10 @@ const ProjectLanding = ({
             return (
               <motion.div
                 key={project.id}
-                initial={{ opacity: 0, y: 12 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2, delay: idx * 0.05 }}
-                className={`relative flex flex-col items-start gap-4 rounded-lg border border-solid px-6 py-5 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/40 bg-indigo-500/10' : 'border-neutral-200 bg-neutral-50 hover:border-neutral-600'}`}
+                transition={{ duration: 0.15, delay: Math.min(idx * 0.03, 0.3) }}
+                className={`relative flex flex-col items-start gap-4 rounded-lg border border-solid px-6 py-5 cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/40 bg-indigo-500/10' : 'border-neutral-200 bg-neutral-50 hover:border-neutral-400 hover:bg-neutral-100'}`}
                 tabIndex={0}
                 role="button"
                 onClick={() => !isRenaming && onOpenProject(project.id)}
@@ -599,7 +626,7 @@ const ProjectLanding = ({
                 <div className="flex w-full items-center gap-3">
                   {/* Checkbox */}
                   <button
-                    className={`flex h-5 w-5 flex-none items-center justify-center rounded border transition-colors ${isSelected ? 'border-indigo-500 bg-indigo-500' : 'border-neutral-300 bg-transparent hover:border-neutral-400'}`}
+                    className={`flex h-5 w-5 flex-none items-center justify-center rounded border ${isSelected ? 'border-indigo-500 bg-indigo-500' : 'border-neutral-300 bg-transparent hover:border-neutral-400'}`}
                     aria-label={`Select ${project.name}`}
                     onClick={(e) => {
                       e.stopPropagation();

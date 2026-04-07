@@ -40,6 +40,7 @@ const WordPreview = ({ currentWord, textStyle }) => {
           fontSize: scaledFontSize,
           fontFamily: textStyle.fontFamily || 'sans-serif',
           fontWeight: textStyle.fontWeight || '600',
+          fontStyle: textStyle.fontStyle || 'normal',
           color: textStyle.color || '#ffffff',
           textTransform: wordTextTransform,
           textShadow: wordTextShadow,

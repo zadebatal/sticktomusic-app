@@ -7,7 +7,7 @@
 import React, { useState, useCallback } from 'react';
 import { Button } from '../ui/components/Button';
 import { scanForSync, syncArtistMedia, formatBytes } from '../services/syncService';
-import { setOnboardingComplete } from '../services/localMediaService';
+import { setOnboardingComplete, ensureArtistMediaFolder } from '../services/localMediaService';
 
 const STATES = {
   WELCOME: 'welcome',
@@ -311,6 +311,36 @@ const DesktopOnboarding = ({ db, artists, onComplete }) => {
     setError(null);
 
     const artistsToSync = scanResults.filter((r) => selectedArtists.has(r.artistId));
+
+    // Ensure flat media folders exist for all artists being synced.
+    // Track failures so we can warn the user instead of silently proceeding
+    // into a broken sync.
+    const folderCreationFailures = [];
+    for (const artistResult of artistsToSync) {
+      const artist = artists.find((a) => a.id === artistResult.artistId);
+      if (!artist?.name) continue;
+      try {
+        await ensureArtistMediaFolder(artist.name);
+      } catch (err) {
+        folderCreationFailures.push({ artist: artist.name, error: err?.message || String(err) });
+      }
+    }
+    if (folderCreationFailures.length > 0) {
+      const names = folderCreationFailures.map((f) => f.artist).join(', ');
+      setError(`Could not create media folders for: ${names}. Sync will skip these artists.`);
+      // Filter them out so we don't try to sync into a missing folder
+      const failed = new Set(folderCreationFailures.map((f) => f.artist));
+      // eslint-disable-next-line no-param-reassign
+      artistsToSync.splice(
+        0,
+        artistsToSync.length,
+        ...artistsToSync.filter((r) => {
+          const a = artists.find((aa) => aa.id === r.artistId);
+          return a && !failed.has(a.name);
+        }),
+      );
+    }
+
     let totalSynced = 0;
     let totalFailed = 0;
     let totalSkipped = 0;

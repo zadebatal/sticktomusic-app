@@ -74,6 +74,7 @@ const FORMAT_ICONS = {
 
 const VideoNicheContent = ({
   db,
+  user = null,
   artistId,
   artistName = '',
   niche,
@@ -819,7 +820,8 @@ const VideoNicheContent = ({
   const handleUploadItemToCloud = useCallback(
     async (item) => {
       if (!item || (item.url && item.syncStatus !== 'local')) return;
-      const result = await uploadLocalItemToCloud(db, artistId, artistName, item);
+      const quotaCtx = { userData: user, userEmail: user?.email };
+      const result = await uploadLocalItemToCloud(db, artistId, artistName, item, quotaCtx);
       if (result) {
         toastSuccess(`Uploaded "${item.name}" to cloud`);
         onRefreshCollections?.();
@@ -827,7 +829,7 @@ const VideoNicheContent = ({
         toastError(`Could not upload "${item.name}"`);
       }
     },
-    [db, artistId, artistName, toastSuccess, toastError, onRefreshCollections],
+    [db, user, artistId, artistName, toastSuccess, toastError, onRefreshCollections],
   );
 
   // Bulk upload selected to cloud
@@ -840,10 +842,11 @@ const VideoNicheContent = ({
       toastSuccess('Selected items are already in the cloud');
       return;
     }
+    const quotaCtx = { userData: user, userEmail: user?.email };
     let ok = 0;
     let failed = 0;
     for (const item of items) {
-      const r = await uploadLocalItemToCloud(db, artistId, artistName, item);
+      const r = await uploadLocalItemToCloud(db, artistId, artistName, item, quotaCtx);
       if (r) ok++;
       else failed++;
     }
@@ -854,6 +857,7 @@ const VideoNicheContent = ({
     bankSelectedIds,
     library,
     db,
+    user,
     artistId,
     artistName,
     toastSuccess,

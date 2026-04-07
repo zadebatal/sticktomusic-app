@@ -58,6 +58,51 @@ function generateId() {
   return `spost_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
+// ── Cross-device sanitization ──
+//
+// `editorState` and `audioUrl` can carry references that only resolve on the
+// device that created them: `blob:` object URLs (lost after the tab/session
+// closes), `file://` paths (Electron-only and machine-specific), and
+// localhost URLs from the embedded Express media server. Persisting these
+// to Firestore breaks playback when the same draft is opened on another
+// device. Strip them before any cloud write.
+function isLocalOnlyUrl(value) {
+  if (typeof value !== 'string') return false;
+  return (
+    value.startsWith('blob:') ||
+    value.startsWith('file:') ||
+    value.includes('localhost:4321/local-media/') ||
+    value.startsWith('http://localhost')
+  );
+}
+
+function stripLocalRefs(value) {
+  if (Array.isArray(value)) return value.map(stripLocalRefs);
+  if (value && typeof value === 'object') {
+    const cleaned = {};
+    for (const [k, v] of Object.entries(value)) {
+      // Drop local-only ref keys entirely
+      if (k === 'localPath' || k === 'localUrl' || k === 'path') continue;
+      // Drop any string field that points at a local-only URL
+      if (typeof v === 'string' && isLocalOnlyUrl(v)) continue;
+      cleaned[k] = stripLocalRefs(v);
+    }
+    return cleaned;
+  }
+  return value;
+}
+
+// Sanitize a post for Firestore write — keeps the original safe for
+// localStorage (same-device replay) so the local user doesn't lose anything.
+function sanitizePostForCloud(post) {
+  return {
+    ...post,
+    audioUrl: isLocalOnlyUrl(post.audioUrl) ? null : (post.audioUrl ?? null),
+    cloudUrl: isLocalOnlyUrl(post.cloudUrl) ? null : (post.cloudUrl ?? null),
+    editorState: post.editorState ? stripLocalRefs(post.editorState) : null,
+  };
+}
+
 // ── CRUD Operations ──
 
 /**
@@ -112,8 +157,10 @@ export async function createScheduledPost(db, artistId, data) {
   };
 
   try {
+    // Strip device-local refs (blob:/file:/localhost) before cloud write —
+    // localStorage still gets the full `post` so same-device replay is intact.
     await setDoc(getDocRef(db, artistId, id), {
-      ...post,
+      ...sanitizePostForCloud(post),
       serverUpdatedAt: serverTimestamp(),
     });
     log('[ScheduledPosts] Created:', id);
@@ -129,7 +176,9 @@ export async function createScheduledPost(db, artistId, data) {
 }
 
 /**
- * Update an existing scheduled post
+ * Update an existing scheduled post.
+ * Uses setDoc with merge so updates work for posts that haven't been
+ * synced to Firestore yet (e.g. created while offline).
  */
 export async function updateScheduledPost(db, artistId, postId, updates) {
   const patch = {
@@ -138,19 +187,20 @@ export async function updateScheduledPost(db, artistId, postId, updates) {
   };
 
   try {
-    await updateDoc(getDocRef(db, artistId, postId), {
-      ...patch,
-      serverUpdatedAt: serverTimestamp(),
-    });
+    // Strip device-local refs from the patch before cloud write — same
+    // sanitization rule as createScheduledPost. localStorage still receives
+    // the full unsanitized patch so same-device editor reopen works.
+    await setDoc(
+      getDocRef(db, artistId, postId),
+      {
+        ...sanitizePostForCloud(patch),
+        serverUpdatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
     log('[ScheduledPosts] Updated:', postId);
-    // Also update local
     updateLocalPost(artistId, postId, patch);
   } catch (error) {
-    if (error?.message?.includes('No document to update')) {
-      log('[ScheduledPosts] Post no longer exists in Firestore:', postId);
-      removeLocalPost(artistId, postId);
-      return patch;
-    }
     log.error('[ScheduledPosts] Firestore update failed:', error);
     // Update localStorage as fallback (mark unsynced)
     updateLocalPost(artistId, postId, { ...patch, syncedToCloud: false });
@@ -193,6 +243,35 @@ export async function deletePostsByContentId(db, artistId, contentId) {
     return matching.length;
   } catch (error) {
     log.error('[ScheduledPosts] Cascade delete failed:', error);
+    return 0;
+  }
+}
+
+/**
+ * Delete all scheduled posts that reference a given collection/niche ID (cascade delete).
+ * Called when a niche or project collection is deleted.
+ */
+export async function deletePostsByCollectionId(db, artistId, collectionId) {
+  try {
+    const allPosts = await getScheduledPosts(db, artistId);
+    const matching = allPosts.filter(
+      (p) => p.collectionId === collectionId || p.nicheId === collectionId,
+    );
+    if (matching.length === 0) return 0;
+
+    const batch = writeBatch(db);
+    matching.forEach((p) => batch.delete(getDocRef(db, artistId, p.id)));
+    await batch.commit();
+    matching.forEach((p) => removeLocalPost(artistId, p.id));
+    log(
+      '[ScheduledPosts] Cascade-deleted',
+      matching.length,
+      'posts for collectionId:',
+      collectionId,
+    );
+    return matching.length;
+  } catch (error) {
+    log.error('[ScheduledPosts] Collection cascade delete failed:', error);
     return 0;
   }
 }

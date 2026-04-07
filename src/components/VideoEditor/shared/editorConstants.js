@@ -1,7 +1,7 @@
 // Shared constants and utilities for all editors
 // Extracted from 5 editor files to eliminate duplication
 
-export const AVAILABLE_FONTS = [
+export const BUILT_IN_FONTS = [
   { name: 'TikTok Sans', value: "'TikTok Sans', sans-serif" },
   { name: 'Inter', value: "'Inter', sans-serif" },
   { name: 'Arial', value: 'Arial, sans-serif' },
@@ -15,6 +15,78 @@ export const AVAILABLE_FONTS = [
   { name: 'Verdana', value: 'Verdana, sans-serif' },
   { name: 'Palatino', value: "'Palatino Linotype', serif" },
 ];
+
+// Custom fonts stored in localStorage
+const CUSTOM_FONTS_KEY = 'stm_custom_fonts';
+
+export function getCustomFonts() {
+  try {
+    return JSON.parse(localStorage.getItem(CUSTOM_FONTS_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+export function saveCustomFont(name, dataUrl) {
+  const customs = getCustomFonts();
+  if (customs.some((f) => f.name === name)) return; // already exists
+  customs.push({ name, value: `'${name}', sans-serif`, dataUrl });
+  localStorage.setItem(CUSTOM_FONTS_KEY, JSON.stringify(customs));
+  // Register with CSS
+  registerCustomFont(name, dataUrl);
+}
+
+export function registerCustomFont(name, dataUrl) {
+  const font = new FontFace(name, `url(${dataUrl})`);
+  font
+    .load()
+    .then((loaded) => {
+      document.fonts.add(loaded);
+    })
+    .catch((err) => {
+      console.warn(`[Font] Failed to load "${name}":`, err.message);
+    });
+}
+
+// Register all saved custom fonts on load
+export function initCustomFonts() {
+  getCustomFonts().forEach((f) => registerCustomFont(f.name, f.dataUrl));
+}
+
+// Combined list: built-in + custom
+export function getAvailableFonts() {
+  return [...BUILT_IN_FONTS, ...getCustomFonts()];
+}
+
+// Backward compat
+export const AVAILABLE_FONTS = BUILT_IN_FONTS;
+
+// Duration auto-bucketing for media banks
+export const DURATION_BUCKETS = [
+  { min: 0, max: 2, label: '0-2s', key: 'micro' },
+  { min: 2, max: 5, label: '2-5s', key: 'short' },
+  { min: 5, max: 10, label: '5-10s', key: 'medium' },
+  { min: 10, max: Infinity, label: '10s+', key: 'long' },
+];
+
+export function bucketByDuration(mediaItems) {
+  const buckets = DURATION_BUCKETS.map((b) => ({
+    ...b,
+    items: [],
+  }));
+  const unknown = [];
+  mediaItems.forEach((item) => {
+    const dur = item.duration;
+    if (!dur && dur !== 0) {
+      unknown.push(item);
+      return;
+    }
+    const bucket = buckets.find((b) => dur >= b.min && dur < b.max);
+    if (bucket) bucket.items.push(item);
+    else unknown.push(item);
+  });
+  return { buckets: buckets.filter((b) => b.items.length > 0), unknown };
+}
 
 export const parseStroke = (str) => {
   if (!str) return { width: 0.5, color: '#000000' };

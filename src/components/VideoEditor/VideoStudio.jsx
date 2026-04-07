@@ -191,7 +191,8 @@ class EditorErrorBoundary extends React.Component {
             </p>
             <button
               onClick={() => {
-                // Only close — don't reset hasError (which would re-render the broken child and cause infinite loop)
+                // Reset error state BEFORE closing so the boundary is clean for next use
+                this.setState({ hasError: false, error: null });
                 this.props.onClose?.();
               }}
               style={{
@@ -870,6 +871,7 @@ const VideoStudio = ({
   const [activePipelineObjectForEditor, setActivePipelineObjectForEditor] = useState(null);
   const [pipelineCategoryVersion, setPipelineCategoryVersion] = useState(0);
   const [selectedMediaBankIds, setSelectedMediaBankIds] = useState(null); // array of bank IDs for filtering
+  const [selectedClipIds, setSelectedClipIds] = useState(null); // array of specific clip IDs pre-selected from niche previewer
   const [crossNicheIds, setCrossNicheIds] = useState(null); // array of additional niche IDs for cross-niche sourcing
   // Firestore-backed library — survives localStorage quota exceeded
   const [firestoreLibrary, setFirestoreLibrary] = useState(() => getLibrary(currentArtistId));
@@ -1050,6 +1052,15 @@ const VideoStudio = ({
       );
     }
 
+    // Per-clip filtering: if user selected specific clips in the niche previewer,
+    // only those clips go into the timeline. All clips remain in the sidebar for adding later.
+    if (selectedClipIds && selectedClipIds.length > 0) {
+      const clipSet = new Set(selectedClipIds);
+      pipelineMedia = pipelineMedia.filter(
+        (item) => item.type === MEDIA_TYPES.AUDIO || clipSet.has(item.id),
+      );
+    }
+
     // textBanks = slideshow text banks (array of arrays), videoTextBank1/2 = video niche text banks
     // Check length to avoid empty-array short-circuit ([] is truthy in JS)
     const nicheTextBanks =
@@ -1098,6 +1109,7 @@ const VideoStudio = ({
     currentArtistId,
     pipelineCategoryVersion,
     selectedMediaBankIds,
+    selectedClipIds,
     crossNicheIds,
     firestoreLibrary,
   ]);
@@ -1391,24 +1403,14 @@ const VideoStudio = ({
 
     const saved = loadSessionState();
     if (saved && (!saved.artistId || saved.artistId === currentArtistId)) {
-      if (saved.categoryId) {
-        const category = categories.find((c) => c.id === saved.categoryId);
-        if (category) {
-          log.debug(
-            '[Session] Restoring:',
-            saved.currentView,
-            category.name,
-            'mode:',
-            saved.studioMode,
-          );
-          setSelectedCategory(category);
-          setCurrentView(saved.currentView || 'home');
-          if (saved.studioMode) {
-            setStudioMode(saved.studioMode);
-          }
-        }
-      }
-      // Restore project context
+      // NOTE: Intentionally NOT restoring `selectedCategory` / legacy aesthetic
+      // home state. The Projects/Niches refactor replaced category-based
+      // navigation; restoring a stale `categoryId` would land the user on the
+      // dead AestheticHome view (whose upload handlers write to orphan
+      // `categories[]` state and don't feed the modern library). All users now
+      // land on ProjectLanding via the default `currentView === 'home' &&
+      // !selectedCategory` branch.
+      // Restore project context only.
       if (saved.activeProjectId) setActiveProjectId(saved.activeProjectId);
       if (saved.activeProjectNicheId) setActiveProjectNicheId(saved.activeProjectNicheId);
     }
@@ -1518,31 +1520,37 @@ const VideoStudio = ({
   );
 
   const handleCloseEditor = useCallback(() => {
-    setShowEditor(false);
-    setEditingVideo(null);
-    setInitialEditorMode(null);
-    setShowTemplatePicker(false);
-    setSchedulerEditPostId(null);
-    // Clear library selection so stale clips don't appear next time
-    setSelectedLibraryMedia({ videos: [], audio: null, images: [], lyrics: [] });
-    setPullFromCollection(null);
-    setClipperSourceVideos([]);
-    setClipperSession(null);
-    setClipperBankLabels(null);
-    setSelectedMediaBankIds(null);
-    // If opened from pipeline, go back to pipeline list or project view
-    if (activePipelineIdForEditor) {
-      const nicheId = activePipelineIdForEditor;
-      setActivePipelineIdForEditor(null);
-      setActivePipelineObjectForEditor(null);
-      setActivePipelineId(null);
-      // Check if niche belongs to a project — return to project view
-      if (activeProjectId) {
-        setActiveProjectNicheId(nicheId);
-        setCurrentView('project', { projectId: activeProjectId, nicheId });
-      } else {
-        setCurrentView('home');
+    try {
+      setShowEditor(false);
+      setEditingVideo(null);
+      setInitialEditorMode(null);
+      setShowTemplatePicker(false);
+      setSchedulerEditPostId(null);
+      // Clear library selection so stale clips don't appear next time
+      setSelectedLibraryMedia({ videos: [], audio: null, images: [], lyrics: [] });
+      setPullFromCollection(null);
+      setClipperSourceVideos([]);
+      setClipperSession(null);
+      setClipperBankLabels(null);
+      setSelectedMediaBankIds(null);
+      // If opened from pipeline, go back to pipeline list or project view
+      if (activePipelineIdForEditor) {
+        const nicheId = activePipelineIdForEditor;
+        setActivePipelineIdForEditor(null);
+        setActivePipelineObjectForEditor(null);
+        setActivePipelineId(null);
+        // Check if niche belongs to a project — return to project view
+        if (activeProjectId) {
+          setActiveProjectNicheId(nicheId);
+          setCurrentView('project', { projectId: activeProjectId, nicheId });
+        } else {
+          setCurrentView('home');
+        }
       }
+    } catch (err) {
+      console.warn('Editor close cleanup error:', err);
+      // Force editor closed even if cleanup fails
+      setShowEditor(false);
     }
   }, [activePipelineIdForEditor, activeProjectId]);
 
@@ -2990,99 +2998,102 @@ const VideoStudio = ({
   // Add lyrics to the bank
   const handleAddLyrics = useCallback(
     async (lyricsData) => {
-      // Library mode: save via libraryService (Firestore + localStorage)
-      if (!selectedCategory) {
-        if (currentArtistId) {
-          const newEntry = await addLyricsAsync(db, currentArtistId, {
-            title: lyricsData.title || 'Untitled Lyrics',
-            content: lyricsData.content || '',
-            words: lyricsData.words || null,
-          });
-          // Also update selectedLibraryMedia so the editor sees the new lyric immediately
-          if (newEntry) {
-            setSelectedLibraryMedia((prev) => ({
-              ...prev,
-              lyrics: [...(prev.lyrics || []), newEntry],
-            }));
-          }
-          return newEntry;
-        }
-        return;
-      }
+      if (!currentArtistId) return;
 
-      // Category mode
-      const newLyrics = {
-        id: `lyrics_${Date.now()}`,
+      // Always persist via lyrics service (Firestore + localStorage)
+      const nicheId = selectedCategory?.id || activeProjectNicheId || null;
+      const newEntry = await addLyricsAsync(db, currentArtistId, {
         title: lyricsData.title || 'Untitled Lyrics',
         content: lyricsData.content || '',
         words: lyricsData.words || null,
-        createdAt: new Date().toISOString(),
-      };
+        collectionIds: nicheId ? [nicheId] : [],
+      });
 
-      setCategories((prev) =>
-        prev.map((cat) =>
-          cat.id === selectedCategory.id
-            ? { ...cat, lyrics: [...(cat.lyrics || []), newLyrics] }
-            : cat,
-        ),
-      );
+      if (!selectedCategory) {
+        // Library mode: also update selectedLibraryMedia so the editor sees the new lyric immediately
+        if (newEntry) {
+          setSelectedLibraryMedia((prev) => ({
+            ...prev,
+            lyrics: [...(prev.lyrics || []), newEntry],
+          }));
+        }
+      } else {
+        // Category mode: also update category state for in-session UI
+        const catLyric = newEntry || {
+          id: `lyrics_${Date.now()}`,
+          title: lyricsData.title || 'Untitled Lyrics',
+          content: lyricsData.content || '',
+          words: lyricsData.words || null,
+          createdAt: new Date().toISOString(),
+        };
 
-      setSelectedCategory((prev) =>
-        prev
-          ? {
-              ...prev,
-              lyrics: [...(prev.lyrics || []), newLyrics],
-            }
-          : prev,
-      );
+        setCategories((prev) =>
+          prev.map((cat) =>
+            cat.id === selectedCategory.id
+              ? { ...cat, lyrics: [...(cat.lyrics || []), catLyric] }
+              : cat,
+          ),
+        );
 
-      return newLyrics;
+        setSelectedCategory((prev) =>
+          prev
+            ? {
+                ...prev,
+                lyrics: [...(prev.lyrics || []), catLyric],
+              }
+            : prev,
+        );
+      }
+
+      return newEntry;
     },
-    [selectedCategory, currentArtistId, db],
+    [selectedCategory, activeProjectNicheId, currentArtistId, db],
   );
 
   // Update lyrics
   const handleUpdateLyrics = useCallback(
     async (lyricsId, updates) => {
-      // Library mode
-      if (!selectedCategory) {
-        if (currentArtistId) {
-          await updateLyricsAsync(db, currentArtistId, lyricsId, updates);
-          // Also update selectedLibraryMedia so the editor sees saved word timings immediately
-          setSelectedLibraryMedia((prev) => ({
-            ...prev,
-            lyrics: (prev.lyrics || []).map((l) =>
-              l.id === lyricsId ? { ...l, ...updates, updatedAt: new Date().toISOString() } : l,
-            ),
-          }));
-        }
-        return;
-      }
+      if (!currentArtistId) return;
 
-      // Category mode
-      setCategories((prev) =>
-        prev.map((cat) =>
-          cat.id === selectedCategory.id
+      // Always persist via lyrics service (Firestore + localStorage)
+      await updateLyricsAsync(db, currentArtistId, lyricsId, updates);
+
+      if (!selectedCategory) {
+        // Library mode: also update selectedLibraryMedia
+        setSelectedLibraryMedia((prev) => ({
+          ...prev,
+          lyrics: (prev.lyrics || []).map((l) =>
+            l.id === lyricsId ? { ...l, ...updates, updatedAt: new Date().toISOString() } : l,
+          ),
+        }));
+      } else {
+        // Category mode: also update category state for in-session UI
+        setCategories((prev) =>
+          prev.map((cat) =>
+            cat.id === selectedCategory.id
+              ? {
+                  ...cat,
+                  lyrics: (cat.lyrics || []).map((l) =>
+                    l.id === lyricsId
+                      ? { ...l, ...updates, updatedAt: new Date().toISOString() }
+                      : l,
+                  ),
+                }
+              : cat,
+          ),
+        );
+
+        setSelectedCategory((prev) =>
+          prev
             ? {
-                ...cat,
-                lyrics: (cat.lyrics || []).map((l) =>
+                ...prev,
+                lyrics: (prev.lyrics || []).map((l) =>
                   l.id === lyricsId ? { ...l, ...updates, updatedAt: new Date().toISOString() } : l,
                 ),
               }
-            : cat,
-        ),
-      );
-
-      setSelectedCategory((prev) =>
-        prev
-          ? {
-              ...prev,
-              lyrics: (prev.lyrics || []).map((l) =>
-                l.id === lyricsId ? { ...l, ...updates, updatedAt: new Date().toISOString() } : l,
-              ),
-            }
-          : prev,
-      );
+            : prev,
+        );
+      }
     },
     [selectedCategory, currentArtistId, db],
   );
@@ -3090,31 +3101,30 @@ const VideoStudio = ({
   // Delete lyrics from bank
   const handleDeleteLyrics = useCallback(
     async (lyricsId) => {
-      // Library mode
-      if (!selectedCategory) {
-        if (currentArtistId) {
-          await deleteLyricsAsync(db, currentArtistId, lyricsId);
-        }
-        return;
+      if (!currentArtistId) return;
+
+      // Always persist via lyrics service (Firestore + localStorage)
+      await deleteLyricsAsync(db, currentArtistId, lyricsId);
+
+      if (selectedCategory) {
+        // Category mode: also update category state for in-session UI
+        setCategories((prev) =>
+          prev.map((cat) =>
+            cat.id === selectedCategory.id
+              ? { ...cat, lyrics: (cat.lyrics || []).filter((l) => l.id !== lyricsId) }
+              : cat,
+          ),
+        );
+
+        setSelectedCategory((prev) =>
+          prev
+            ? {
+                ...prev,
+                lyrics: (prev.lyrics || []).filter((l) => l.id !== lyricsId),
+              }
+            : prev,
+        );
       }
-
-      // Category mode
-      setCategories((prev) =>
-        prev.map((cat) =>
-          cat.id === selectedCategory.id
-            ? { ...cat, lyrics: (cat.lyrics || []).filter((l) => l.id !== lyricsId) }
-            : cat,
-        ),
-      );
-
-      setSelectedCategory((prev) =>
-        prev
-          ? {
-              ...prev,
-              lyrics: (prev.lyrics || []).filter((l) => l.id !== lyricsId),
-            }
-          : prev,
-      );
     },
     [selectedCategory, currentArtistId, db],
   );
@@ -3770,6 +3780,7 @@ const VideoStudio = ({
             db={db}
             user={user}
             artistId={currentArtistId}
+            artistName={artists.find((a) => a.id === currentArtistId)?.name || 'Unknown'}
             projectId={activeProjectId}
             initialNicheId={activeProjectNicheId}
             latePages={latePages}
@@ -3799,6 +3810,7 @@ const VideoStudio = ({
               nicheSourceVideos,
               bankIds,
               nicheObject,
+              clipIds,
             ) => {
               if (nicheId) {
                 setSelectedCategory(null); // Clear stale category so pipelineCategory is used
@@ -3815,6 +3827,7 @@ const VideoStudio = ({
                 setPipelineCategoryVersion((v) => v + 1); // Force recompute to pick up latest text banks
               }
               setSelectedMediaBankIds(bankIds || null);
+              setSelectedClipIds(clipIds || null);
               setClipperSourceVideos(nicheSourceVideos || []);
               // Clipper: compute bank labels from niche + handle session objects
               if (format?.id === 'clipper' && nicheId && currentArtistId) {
@@ -3880,6 +3893,7 @@ const VideoStudio = ({
             <ProjectWizard
               db={db}
               artistId={currentArtistId}
+              artistName={artists.find((a) => a.id === currentArtistId)?.name || 'Unknown'}
               latePages={latePages}
               manualAccounts={manualAccounts}
               onComplete={(projId) => handleOpenProject(projId)}
@@ -4082,6 +4096,7 @@ const VideoStudio = ({
                   }}
                   artistId={currentArtistId}
                   db={db}
+                  user={user}
                   showTemplatePicker={schedulerEditPostId ? false : showTemplatePicker}
                   schedulerEditMode={!!schedulerEditPostId}
                   initialEditorMode={initialEditorMode}

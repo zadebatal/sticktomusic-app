@@ -110,13 +110,16 @@ const ApprovalQueue = ({
     );
   }
 
-  // Get preview URL
+  // Get preview URL — fall back to local references so local-only drafts
+  // don't render a broken thumbnail.
   const thumbnailUrl =
     currentDraft.thumbnailUrl ||
     currentDraft.cloudUrl ||
+    currentDraft.localUrl ||
     currentDraft.montagePhotos?.[0]?.url ||
+    currentDraft.montagePhotos?.[0]?.localUrl ||
     null;
-  const videoUrl = currentDraft.cloudUrl || null;
+  const videoUrl = currentDraft.cloudUrl || currentDraft.localUrl || null;
   const draftName = currentDraft.name || currentDraft.title || `Draft ${currentIndex + 1}`;
   const editorMode = currentDraft.editorMode || 'unknown';
   const clipCount =

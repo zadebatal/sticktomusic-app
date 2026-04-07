@@ -26,7 +26,7 @@ import {
   exportSlideshowAsImages,
   generateSlideThumbnail,
 } from '../../services/slideshowExportService';
-import { uploadFile } from '../../services/firebaseStorage';
+import { uploadFile, uploadFileWithQuota } from '../../services/firebaseStorage';
 import { startPolling } from '../../services/postStatusPolling';
 import { getAuth } from 'firebase/auth';
 import log from '../../utils/logger';
@@ -75,6 +75,7 @@ import * as SubframeCore from '@subframe/core';
  */
 const SchedulingPage = ({
   db,
+  user = null,
   artistId,
   accounts = [],
   lateAccountIds = {},
@@ -1146,6 +1147,26 @@ const SchedulingPage = ({
         throw new Error('No video clips to render');
       }
 
+      // Pre-flight: count clips whose source URL is a stale `blob:` reference.
+      // `videoExportService` will silently filter these (intentional — they
+      // can't be re-fetched cross-session), but the user needs to know the
+      // rendered output will be missing material. This was a silent
+      // data-loss UX trap before — see QA-94 #8.
+      const isStaleBlob = (u) => typeof u === 'string' && u.startsWith('blob:');
+      const blobClipCount = editorState.clips.filter(
+        (c) => isStaleBlob(c.url) && !c.localUrl && !c.localPath,
+      ).length;
+      if (blobClipCount === editorState.clips.length) {
+        throw new Error(
+          `All ${blobClipCount} clip(s) reference stale blob URLs that can no longer be loaded — re-import the source media before rendering.`,
+        );
+      }
+      if (blobClipCount > 0) {
+        toastError(
+          `${blobClipCount} clip${blobClipCount === 1 ? '' : 's'} will be skipped — source no longer accessible. Re-import to include them.`,
+        );
+      }
+
       setRenderingPostId(post.id);
       setRenderProgress(0);
       try {
@@ -1159,9 +1180,14 @@ const SchedulingPage = ({
         const isMP4 = blob.type.includes('mp4');
         const ext = isMP4 ? 'mp4' : 'webm';
         const uploadType = isMP4 ? 'video/mp4' : 'video/webm';
-        const { url: cloudUrl } = await uploadFile(
+        // Quota-enforced upload — bypassing this lets users blow past their plan.
+        const quotaCtx = { userData: user, userEmail: user?.email };
+        const { url: cloudUrl } = await uploadFileWithQuota(
           new File([blob], `${post.contentId || post.id}.${ext}`, { type: uploadType }),
           'videos',
+          null,
+          {},
+          quotaCtx,
         );
 
         log('[Schedule] Upload complete:', cloudUrl);
@@ -1173,7 +1199,7 @@ const SchedulingPage = ({
         setRenderProgress(0);
       }
     },
-    [handleUpdatePost],
+    [handleUpdatePost, user, toastError],
   );
 
   // ── Publish / push a post to Late.co (auto-renders if needed) ──
@@ -1307,17 +1333,27 @@ const SchedulingPage = ({
             }
 
             if (images) {
+              // Skip stale blob: URLs — they're unresolvable on the next page load
+              // and would silently make scheduled audio disappear hours later.
+              const candidateAudioUrl =
+                post.audioUrl ||
+                post.editorState?.audio?.url ||
+                post.editorState?.audio?.localUrl ||
+                null;
+              const audioUrl =
+                candidateAudioUrl && !candidateAudioUrl.startsWith('blob:')
+                  ? candidateAudioUrl
+                  : null;
+              if (candidateAudioUrl && candidateAudioUrl.startsWith('blob:')) {
+                log.warn('[Schedule] Dropping stale blob audio URL for post:', post.id);
+              }
               const result = await onSchedulePost({
                 caption: buildPlatformCaption(entry.platform),
                 platforms: [entry],
                 scheduledFor: post.scheduledTime || new Date().toISOString(),
                 type: 'carousel',
                 images,
-                audioUrl:
-                  post.audioUrl ||
-                  post.editorState?.audio?.url ||
-                  post.editorState?.audio?.localUrl ||
-                  null,
+                audioUrl,
               });
 
               if (result?.success === false) {
@@ -1598,20 +1634,27 @@ const SchedulingPage = ({
     handlePublishPost,
   ]);
 
-  // ── Auto-Schedule Approved Drafts ──
-  const handleAutoScheduleApproved = useCallback(async () => {
+  // ── Auto-Schedule Ready Content ──
+  const handleAutoScheduleReady = useCallback(async () => {
     if (!db || !artistId) return;
     const content = getCreatedContent(artistId);
-    const approved = (content.videos || []).filter((v) => v.status === 'approved');
-    if (approved.length === 0) {
-      toastInfo('No approved drafts to schedule');
+    const readyItems = [
+      ...(content.videos || [])
+        .filter((v) => v.status === 'ready')
+        .map((v) => ({ ...v, type: 'video' })),
+      ...(content.slideshows || [])
+        .filter((s) => s.status === 'ready')
+        .map((s) => ({ ...s, type: 'slideshow' })),
+    ];
+    if (readyItems.length === 0) {
+      toastInfo('No ready content to schedule');
       return;
     }
 
-    // Create scheduled posts from approved drafts
-    const newPosts = approved.map((draft) => ({
+    // Create scheduled posts from ready content
+    const newPosts = readyItems.map((draft) => ({
       contentId: draft.id,
-      contentType: 'video',
+      contentType: draft.type || 'video',
       contentName: draft.name || draft.title || 'Untitled',
       thumbnail: draft.thumbnail || null,
       cloudUrl: draft.cloudUrl || null,
@@ -1626,11 +1669,11 @@ const SchedulingPage = ({
       const newIds = new Set(created.map((p) => p.id));
       setSelectedPostIds(newIds);
       toastSuccess(
-        `Added ${created.length} approved draft${created.length !== 1 ? 's' : ''} to queue — set cadence and schedule`,
+        `Added ${created.length} ready item${created.length !== 1 ? 's' : ''} to queue — set cadence and schedule`,
       );
     } catch (err) {
       log.error('[Schedule] Auto-schedule failed:', err);
-      toastError('Failed to add approved drafts: ' + err.message);
+      toastError('Failed to add ready content: ' + err.message);
     }
   }, [db, artistId, toastSuccess, toastError, toastInfo]);
 
@@ -1763,17 +1806,26 @@ const SchedulingPage = ({
               continue;
             }
 
+            // Skip stale blob: URLs — see candidateAudioUrl above for rationale.
+            const candidateBulkAudio =
+              post.audioUrl ||
+              post.editorState?.audio?.url ||
+              post.editorState?.audio?.localUrl ||
+              null;
+            const bulkAudioUrl =
+              candidateBulkAudio && !candidateBulkAudio.startsWith('blob:')
+                ? candidateBulkAudio
+                : null;
+            if (candidateBulkAudio && candidateBulkAudio.startsWith('blob:')) {
+              log.warn('[Schedule] Bulk: dropping stale blob audio for post:', post.id);
+            }
             const result = await onSchedulePost({
               caption,
               platforms: [entry],
               scheduledFor: post.scheduledTime || new Date().toISOString(),
               type: 'carousel',
               images,
-              audioUrl:
-                post.audioUrl ||
-                post.editorState?.audio?.url ||
-                post.editorState?.audio?.localUrl ||
-                null,
+              audioUrl: bulkAudioUrl,
             });
 
             if (result?.success === false) {
@@ -2450,11 +2502,11 @@ const SchedulingPage = ({
             </button>
             <button
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-body font-body bg-transparent border-none cursor-pointer text-indigo-400 hover:text-indigo-300 transition-colors"
-              onClick={handleAutoScheduleApproved}
-              title="Import approved drafts into the schedule queue"
+              onClick={handleAutoScheduleReady}
+              title="Import ready content into the schedule queue"
             >
               <FeatherPlus style={{ width: 14, height: 14 }} />
-              Auto-Schedule Approved
+              Auto-Schedule Ready
             </button>
           </div>
           <div className="flex w-full items-center justify-between">
@@ -4580,15 +4632,19 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
     loadContent();
   }, [artistId]);
 
-  const allItems = [
-    ...content.videos.map((v) => ({ ...v, type: 'video' })),
-    ...content.slideshows.map((s) => ({ ...s, type: 'slideshow' })),
-  ];
+  // Only show items marked as 'ready' for scheduling
+  const readyVideos = content.videos
+    .filter((v) => v.status === 'ready')
+    .map((v) => ({ ...v, type: 'video' }));
+  const readySlideshows = content.slideshows
+    .filter((s) => s.status === 'ready')
+    .map((s) => ({ ...s, type: 'slideshow' }));
+  const allItems = [...readyVideos, ...readySlideshows];
 
   const tabItems = {
     all: allItems,
-    videos: content.videos.map((v) => ({ ...v, type: 'video' })),
-    slideshows: content.slideshows.map((s) => ({ ...s, type: 'slideshow' })),
+    videos: readyVideos,
+    slideshows: readySlideshows,
   };
 
   const items = tabItems[selectedTab] || [];
@@ -4609,7 +4665,7 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
     <div style={s.modalOverlay} onClick={onClose}>
       <div style={s.modalContent} onClick={(e) => e.stopPropagation()}>
         <div style={s.modalHeader}>
-          <h2 style={s.modalTitle}>Add from Drafts</h2>
+          <h2 style={s.modalTitle}>Add from Ready Content</h2>
           <IconButton size="small" icon={<FeatherX />} aria-label="Close" onClick={onClose} />
         </div>
         <div style={{ padding: '8px 16px', borderBottom: `1px solid ${theme.bg.elevated}` }}>
@@ -4622,13 +4678,13 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
               }
             }}
           >
-            <ToggleGroup.Item value="all" aria-label="Show all drafts">
+            <ToggleGroup.Item value="all" aria-label="Show all ready content">
               All
             </ToggleGroup.Item>
-            <ToggleGroup.Item value="videos" aria-label="Show video drafts">
+            <ToggleGroup.Item value="videos" aria-label="Show ready videos">
               Videos
             </ToggleGroup.Item>
-            <ToggleGroup.Item value="slideshows" aria-label="Show slideshow drafts">
+            <ToggleGroup.Item value="slideshows" aria-label="Show ready slideshows">
               Slideshows
             </ToggleGroup.Item>
           </ToggleGroup>
@@ -4650,7 +4706,7 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
                     gridColumn: '1 / -1',
                   }}
                 >
-                  No content available
+                  No ready content available. Mark drafts as "Ready" in the content library first.
                 </div>
               ) : (
                 items.map((item) => {

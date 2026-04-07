@@ -72,7 +72,8 @@ import { FeatherAlignLeft, FeatherAlignCenter, FeatherAlignRight } from '@subfra
 import {
   parseStroke,
   buildStroke,
-  AVAILABLE_FONTS,
+  getAvailableFonts,
+  saveCustomFont,
   makeFieldSetter,
 } from './shared/editorConstants';
 import CloseConfirmOverlay from './shared/CloseConfirmOverlay';
@@ -1374,7 +1375,11 @@ const SoloClipEditor = ({
     if (hasUnsavedWork) {
       setShowCloseConfirm(true);
     } else {
-      clearSession();
+      try {
+        clearSession();
+      } catch (err) {
+        console.warn('Editor cleanup error:', err);
+      }
       onClose();
     }
   }, [hasUnsavedWork, onClose, clearSession]);
@@ -1758,6 +1763,15 @@ const SoloClipEditor = ({
                     </Button>
                     <Button variant="neutral-secondary" size="small" onClick={handleCutByBeat}>
                       Cut by beat
+                    </Button>
+                    <Button
+                      variant="neutral-secondary"
+                      size="small"
+                      onClick={() => setShowMomentumSelector(true)}
+                      disabled={isAnalyzing || !filteredBeats.length}
+                      style={isAnalyzing ? { opacity: 0.5, cursor: 'wait' } : undefined}
+                    >
+                      {isAnalyzing ? 'Analyzing...' : 'Cut to music'}
                     </Button>
                     <Badge variant="neutral">
                       {isAnalyzing
@@ -2958,13 +2972,35 @@ const SoloClipEditor = ({
 
                       {/* Font Family */}
                       <div>
-                        <div className="text-[13px] text-neutral-500 mb-1.5">Font Family</div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[13px] text-neutral-500">Font Family</span>
+                          <label className="text-[11px] text-indigo-400 hover:text-indigo-300 cursor-pointer">
+                            + Upload
+                            <input
+                              type="file"
+                              accept=".ttf,.otf,.woff,.woff2"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                const name = file.name.replace(/\.(ttf|otf|woff2?)$/i, '');
+                                const reader = new FileReader();
+                                reader.onload = () => {
+                                  saveCustomFont(name, reader.result);
+                                  handleStyleChange({ fontFamily: `'${name}', sans-serif` });
+                                };
+                                reader.readAsDataURL(file);
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
+                        </div>
                         <select
                           value={activeStyle.fontFamily || "'Inter', sans-serif"}
                           onChange={(e) => handleStyleChange({ fontFamily: e.target.value })}
                           className="w-full px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-50 text-white text-[13px] outline-none cursor-pointer"
                         >
-                          {AVAILABLE_FONTS.map((f) => (
+                          {getAvailableFonts().map((f) => (
                             <option key={f.name} value={f.value}>
                               {f.name}
                             </option>
@@ -3099,6 +3135,18 @@ const SoloClipEditor = ({
                               bold: true,
                             },
                             {
+                              key: 'italic',
+                              label: 'I',
+                              ariaLabel: 'Italic',
+                              active: activeStyle.fontStyle === 'italic',
+                              toggle: () =>
+                                handleStyleChange({
+                                  fontStyle:
+                                    activeStyle.fontStyle === 'italic' ? 'normal' : 'italic',
+                                }),
+                              italic: true,
+                            },
+                            {
                               key: 'caps',
                               label: 'AA',
                               ariaLabel: 'All caps',
@@ -3136,6 +3184,7 @@ const SoloClipEditor = ({
                               icon={
                                 <span
                                   className={`text-xs ${btn.bold ? 'font-bold' : 'font-semibold'}`}
+                                  style={btn.italic ? { fontStyle: 'italic' } : undefined}
                                 >
                                   {btn.label}
                                 </span>
@@ -3303,7 +3352,7 @@ const SoloClipEditor = ({
 
       <EditorFooter
         lastSaved={lastSaved}
-        onCancel={onClose}
+        onCancel={handleCloseRequest}
         onSaveAll={handleSaveAllAndClose}
         isSavingAll={isSavingAll}
         saveAllCount={allVideos.length}

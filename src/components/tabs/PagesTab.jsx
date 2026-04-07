@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useToast } from '../ui';
+import * as pageLinkUtils from '../../utils/pageLinkGroups';
 import { getLateProfiles, createLateProfile, getConnectUrl } from '../../services/lateService';
 import useIsMobile from '../../hooks/useIsMobile';
 import { Button } from '../../ui/components/Button';
@@ -422,6 +423,54 @@ const PagesTab = ({
   const [expandedArtists, setExpandedArtists] = useState({});
   const [expandedHandles, setExpandedHandles] = useState({});
   const [bulkEntryArtistId, setBulkEntryArtistId] = useState(null);
+  const [linkingHandle, setLinkingHandle] = useState(null); // { artistId, handle }
+
+  // Link groups from shared utility
+  const [linkGroups, setLinkGroups] = useState(() => pageLinkUtils.getLinkGroups());
+  const getLinkGroupId = (artistId, normHandle) => {
+    for (const [groupId, members] of Object.entries(linkGroups)) {
+      if (members.some((m) => m.artistId === artistId && m.handle === normHandle)) return groupId;
+    }
+    return null;
+  };
+  const handleLinkHandles = (artistId, handle1, handle2) => {
+    const gid1 = getLinkGroupId(artistId, handle1);
+    const gid2 = getLinkGroupId(artistId, handle2);
+    if (gid1 && gid2 && gid1 === gid2) return;
+    const newGroupId = gid1 || gid2 || `lg_${Date.now()}`;
+    const members = [
+      ...(gid1 ? linkGroups[gid1] : [{ artistId, handle: handle1 }]),
+      ...(gid2 ? linkGroups[gid2] : [{ artistId, handle: handle2 }]),
+    ];
+    const seen = new Set();
+    const unique = members.filter((m) => {
+      const key = `${m.artistId}:${m.handle}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const updated = { ...linkGroups };
+    if (gid1 && gid1 !== newGroupId) delete updated[gid1];
+    if (gid2 && gid2 !== newGroupId) delete updated[gid2];
+    updated[newGroupId] = unique;
+    pageLinkUtils.saveLinkGroups(updated);
+    setLinkGroups(updated);
+    toastSuccess(`Linked @${handle1} ↔ @${handle2}`);
+    setLinkingHandle(null);
+  };
+  const handleUnlinkHandle = (artistId, normHandle) => {
+    const gid = getLinkGroupId(artistId, normHandle);
+    if (!gid) return;
+    const remaining = linkGroups[gid].filter(
+      (m) => !(m.artistId === artistId && m.handle === normHandle),
+    );
+    const updated = { ...linkGroups };
+    if (remaining.length <= 1) delete updated[gid];
+    else updated[gid] = remaining;
+    pageLinkUtils.saveLinkGroups(updated);
+    setLinkGroups(updated);
+    toastSuccess(`Unlinked @${normHandle}`);
+  };
   const [showPasswords, setShowPasswords] = useState({});
   const togglePw = (key) => setShowPasswords((prev) => ({ ...prev, [key]: !prev[key] }));
 
@@ -833,7 +882,7 @@ const PagesTab = ({
                                   {/* Handle Row */}
                                   <div
                                     onClick={() => toggleHandle(handleKey)}
-                                    className={`cursor-pointer px-6 py-3 flex items-center justify-between gap-4 hover:opacity-80 transition ${t.bgPage}`}
+                                    className={`group cursor-pointer px-6 py-3 flex items-center justify-between gap-4 hover:opacity-80 transition ${t.bgPage}`}
                                   >
                                     <div className="flex items-center gap-3 min-w-0 flex-1">
                                       {profilePic ? (
@@ -855,9 +904,57 @@ const PagesTab = ({
                                         </div>
                                       )}
                                       <div className="min-w-0 flex-1">
-                                        <span className={`font-semibold text-sm ${t.textPrimary}`}>
-                                          {displayHandle}
-                                        </span>
+                                        <div className="flex items-center gap-2">
+                                          <span
+                                            className={`font-semibold text-sm ${t.textPrimary}`}
+                                          >
+                                            {displayHandle}
+                                          </span>
+                                          {getLinkGroupId(artist.id, normalizedHandle) && (
+                                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400">
+                                              linked
+                                            </span>
+                                          )}
+                                          {linkingHandle &&
+                                          linkingHandle.artistId === artist.id &&
+                                          linkingHandle.handle !== normalizedHandle ? (
+                                            <button
+                                              className="text-[10px] px-2 py-0.5 rounded bg-indigo-600 text-white border-none cursor-pointer hover:bg-indigo-500"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleLinkHandles(
+                                                  artist.id,
+                                                  linkingHandle.handle,
+                                                  normalizedHandle,
+                                                );
+                                              }}
+                                            >
+                                              Link here
+                                            </button>
+                                          ) : (
+                                            <button
+                                              className="text-[10px] px-1.5 py-0.5 rounded bg-transparent border border-neutral-200 text-neutral-400 cursor-pointer hover:text-white hover:border-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (getLinkGroupId(artist.id, normalizedHandle)) {
+                                                  handleUnlinkHandle(artist.id, normalizedHandle);
+                                                } else {
+                                                  setLinkingHandle({
+                                                    artistId: artist.id,
+                                                    handle: normalizedHandle,
+                                                  });
+                                                  toastSuccess(
+                                                    `Click another handle to link with @${normalizedHandle}`,
+                                                  );
+                                                }
+                                              }}
+                                            >
+                                              {getLinkGroupId(artist.id, normalizedHandle)
+                                                ? 'Unlink'
+                                                : 'Link'}
+                                            </button>
+                                          )}
+                                        </div>
                                         <div className="flex gap-1.5 mt-1 flex-wrap">
                                           {/* Late platform badges (solid) */}
                                           {pages.map((page) => {

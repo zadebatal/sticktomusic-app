@@ -62,6 +62,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('generate-local-thumbnail', videoPath, outputPath),
   renamePath: (oldPath, newPath) =>
     ipcRenderer.invoke('rename-path', oldPath, newPath),
+  trimVideoDestructive: (fullPath, trimStart, trimEnd) =>
+    ipcRenderer.invoke('trim-video-destructive', fullPath, trimStart, trimEnd),
+
+  // ── CLIP Semantic Search ──
+  clipIndexMedia: (artistId, mediaItem) =>
+    ipcRenderer.invoke('clip-index-media', { artistId, mediaItem }),
+  clipSearch: (artistId, query, options = {}) =>
+    ipcRenderer.invoke('clip-search', { artistId, query, ...options }),
+  clipIndexStatus: (artistId) =>
+    ipcRenderer.invoke('clip-index-status', { artistId }),
+  clipReindexAll: (artistId, mediaItems) =>
+    ipcRenderer.invoke('clip-reindex-all', { artistId, mediaItems }),
+  onClipReindexProgress: (cb) => {
+    ipcRenderer.on('clip-reindex-progress', (_event, data) => cb(data));
+  },
+
+  // ── Remotion Rendering ──
+  remotionRender: (params) => ipcRenderer.invoke('remotion-render', params),
+  onRemotionProgress: (cb) => {
+    ipcRenderer.on('remotion-progress', (_event, progress) => cb(progress));
+  },
 
   // ── Onboarding ──
   isOnboardingComplete: () => ipcRenderer.invoke('is-onboarding-complete'),
@@ -73,6 +94,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ytdlpInfo: (url) => ipcRenderer.invoke('ytdlp-info', url),
   onYtdlpProgress: (cb) => {
     ipcRenderer.on('ytdlp-progress', (_event, data) => cb(data));
+  },
+
+  // ── Command Palette (Cmd+K from native menu) ──
+  onToggleCommandPalette: (cb) => {
+    ipcRenderer.on('toggle-command-palette', () => cb());
   },
 
   // ── Local Montage Rip (yt-dlp + FFmpeg scene detect) ──

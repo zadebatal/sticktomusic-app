@@ -372,7 +372,14 @@ const WizardStepBanks = ({
   const handleWebImportComplete = useCallback(
     async (files, bankIdx) => {
       const nicheId = showWebImport;
-      if (!nicheId || !files?.length) return;
+      log(
+        `[WizardBanks] Web import complete: ${files?.length || 0} files, nicheId=${nicheId}, bankIdx=${bankIdx}`,
+      );
+      if (!nicheId || !files?.length) {
+        log.warn(`[WizardBanks] Import skipped — nicheId=${nicheId}, files=${files?.length}`);
+        setShowWebImport(null);
+        return;
+      }
 
       let imported = 0;
       for (const file of files) {
@@ -380,9 +387,10 @@ const WizardStepBanks = ({
           const item = {
             type: file.type || 'video',
             name: file.name,
-            url: file.url,
+            url: file.url || file.localUrl,
             thumbnailUrl: file.thumbnailUrl || null,
             storagePath: file.storagePath || null,
+            localPath: file.path || null,
             collectionIds: [nicheId],
             metadata: { fileSize: file.size, source: 'web-import' },
           };

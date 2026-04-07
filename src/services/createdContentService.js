@@ -657,6 +657,14 @@ export const permanentlyDeleteContentAsync = async (db, artistId, itemId) => {
   try {
     const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', itemId);
     await deleteDoc(docRef);
+    // Cascade-delete any scheduled posts that referenced this content.
+    // Lazy-import to avoid a service-layer circular dep.
+    try {
+      const { deletePostsByContentId } = await import('./scheduledPostsService');
+      await deletePostsByContentId(db, artistId, itemId);
+    } catch (err) {
+      log.warn('[Library] Cascade delete of scheduled posts failed:', err.message);
+    }
     log('[Library] Permanently deleted content:', itemId);
     return true;
   } catch (error) {

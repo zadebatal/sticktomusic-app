@@ -348,6 +348,7 @@ export const StatusPill = ({ status, size = 'sm' }) => {
     // Positive
     scheduled: { bg: 'bg-green-900/50', text: 'text-green-400', label: 'Scheduled' },
     active: { bg: 'bg-green-900/50', text: 'text-green-400', label: 'Active' },
+    ready: { bg: 'bg-green-900/50', text: 'text-green-400', label: 'Ready' },
     approved: { bg: 'bg-green-900/50', text: 'text-green-400', label: 'Approved' },
     posted: { bg: 'bg-green-900/50', text: 'text-green-400', label: 'Posted' },
     published: { bg: 'bg-green-900/50', text: 'text-green-400', label: 'Posted' }, // Late uses "published"

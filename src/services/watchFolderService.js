@@ -16,7 +16,7 @@ import {
   isAuthenticated as isDbxAuth,
   detectMediaType as dbxDetectMediaType,
 } from './dropboxService';
-import { uploadFile } from './firebaseStorage';
+import { uploadFile, uploadFileWithQuota } from './firebaseStorage';
 import {
   createMediaItem,
   addToLibraryAsync,
@@ -223,6 +223,7 @@ export async function syncWatchFolder(
   db,
   onProgress,
   artistName = '',
+  user = null,
 ) {
   const { provider, folderId, lastSyncAt } = watchConfig;
   const errors = [];
@@ -281,7 +282,8 @@ export async function syncWatchFolder(
       }
       if (!localPath) {
         const folder = storageFolderForType(mediaType);
-        const uploadResult = await uploadFile(fileObj, folder);
+        const quotaCtx = { userData: user, userEmail: user?.email };
+        const uploadResult = await uploadFileWithQuota(fileObj, folder, null, {}, quotaCtx);
         url = uploadResult.url;
         storagePath = uploadResult.path;
       }

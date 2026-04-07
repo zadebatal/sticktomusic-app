@@ -8,7 +8,10 @@
 import { getLibraryAsync } from './libraryService';
 import log from '../utils/logger';
 
-const isElectron = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
+// Lazy — see localMediaService.js for rationale.
+function isElectron() {
+  return typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
+}
 
 /**
  * Map media type to folder name on drive.
@@ -36,7 +39,7 @@ function safeName(name) {
  * @returns {Promise<Array<{ artistId, artistName, files, byType, totalSize, totalCount, localCount, needsSync }>>}
  */
 export async function scanForSync(db, artists) {
-  if (!isElectron) return [];
+  if (!isElectron()) return [];
 
   const results = [];
 
@@ -47,12 +50,15 @@ export async function scanForSync(db, artists) {
       (item) => item.url && !item.url.startsWith('blob:') && item.name,
     );
 
-    // Check which files already exist locally
+    // Check which files already exist locally (try new flat path, then legacy)
     let localCount = 0;
     for (const file of files) {
-      const relativePath = `StickToMusic/${safeName(artist.name)}/${typeToFolder(file.type)}/${file.name}`;
+      const newPath = `StickToMusic/${safeName(artist.name)}/media/${file.name}`;
+      const legacyPath = `StickToMusic/${safeName(artist.name)}/${typeToFolder(file.type)}/${file.name}`;
       try {
-        const exists = await window.electronAPI.checkFileExists(relativePath);
+        const exists =
+          (await window.electronAPI.checkFileExists(newPath)) ||
+          (await window.electronAPI.checkFileExists(legacyPath));
         if (exists) localCount++;
       } catch {
         // ignore check errors
@@ -90,7 +96,7 @@ export async function scanForSync(db, artists) {
  * @returns {Promise<{ synced: number, failed: number, skipped: number }>}
  */
 export async function syncArtistMedia(db, artist, onProgress) {
-  if (!isElectron) return { synced: 0, failed: 0, skipped: 0 };
+  if (!isElectron()) return { synced: 0, failed: 0, skipped: 0 };
 
   const library = await getLibraryAsync(db, artist.id);
   const files = (library || []).filter(
@@ -104,11 +110,15 @@ export async function syncArtistMedia(db, artist, onProgress) {
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    const relativePath = `StickToMusic/${artistFolder}/${typeToFolder(file.type)}/${file.name}`;
+    // Save to new flat path
+    const relativePath = `StickToMusic/${artistFolder}/media/${file.name}`;
+    const legacyPath = `StickToMusic/${artistFolder}/${typeToFolder(file.type)}/${file.name}`;
 
-    // Skip if already exists locally
+    // Skip if already exists locally (check both paths)
     try {
-      const exists = await window.electronAPI.checkFileExists(relativePath);
+      const exists =
+        (await window.electronAPI.checkFileExists(relativePath)) ||
+        (await window.electronAPI.checkFileExists(legacyPath));
       if (exists) {
         skipped++;
         onProgress?.(artist.id, i + 1, files.length, file.name);
@@ -119,7 +129,7 @@ export async function syncArtistMedia(db, artist, onProgress) {
     }
 
     try {
-      // Download from Firebase Storage URL
+      // Download from Firebase Storage URL → save to new flat path
       const response = await fetch(file.url);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();

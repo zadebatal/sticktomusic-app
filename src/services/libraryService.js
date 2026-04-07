@@ -24,6 +24,7 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp,
+  runTransaction,
 } from 'firebase/firestore';
 import log from '../utils/logger';
 
@@ -279,9 +280,13 @@ const _firestoreCollectionsCache = new Map(); // artistId → collections[]
 export const createMediaItem = ({
   type,
   name,
-  url,
+  url = null,
   thumbnailUrl = null,
   storagePath = null,
+  localPath = null,
+  localUrl = null,
+  syncStatus = null,
+  collectionIds = [],
   duration = null,
   width = null,
   height = null,
@@ -290,14 +295,23 @@ export const createMediaItem = ({
   metadata = {},
 }) => {
   const now = new Date().toISOString();
+  // Default syncStatus by what we actually have:
+  //   localPath only → 'local'
+  //   url only → 'cloud'
+  //   both → 'synced'
+  //   neither → 'cloud' (legacy default)
+  const computedSyncStatus =
+    syncStatus || (localPath && url ? 'synced' : localPath ? 'local' : 'cloud');
   return {
     id: `media_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     type, // video | image | audio
     name,
-    url, // Firebase Storage URL (permanent, full-res)
-    thumbnailUrl, // Firebase Storage URL (small ~300px version for grids)
-    localUrl: url, // Alias for components that expect localUrl
-    storagePath, // Path in Firebase Storage
+    // Use null (NOT undefined) when missing — Firestore rejects undefined values.
+    url: url || null, // Firebase Storage URL (permanent, full-res)
+    thumbnailUrl: thumbnailUrl || null, // Firebase Storage URL (small ~300px version for grids)
+    // Prefer explicit localUrl, then file:// from localPath, then fall back to cloud url.
+    localUrl: localUrl || url || null,
+    storagePath: storagePath || null, // Path in Firebase Storage
     duration, // For video/audio
     width, // For video/image
     height, // For video/image
@@ -313,7 +327,7 @@ export const createMediaItem = ({
     linkedLyricsId: metadata.linkedLyricsId ?? null,
 
     // Organization
-    collectionIds: [], // Which collections this belongs to
+    collectionIds, // Which collections this belongs to
     tags: [], // User-defined tags
     isFavorite: false,
 
@@ -331,8 +345,8 @@ export const createMediaItem = ({
     },
 
     // Local drive (Electron desktop)
-    syncStatus: 'cloud', // 'cloud' | 'local' | 'synced' | 'offline'
-    localPath: null, // relative path on drive (e.g. 'StickToMusic/Artist/videos/clip.mp4')
+    syncStatus: computedSyncStatus, // 'cloud' | 'local' | 'synced' | 'offline'
+    localPath: localPath || null, // relative path on drive (e.g. 'StickToMusic/Artist/media/clip.mp4')
 
     // Timestamps
     createdAt: now,
@@ -482,7 +496,8 @@ export const saveLibrary = (artistId, library) => {
         thumbnail: null, // Never persist thumbnails
         url: item.url?.startsWith('blob:') ? null : item.url, // Remove blob URLs
       }))
-      .filter((item) => item.url); // Only keep items with valid URLs
+      // Keep items that have EITHER a public url OR a local reference (local-first items)
+      .filter((item) => item.url || item.localPath || item.localUrl);
 
     localStorage.setItem(getLibraryKey(artistId), JSON.stringify(cleanedLibrary));
   } catch (error) {
@@ -863,7 +878,16 @@ export const deleteCollection = (artistId, collectionId, db = null) => {
   saveLibrary(artistId, library);
 
   saveCollections(artistId, filtered);
-  if (db) deleteCollectionFromFirestore(db, artistId, collectionId).catch(log.error);
+  if (db) {
+    deleteCollectionFromFirestore(db, artistId, collectionId).catch(log.error);
+    // Cascade-delete any scheduled posts that referenced this collection/niche.
+    // Lazy-import to avoid a service-layer circular dep.
+    import('./scheduledPostsService')
+      .then(({ deletePostsByCollectionId }) =>
+        deletePostsByCollectionId(db, artistId, collectionId),
+      )
+      .catch(log.error);
+  }
   return true;
 };
 
@@ -1345,31 +1369,34 @@ export const addToTextBank = (artistId, collectionId, bankNum, text, db = null) 
     saveCollections(artistId, collections);
   }
   if (db) {
-    // When collection wasn't in localStorage, read current Firestore doc and merge textBanks
+    // When collection wasn't in localStorage, use a transaction to atomically
+    // read + merge + write the textBanks. This prevents the lost-update race
+    // when two devices add to the same bank concurrently.
     if (!foundInLocal) {
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', collectionId);
-      getDoc(docRef)
-        .then((snap) => {
-          if (snap.exists()) {
-            const data = snap.data();
-            let existingTB = data.textBanks || [];
-            if (typeof existingTB === 'string')
-              try {
-                existingTB = JSON.parse(existingTB);
-              } catch {
-                existingTB = [];
-              }
-            // Merge: ensure our new text is added to the correct bank
-            while (existingTB.length <= idx) existingTB.push([]);
-            if (!Array.isArray(existingTB[idx])) existingTB[idx] = [];
-            existingTB[idx] = [...existingTB[idx], text];
-            const updated = { ...data, textBanks: existingTB, updatedAt: new Date().toISOString() };
-            return saveCollectionToFirestore(db, artistId, updated);
-          } else {
-            return saveCollectionToFirestore(db, artistId, collection);
-          }
-        })
-        .catch((err) => log.error('[addToTextBank] Firestore merge ERROR:', err));
+      runTransaction(db, async (tx) => {
+        const snap = await tx.get(docRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          let existingTB = data.textBanks || [];
+          if (typeof existingTB === 'string')
+            try {
+              existingTB = JSON.parse(existingTB);
+            } catch {
+              existingTB = [];
+            }
+          while (existingTB.length <= idx) existingTB.push([]);
+          if (!Array.isArray(existingTB[idx])) existingTB[idx] = [];
+          existingTB[idx] = [...existingTB[idx], text];
+          tx.set(
+            docRef,
+            { ...data, textBanks: existingTB, updatedAt: new Date().toISOString() },
+            { merge: true },
+          );
+        } else {
+          tx.set(docRef, collection, { merge: true });
+        }
+      }).catch((err) => log.error('[addToTextBank] Firestore txn ERROR:', err));
     } else {
       saveCollectionToFirestore(db, artistId, collection).catch(log.error);
     }
@@ -1441,23 +1468,25 @@ export const updateTextBankEntry = (artistId, collectionId, bankNum, index, newT
     if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
   } else if (db) {
     const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', collectionId);
-    getDoc(docRef)
-      .then((snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          let existingTB = data.textBanks || [];
-          if (typeof existingTB === 'string')
-            try {
-              existingTB = JSON.parse(existingTB);
-            } catch {
-              existingTB = [];
-            }
-          applyUpdate(existingTB);
-          const updated = { ...data, textBanks: existingTB, updatedAt: new Date().toISOString() };
-          return saveCollectionToFirestore(db, artistId, updated);
-        }
-      })
-      .catch((err) => log.error('[updateTextBankEntry] Firestore merge ERROR:', err));
+    runTransaction(db, async (tx) => {
+      const snap = await tx.get(docRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        let existingTB = data.textBanks || [];
+        if (typeof existingTB === 'string')
+          try {
+            existingTB = JSON.parse(existingTB);
+          } catch {
+            existingTB = [];
+          }
+        applyUpdate(existingTB);
+        tx.set(
+          docRef,
+          { ...data, textBanks: existingTB, updatedAt: new Date().toISOString() },
+          { merge: true },
+        );
+      }
+    }).catch((err) => log.error('[updateTextBankEntry] Firestore txn ERROR:', err));
   }
 };
 
@@ -2954,45 +2983,89 @@ export const subscribeToLibrary = (db, artistId, callback) => {
 
   const mediaRef = collection(db, 'artists', artistId, 'library', 'data', 'mediaItems');
 
-  return onSnapshot(
-    mediaRef,
-    (snapshot) => {
-      const firestoreItems = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  // Retry-with-backoff wrapper around onSnapshot. The Firestore SDK auto-
+  // reconnects on transient network errors but the error callback fires for
+  // permanent errors (permission denied, invalid query, etc.) and after that
+  // the listener is dead. Without retry the UI silently freezes on the last
+  // localStorage cache forever. We retry a bounded number of times with
+  // exponential backoff so transient permission/auth races recover, but
+  // permanently broken queries eventually give up.
+  let cancelled = false;
+  let currentUnsub = () => {};
+  let retryCount = 0;
+  let retryTimer = null;
+  const MAX_RETRIES = 5;
 
-      if (firestoreItems.length > 0) {
-        // Firestore is the single source of truth
-        log('[Library] Firestore:', firestoreItems.length, 'items');
+  const start = () => {
+    if (cancelled) return;
+    currentUnsub = onSnapshot(
+      mediaRef,
+      (snapshot) => {
+        retryCount = 0; // Reset backoff on any successful snapshot
+        const firestoreItems = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 
-        // Always update in-memory cache (survives localStorage quota exceeded)
-        _firestoreLibraryCache.set(artistId, firestoreItems);
+        if (firestoreItems.length > 0) {
+          // Firestore is the single source of truth
+          log('[Library] Firestore:', firestoreItems.length, 'items');
 
-        // Cache to localStorage for offline/instant loads
+          // Always update in-memory cache (survives localStorage quota exceeded)
+          _firestoreLibraryCache.set(artistId, firestoreItems);
+
+          // Cache to localStorage for offline/instant loads
+          try {
+            saveLibrary(artistId, firestoreItems);
+          } catch (_) {
+            /* best-effort */
+          }
+
+          callback(firestoreItems);
+        } else {
+          // Firestore empty — check localStorage and upload if data exists
+          const localItems = getLibrary(artistId);
+          if (localItems.length > 0) {
+            log('[Library] Uploading', localItems.length, 'local items to Firestore');
+            localItems.forEach((item) => {
+              const docRef = doc(db, 'artists', artistId, 'library', 'data', 'mediaItems', item.id);
+              setDoc(docRef, { ...item, updatedAt: serverTimestamp() }).catch(log.error);
+            });
+          }
+          callback(localItems);
+        }
+      },
+      (error) => {
+        log.error('[Library] Subscription error:', error);
+        // Fallback to localStorage on error
+        callback(getLibrary(artistId));
+        // Tear down the dead listener and schedule a backoff retry
         try {
-          saveLibrary(artistId, firestoreItems);
-        } catch (_) {
-          /* best-effort */
+          currentUnsub();
+        } catch (_) {}
+        if (cancelled || retryCount >= MAX_RETRIES) {
+          if (!cancelled) {
+            log.error(
+              `[Library] Subscription gave up after ${MAX_RETRIES} retries — UI will not receive further updates until reload`,
+            );
+          }
+          return;
         }
+        const delay = Math.min(30000, 2000 * Math.pow(2, retryCount));
+        retryCount += 1;
+        log.warn(
+          `[Library] Retrying subscription in ${delay}ms (attempt ${retryCount}/${MAX_RETRIES})`,
+        );
+        retryTimer = setTimeout(start, delay);
+      },
+    );
+  };
 
-        callback(firestoreItems);
-      } else {
-        // Firestore empty — check localStorage and upload if data exists
-        const localItems = getLibrary(artistId);
-        if (localItems.length > 0) {
-          log('[Library] Uploading', localItems.length, 'local items to Firestore');
-          localItems.forEach((item) => {
-            const docRef = doc(db, 'artists', artistId, 'library', 'data', 'mediaItems', item.id);
-            setDoc(docRef, { ...item, updatedAt: serverTimestamp() }).catch(log.error);
-          });
-        }
-        callback(localItems);
-      }
-    },
-    (error) => {
-      log.error('[Library] Subscription error:', error);
-      // Fallback to localStorage on error
-      callback(getLibrary(artistId));
-    },
-  );
+  start();
+  return () => {
+    cancelled = true;
+    if (retryTimer) clearTimeout(retryTimer);
+    try {
+      currentUnsub();
+    } catch (_) {}
+  };
 };
 
 /**
@@ -3002,6 +3075,18 @@ export const subscribeToLibrary = (db, artistId, callback) => {
  * @param {Object} mediaItem
  * @returns {Promise<Object>} Added item
  */
+// Strip top-level undefined values — Firestore throws "Unsupported field
+// value: undefined" otherwise. Local-first items typically have several
+// undefined fields (no url, no storagePath, etc.) that need to become null.
+function stripUndefined(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === undefined) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
 export const addToLibraryAsync = async (db, artistId, mediaItem) => {
   const newItem = mediaItem.id ? mediaItem : createMediaItem(mediaItem);
 
@@ -3018,10 +3103,13 @@ export const addToLibraryAsync = async (db, artistId, mediaItem) => {
   if (db && artistId) {
     try {
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'mediaItems', newItem.id);
-      await setDoc(docRef, {
-        ...newItem,
-        updatedAt: serverTimestamp(),
-      });
+      await setDoc(
+        docRef,
+        stripUndefined({
+          ...newItem,
+          updatedAt: serverTimestamp(),
+        }),
+      );
       log('[Library] Saved to Firestore:', newItem.id);
       localResult.syncedToCloud = true;
     } catch (error) {
@@ -3055,10 +3143,13 @@ export const addManyToLibraryAsync = async (db, artistId, mediaItems) => {
 
         chunk.forEach((item) => {
           const docRef = doc(db, 'artists', artistId, 'library', 'data', 'mediaItems', item.id);
-          batch.set(docRef, {
-            ...item,
-            updatedAt: serverTimestamp(),
-          });
+          batch.set(
+            docRef,
+            stripUndefined({
+              ...item,
+              updatedAt: serverTimestamp(),
+            }),
+          );
         });
 
         await batch.commit();
@@ -3087,14 +3178,21 @@ export const updateLibraryItemAsync = async (db, artistId, mediaId, updates) => 
   // Update localStorage first
   const localResult = updateLibraryItem(artistId, mediaId, updates);
 
-  // Then update Firestore
+  // Then update Firestore. Use setDoc with merge so local-only items
+  // (which never had a Firestore doc) can be updated/created in one call.
+  // updateDoc would throw "No document to update" and silently lose the write.
   if (db && artistId && localResult) {
     try {
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'mediaItems', mediaId);
-      await updateDoc(docRef, {
-        ...updates,
-        updatedAt: serverTimestamp(),
-      });
+      await setDoc(
+        docRef,
+        stripUndefined({
+          ...localResult, // full item so a fresh doc is well-formed
+          ...updates,
+          updatedAt: serverTimestamp(),
+        }),
+        { merge: true },
+      );
       log('[Library] Updated in Firestore:', mediaId);
     } catch (error) {
       log.error('[Library] Firestore update failed:', error.message);
@@ -3170,139 +3268,178 @@ export const subscribeToCollections = (db, artistId, callback) => {
 
   const collectionsRef = collection(db, 'artists', artistId, 'library', 'data', 'collections');
 
-  return onSnapshot(
-    collectionsRef,
-    (snapshot) => {
-      const rawFirestoreCollections = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        // Deserialize banks/textBanks (stored as JSON strings to avoid Firestore nested array restriction)
-        if (typeof data.banks === 'string')
-          try {
-            data.banks = JSON.parse(data.banks);
-          } catch {
-            data.banks = [];
-          }
-        if (typeof data.textBanks === 'string')
-          try {
-            data.textBanks = JSON.parse(data.textBanks);
-          } catch {
-            data.textBanks = [];
-          }
-        if (typeof data.clipperSessions === 'string')
-          try {
-            data.clipperSessions = JSON.parse(data.clipperSessions);
-          } catch {
-            data.clipperSessions = [];
-          }
-        if (typeof data.mediaBanks === 'string')
-          try {
-            data.mediaBanks = JSON.parse(data.mediaBanks);
-          } catch {
-            data.mediaBanks = null;
-          }
-        return { id: doc.id, ...data };
-      });
+  // Same retry-with-backoff scaffold as subscribeToLibrary — without it, a
+  // permission/auth error makes the listener silently dead and the UI freezes
+  // on the last localStorage cache.
+  let cancelled = false;
+  let currentUnsub = () => {};
+  let retryCount = 0;
+  let retryTimer = null;
+  const MAX_RETRIES = 5;
 
-      // Deduplicate project roots by normalized name (migration may have created duplicates)
-      // NOTE: Only dedup project roots by name. Niches are NOT deduped by name because
-      // multiple niches can legitimately share the same name (e.g., two "Montage" niches
-      // in different projects). Deduping niches by name causes data loss.
-      const seenProjectNames = new Set();
-      const firestoreCollections = rawFirestoreCollections.filter((col) => {
-        if (col.isProjectRoot) {
-          const key = (col.name || col.id).replace(/^@+/, '');
-          if (seenProjectNames.has(key)) return false;
-          seenProjectNames.add(key);
-        }
-        return true;
-      });
+  const start = () => {
+    if (cancelled) return;
+    currentUnsub = onSnapshot(
+      collectionsRef,
+      (snapshot) => {
+        retryCount = 0; // Reset backoff on any successful snapshot
+        const rawFirestoreCollections = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          // Deserialize banks/textBanks (stored as JSON strings to avoid Firestore nested array restriction)
+          if (typeof data.banks === 'string')
+            try {
+              data.banks = JSON.parse(data.banks);
+            } catch {
+              data.banks = [];
+            }
+          if (typeof data.textBanks === 'string')
+            try {
+              data.textBanks = JSON.parse(data.textBanks);
+            } catch {
+              data.textBanks = [];
+            }
+          if (typeof data.clipperSessions === 'string')
+            try {
+              data.clipperSessions = JSON.parse(data.clipperSessions);
+            } catch {
+              data.clipperSessions = [];
+            }
+          if (typeof data.mediaBanks === 'string')
+            try {
+              data.mediaBanks = JSON.parse(data.mediaBanks);
+            } catch {
+              data.mediaBanks = null;
+            }
+          return { id: doc.id, ...data };
+        });
 
-      if (firestoreCollections.length > 0) {
-        // Firestore is the single source of truth. Migrate banks and use directly.
-        const collections = firestoreCollections
-          .filter((c) => !pendingDeletionIds.has(c.id))
-          .map((col) => migrateCollectionBanks(col));
-
-        // Cleanup pending deletions: if a pending ID is absent from Firestore,
-        // Firestore has confirmed the delete — safe to clear the flag.
-        const snapshotIds = new Set(firestoreCollections.map((c) => c.id));
-        for (const [pendingId] of pendingDeletionMap) {
-          if (!snapshotIds.has(pendingId)) {
-            clearPendingDeletion(pendingId);
+        // Deduplicate project roots by normalized name (migration may have created duplicates)
+        // NOTE: Only dedup project roots by name. Niches are NOT deduped by name because
+        // multiple niches can legitimately share the same name (e.g., two "Montage" niches
+        // in different projects). Deduping niches by name causes data loss.
+        const seenProjectNames = new Set();
+        const firestoreCollections = rawFirestoreCollections.filter((col) => {
+          if (col.isProjectRoot) {
+            const key = (col.name || col.id).replace(/^@+/, '');
+            if (seenProjectNames.has(key)) return false;
+            seenProjectNames.add(key);
           }
-        }
+          return true;
+        });
 
-        // Cleanup: undo bad auto-migration that assigned legacy niches to wrong projects.
-        // If a niche's createdAt predates its assigned project by >1 day, clear the projectId.
-        const projectRoots = collections.filter((c) => c.isProjectRoot);
-        if (projectRoots.length > 0) {
-          const projectMap = new Map(projectRoots.map((p) => [p.id, p]));
-          for (const niche of collections.filter((c) => c.isPipeline && c.projectId)) {
-            const project = projectMap.get(niche.projectId);
-            if (!project) continue;
-            const nicheDate = new Date(niche.createdAt || 0).getTime();
-            const projDate = new Date(project.createdAt || 0).getTime();
-            // Niche created >1 day before its project → was mis-assigned by auto-migration
-            if (nicheDate > 0 && projDate > 0 && nicheDate < projDate - 86400000) {
-              log('[Migration] Clearing mis-assigned projectId on legacy niche', niche.name);
-              delete niche.projectId;
-              saveCollectionToFirestore(db, artistId, niche).catch(() => {});
+        if (firestoreCollections.length > 0) {
+          // Firestore is the single source of truth. Migrate banks and use directly.
+          const collections = firestoreCollections
+            .filter((c) => !pendingDeletionIds.has(c.id))
+            .map((col) => migrateCollectionBanks(col));
+
+          // Cleanup pending deletions: if a pending ID is absent from Firestore,
+          // Firestore has confirmed the delete — safe to clear the flag.
+          const snapshotIds = new Set(firestoreCollections.map((c) => c.id));
+          for (const [pendingId] of pendingDeletionMap) {
+            if (!snapshotIds.has(pendingId)) {
+              clearPendingDeletion(pendingId);
             }
           }
+
+          // Cleanup: undo bad auto-migration that assigned legacy niches to wrong projects.
+          // If a niche's createdAt predates its assigned project by >1 day, clear the projectId.
+          const projectRoots = collections.filter((c) => c.isProjectRoot);
+          if (projectRoots.length > 0) {
+            const projectMap = new Map(projectRoots.map((p) => [p.id, p]));
+            for (const niche of collections.filter((c) => c.isPipeline && c.projectId)) {
+              const project = projectMap.get(niche.projectId);
+              if (!project) continue;
+              const nicheDate = new Date(niche.createdAt || 0).getTime();
+              const projDate = new Date(project.createdAt || 0).getTime();
+              // Niche created >1 day before its project → was mis-assigned by auto-migration
+              if (nicheDate > 0 && projDate > 0 && nicheDate < projDate - 86400000) {
+                log('[Migration] Clearing mis-assigned projectId on legacy niche', niche.name);
+                delete niche.projectId;
+                saveCollectionToFirestore(db, artistId, niche).catch(() => {});
+              }
+            }
+          }
+
+          // Log for debugging
+          const pipelines = collections.filter((c) => c.isPipeline);
+          log(
+            '[subscribeToCollections] Firestore:',
+            collections.length,
+            'collections,',
+            pipelines.length,
+            'niches →',
+            pipelines
+              .map(
+                (c) =>
+                  `${c.name}(${c.mediaIds?.length || 0}media, tb:${c.textBanks?.map((tb) => tb?.length || 0).join('/') || 'none'})`,
+              )
+              .join(', '),
+          );
+
+          const smartCollections = createSmartCollections();
+
+          // Always update in-memory cache (survives localStorage quota exceeded)
+          _firestoreCollectionsCache.set(artistId, collections);
+
+          // Call the callback BEFORE caching to localStorage so that safeSetCollections
+          // can compare Firestore data against the real local data (not an overwritten copy).
+          callback([...smartCollections, ...collections]);
+
+          // Cache to localStorage for offline/instant loads (AFTER callback)
+          try {
+            localStorage.setItem(getCollectionsKey(artistId), JSON.stringify(collections));
+          } catch (e) {}
+        } else {
+          // Firestore empty — check localStorage and upload if data exists
+          const localCollections = getCollections(artistId);
+          const userCollections = localCollections.filter(
+            (c) => c.type !== 'smart' && !c.id?.startsWith('smart_'),
+          );
+
+          if (userCollections.length > 0) {
+            // Upload local collections to Firestore (including banks)
+            // Must use saveCollectionToFirestore to serialize nested arrays as JSON strings
+            userCollections.forEach((col) => {
+              saveCollectionToFirestore(db, artistId, col).catch(log.error);
+            });
+          }
+
+          callback(localCollections);
         }
-
-        // Log for debugging
-        const pipelines = collections.filter((c) => c.isPipeline);
-        log(
-          '[subscribeToCollections] Firestore:',
-          collections.length,
-          'collections,',
-          pipelines.length,
-          'niches →',
-          pipelines
-            .map(
-              (c) =>
-                `${c.name}(${c.mediaIds?.length || 0}media, tb:${c.textBanks?.map((tb) => tb?.length || 0).join('/') || 'none'})`,
-            )
-            .join(', '),
-        );
-
-        const smartCollections = createSmartCollections();
-
-        // Always update in-memory cache (survives localStorage quota exceeded)
-        _firestoreCollectionsCache.set(artistId, collections);
-
-        // Call the callback BEFORE caching to localStorage so that safeSetCollections
-        // can compare Firestore data against the real local data (not an overwritten copy).
-        callback([...smartCollections, ...collections]);
-
-        // Cache to localStorage for offline/instant loads (AFTER callback)
+      },
+      (error) => {
+        log.error('[Collections] Firestore subscription error:', error);
+        callback(getCollections(artistId));
         try {
-          localStorage.setItem(getCollectionsKey(artistId), JSON.stringify(collections));
-        } catch (e) {}
-      } else {
-        // Firestore empty — check localStorage and upload if data exists
-        const localCollections = getCollections(artistId);
-        const userCollections = localCollections.filter(
-          (c) => c.type !== 'smart' && !c.id?.startsWith('smart_'),
-        );
-
-        if (userCollections.length > 0) {
-          // Upload local collections to Firestore (including banks)
-          // Must use saveCollectionToFirestore to serialize nested arrays as JSON strings
-          userCollections.forEach((col) => {
-            saveCollectionToFirestore(db, artistId, col).catch(log.error);
-          });
+          currentUnsub();
+        } catch (_) {}
+        if (cancelled || retryCount >= MAX_RETRIES) {
+          if (!cancelled) {
+            log.error(
+              `[Collections] Subscription gave up after ${MAX_RETRIES} retries — UI will not receive further updates until reload`,
+            );
+          }
+          return;
         }
+        const delay = Math.min(30000, 2000 * Math.pow(2, retryCount));
+        retryCount += 1;
+        log.warn(
+          `[Collections] Retrying subscription in ${delay}ms (attempt ${retryCount}/${MAX_RETRIES})`,
+        );
+        retryTimer = setTimeout(start, delay);
+      },
+    );
+  };
 
-        callback(localCollections);
-      }
-    },
-    (error) => {
-      log.error('[Collections] Firestore subscription error:', error);
-      callback(getCollections(artistId));
-    },
-  );
+  start();
+  return () => {
+    cancelled = true;
+    if (retryTimer) clearTimeout(retryTimer);
+    try {
+      currentUnsub();
+    } catch (_) {}
+  };
 };
 
 /**
@@ -3514,6 +3651,26 @@ export const migrateToFirestore = async (db, artistId) => {
     return { success: false, error: 'Missing db or artistId' };
   }
 
+  // Idempotency guard — prevent the migration from running twice on the
+  // same artist (would overwrite Firestore data with stale localStorage).
+  // Both an in-flight lock AND a "completed" marker are checked.
+  const lockKey = `stm_migration_lock_${artistId}`;
+  const doneKey = `stm_migration_done_${artistId}`;
+  if (typeof localStorage !== 'undefined') {
+    if (localStorage.getItem(doneKey)) {
+      return { success: true, migrated: {}, alreadyMigrated: true };
+    }
+    const lockedAt = parseInt(localStorage.getItem(lockKey) || '0', 10);
+    if (lockedAt && Date.now() - lockedAt < 5 * 60 * 1000) {
+      return { success: false, error: 'Migration already in progress' };
+    }
+    try {
+      localStorage.setItem(lockKey, String(Date.now()));
+    } catch {
+      /* quota issues — proceed without lock */
+    }
+  }
+
   const result = {
     success: true,
     migrated: {
@@ -3606,6 +3763,16 @@ export const migrateToFirestore = async (db, artistId) => {
     log.error('[Migration] Failed:', error);
     result.success = false;
     result.errors.push(error.message);
+  }
+
+  // Release the lock and mark complete (only on success — let failures retry)
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.removeItem(lockKey);
+      if (result.success) localStorage.setItem(doneKey, String(Date.now()));
+    } catch {
+      /* quota issues — non-fatal */
+    }
   }
 
   return result;

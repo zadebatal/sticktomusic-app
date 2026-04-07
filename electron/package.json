@@ -1,0 +1,44 @@
+{
+  "name": "sticktomusic-app",
+  "version": "1.6.0",
+  "description": "The Content Engine for Music Artists",
+  "author": "StickToMusic <zadebatal@gmail.com>",
+  "private": true,
+  "main": "main.js",
+  "build": {
+    "appId": "com.sticktomusic.app",
+    "productName": "StickToMusic",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "zadebatal",
+        "repo": "sticktomusic-app"
+      }
+    ],
+    "mac": {
+      "icon": "icon.icns",
+      "identity": "Zade Batal (72L7VUQDAY)",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "extraResources": [
+      {
+        "from": "app-build",
+        "to": "app-build"
+      }
+    ]
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^4.0.1",
+    "electron-store": "^10.1.0",
+    "electron-updater": "^6.8.3",
+    "express": "^4.22.1",
+    "onnxruntime-node": "^1.24.3"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^26.8.1"
+  }
+}

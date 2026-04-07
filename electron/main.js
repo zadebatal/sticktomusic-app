@@ -149,6 +149,20 @@ function buildMenu() {
     },
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
     { label: 'View', submenu: [{ role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' }] },
+    {
+      label: 'Go',
+      submenu: [
+        {
+          label: 'Command Palette',
+          accelerator: 'CmdOrCtrl+K',
+          click: () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('toggle-command-palette');
+            }
+          },
+        },
+      ],
+    },
     { label: 'Window', submenu: [{ role: 'minimize' }, { role: 'zoom' }, { type: 'separator' }, { role: 'front' }] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -160,6 +174,13 @@ function setupAutoUpdater() {
 
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
+
+  // Public repo — no token needed for release checks/downloads
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: 'zadebatal',
+    repo: 'sticktomusic-app',
+  });
 
   autoUpdater.on('update-available', (info) => {
     console.log(`[updater] Update available: ${info.version}`);
@@ -198,7 +219,20 @@ ipcMain.handle('download-update', () => {
 });
 
 ipcMain.handle('install-update', () => {
-  if (autoUpdater) autoUpdater.quitAndInstall();
+  if (autoUpdater) {
+    try {
+      autoUpdater.quitAndInstall(false, true);
+    } catch (err) {
+      console.error('[updater] quitAndInstall failed:', err.message);
+      // Fallback: relaunch the app manually
+      app.relaunch();
+      app.exit(0);
+    }
+  } else {
+    // No updater — just relaunch
+    app.relaunch();
+    app.exit(0);
+  }
 });
 
 // ── IPC: Local Drive Storage ──
@@ -232,12 +266,47 @@ ipcMain.handle('set-media-folder', (_event, folderPath) => {
   return folderPath;
 });
 
+// ── Path validation helper ──
+// Reject absolute paths, null bytes, and any path that escapes the media folder
+// after resolution. Returns the resolved absolute path on success, throws otherwise.
+function resolveSafeMediaPath(root, relativePath) {
+  if (typeof relativePath !== 'string' || !relativePath) {
+    throw new Error('Invalid relative path');
+  }
+  if (relativePath.includes('\0')) {
+    throw new Error('Invalid path (null byte)');
+  }
+  if (path.isAbsolute(relativePath)) {
+    throw new Error('Absolute paths are not allowed');
+  }
+  const fullPath = path.resolve(root, relativePath);
+  const rel = path.relative(root, fullPath);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error('Path escapes media folder');
+  }
+  return fullPath;
+}
+
 ipcMain.handle('save-file-locally', async (_event, arrayBuffer, relativePath) => {
   const root = store.get('mediaFolder');
   if (!root) throw new Error('No media folder configured');
-  const fullPath = path.join(root, relativePath);
+  const fullPath = resolveSafeMediaPath(root, relativePath);
   fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-  fs.writeFileSync(fullPath, Buffer.from(arrayBuffer));
+  // Atomic write: write to a temp file in the same dir, then rename.
+  // Prevents leaving a half-written file on crash / power loss.
+  const tmpPath = `${fullPath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(tmpPath, Buffer.from(arrayBuffer));
+    fs.renameSync(tmpPath, fullPath);
+  } catch (err) {
+    // Best-effort cleanup of partial temp file
+    try {
+      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    } catch {
+      /* ignore */
+    }
+    throw err;
+  }
   console.log(`[storage] Saved: ${relativePath}`);
   return fullPath;
 });
@@ -245,7 +314,7 @@ ipcMain.handle('save-file-locally', async (_event, arrayBuffer, relativePath) =>
 ipcMain.handle('read-local-file', async (_event, relativePath) => {
   const root = store.get('mediaFolder');
   if (!root) throw new Error('No media folder configured');
-  const fullPath = path.join(root, relativePath);
+  const fullPath = resolveSafeMediaPath(root, relativePath);
   if (!fs.existsSync(fullPath)) throw new Error('File not found');
   return fs.readFileSync(fullPath);
 });
@@ -253,7 +322,12 @@ ipcMain.handle('read-local-file', async (_event, relativePath) => {
 ipcMain.handle('check-file-exists', async (_event, relativePath) => {
   const root = store.get('mediaFolder');
   if (!root) return false;
-  return fs.existsSync(path.join(root, relativePath));
+  try {
+    const fullPath = resolveSafeMediaPath(root, relativePath);
+    return fs.existsSync(fullPath);
+  } catch {
+    return false;
+  }
 });
 
 ipcMain.handle('is-drive-connected', () => {
@@ -436,6 +510,249 @@ ipcMain.handle('generate-local-thumbnail', async (_event, videoPath, outputPath)
     if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) return outputPath;
   } catch {}
   return null;
+});
+
+// Destructive video trim — overwrites original file with trimmed version
+ipcMain.handle('trim-video-destructive', async (_event, fullPath, trimStart, trimEnd) => {
+  const ffmpeg = getFfmpegPath();
+  if (!ffmpeg) throw new Error('FFmpeg not found');
+  if (!fs.existsSync(fullPath)) throw new Error('File not found: ' + fullPath);
+
+  const duration = trimEnd - trimStart;
+  if (duration <= 0) throw new Error('Invalid trim range');
+
+  const tmpPath = fullPath + '.trim-tmp.mp4';
+  const { execFileSync } = require('child_process');
+
+  try {
+    execFileSync(ffmpeg, [
+      '-y', '-i', fullPath,
+      '-ss', String(trimStart),
+      '-t', String(duration),
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '18',
+      '-c:a', 'aac', '-b:a', '128k',
+      tmpPath,
+    ], { timeout: 300000 }); // 5 min timeout
+
+    // Verify output exists and has content
+    if (!fs.existsSync(tmpPath) || fs.statSync(tmpPath).size === 0) {
+      throw new Error('FFmpeg produced empty output');
+    }
+
+    // Replace original with trimmed version
+    fs.unlinkSync(fullPath);
+    fs.renameSync(tmpPath, fullPath);
+
+    console.log(`[trim] Trimmed ${path.basename(fullPath)}: ${trimStart.toFixed(2)}s-${trimEnd.toFixed(2)}s (${duration.toFixed(2)}s)`);
+    return { success: true, newDuration: duration };
+  } catch (err) {
+    // Cleanup temp file on failure
+    try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch {}
+    throw new Error('Trim failed: ' + err.message);
+  }
+});
+
+// ── IPC: CLIP Semantic Media Search ──
+const clip = require('./clip');
+const clipIndex = require('./clipIndex');
+
+// Index a single media item (extract keyframes → CLIP encode → store)
+ipcMain.handle('clip-index-media', async (_event, { artistId, mediaItem }) => {
+  const ffmpeg = getFfmpegPath();
+  if (!ffmpeg) throw new Error('FFmpeg not found');
+
+  await clip.ensureLoaded();
+
+  const filePath = mediaItem.localPath || mediaItem.localUrl || mediaItem.url;
+  if (!filePath) throw new Error('No file path for media item');
+
+  // Skip if already indexed
+  if (clipIndex.isIndexed(artistId, mediaItem.id)) {
+    return { status: 'already_indexed' };
+  }
+
+  const tmpDir = path.join(app.getPath('temp'), 'stm-clip-frames');
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  let vectors = [];
+
+  if (mediaItem.type === 'video') {
+    // Extract 5 keyframes at equal intervals, scaled to 224x224
+    const framePattern = path.join(tmpDir, `${mediaItem.id}_%03d.jpg`);
+    const { execFileSync } = require('child_process');
+    try {
+      execFileSync(ffmpeg, [
+        '-y', '-i', filePath,
+        '-vf', 'fps=1,scale=224:224:force_original_aspect_ratio=decrease,pad=224:224:(ow-iw)/2:(oh-ih)/2',
+        '-frames:v', '5',
+        '-q:v', '2',
+        framePattern,
+      ], { timeout: 30000 });
+
+      // Encode each frame
+      for (let i = 1; i <= 5; i++) {
+        const framePath = path.join(tmpDir, `${mediaItem.id}_${String(i).padStart(3, '0')}.jpg`);
+        if (fs.existsSync(framePath)) {
+          try {
+            const vec = await clip.encodeImage(framePath);
+            vectors.push(vec);
+          } catch (err) {
+            console.warn(`[clip] Failed to encode frame ${i}:`, err.message);
+          }
+          // Cleanup frame
+          try { fs.unlinkSync(framePath); } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn('[clip] FFmpeg frame extraction failed:', err.message);
+    }
+  } else if (mediaItem.type === 'image') {
+    // Encode image directly
+    try {
+      const vec = await clip.encodeImage(filePath);
+      vectors.push(vec);
+    } catch (err) {
+      console.warn('[clip] Image encode failed:', err.message);
+    }
+  }
+
+  if (vectors.length === 0) {
+    return { status: 'no_vectors' };
+  }
+
+  // Mean pool all frame vectors → single embedding
+  const dim = vectors[0].length;
+  const meanVector = new Array(dim).fill(0);
+  for (const vec of vectors) {
+    for (let i = 0; i < dim; i++) meanVector[i] += vec[i];
+  }
+  for (let i = 0; i < dim; i++) meanVector[i] /= vectors.length;
+
+  // Normalize
+  const norm = Math.sqrt(meanVector.reduce((s, v) => s + v * v, 0));
+  for (let i = 0; i < dim; i++) meanVector[i] /= norm;
+
+  // Store in index
+  const totalIndexed = clipIndex.addToIndex(artistId, {
+    mediaId: mediaItem.id,
+    vector: meanVector,
+    collectionIds: mediaItem.collectionIds || [],
+    type: mediaItem.type,
+    name: mediaItem.name || '',
+    duration: mediaItem.duration || null,
+    indexedAt: new Date().toISOString(),
+  });
+
+  console.log(`[clip] Indexed ${mediaItem.name || mediaItem.id} (${vectors.length} frames, total: ${totalIndexed})`);
+  return { status: 'indexed', totalIndexed };
+});
+
+// Search media by text query
+ipcMain.handle('clip-search', async (_event, { artistId, query, collectionIds, limit }) => {
+  await clip.ensureLoaded();
+  const queryVector = await clip.encodeText(query);
+  const results = clipIndex.searchIndex(artistId, queryVector, { collectionIds, limit });
+  return results;
+});
+
+// Get index stats
+ipcMain.handle('clip-index-status', async (_event, { artistId }) => {
+  return clipIndex.getStats(artistId);
+});
+
+// Reindex all unindexed media for an artist (background job)
+ipcMain.handle('clip-reindex-all', async (_event, { artistId, mediaItems }) => {
+  await clip.ensureLoaded();
+  let indexed = 0;
+  let skipped = 0;
+
+  for (const item of mediaItems) {
+    if (clipIndex.isIndexed(artistId, item.id)) {
+      skipped++;
+      continue;
+    }
+    try {
+      // Trigger the index handler for each item
+      await ipcMain.emit('clip-index-media', null, { artistId, mediaItem: item });
+      indexed++;
+    } catch (err) {
+      console.warn(`[clip] Reindex failed for ${item.id}:`, err.message);
+    }
+
+    // Send progress
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('clip-reindex-progress', {
+        indexed,
+        skipped,
+        total: mediaItems.length,
+      });
+    }
+  }
+
+  return { indexed, skipped, total: mediaItems.length };
+});
+
+// ── IPC: Remotion Video Rendering ──
+// Renders a video composition using @remotion/renderer (headless Chrome, frame-perfect)
+ipcMain.handle('remotion-render', async (_event, params) => {
+  const { compositionProps, width, height, fps, durationInFrames } = params;
+  const outputDir = path.join(app.getPath('temp'), 'stm-remotion');
+  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+  const outputPath = path.join(outputDir, `render_${Date.now()}.mp4`);
+
+  try {
+    // Dynamic import — @remotion/renderer is a heavy Node.js module
+    const { renderMedia, selectComposition } = await import('@remotion/renderer');
+
+    // Remotion needs a bundle URL pointing to the composition entry point.
+    // For Electron, we use a minimal inline composition via the serveUrl approach.
+    // Since we can't easily bundle Remotion compositions in CRA, we use the
+    // programmatic API with an inline component via bundle().
+    const { bundle } = await import('@remotion/bundler');
+
+    const bundlePath = path.join(__dirname, '..', 'src', 'remotion', 'index.js');
+    let serveUrl;
+
+    // If bundled entry exists, use it; otherwise fall back to a temp bundle
+    if (fs.existsSync(bundlePath)) {
+      serveUrl = await bundle(bundlePath);
+    } else {
+      throw new Error('Remotion entry point not found at ' + bundlePath);
+    }
+
+    const composition = await selectComposition({
+      serveUrl,
+      id: 'Montage',
+      inputProps: compositionProps,
+    });
+
+    await renderMedia({
+      composition: {
+        ...composition,
+        width,
+        height,
+        fps,
+        durationInFrames,
+      },
+      serveUrl,
+      codec: 'h264',
+      outputLocation: outputPath,
+      inputProps: compositionProps,
+      onProgress: ({ progress }) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('remotion-progress', progress);
+        }
+      },
+    });
+
+    console.log(`[remotion] Render complete: ${outputPath}`);
+    return { outputPath, success: true };
+  } catch (err) {
+    console.error('[remotion] Render failed:', err.message);
+    // Clean up failed output
+    try { if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath); } catch {}
+    throw new Error('Remotion render failed: ' + err.message);
+  }
 });
 
 // Rename a file or directory
@@ -684,10 +1001,12 @@ function splitVideo(videoPath, cutTimes, outputDir) {
   const promises = [];
 
   for (let i = 0; i < boundaries.length - 1; i++) {
-    const start = boundaries[i];
+    const rawStart = boundaries[i];
+    // Offset by 1 frame (~0.033s at 30fps) to avoid grabbing the last frame of the previous scene
+    const start = i > 0 ? rawStart + 0.033 : rawStart;
     const end = boundaries[i + 1];
     const clipDur = end - start;
-    if (clipDur < 0.03) continue; // ~1 frame at 30fps — keep everything meaningful
+    if (clipDur < 0.03) continue;
 
     const clipName = `${basename}_clip${String(i + 1).padStart(3, '0')}.mp4`;
     const clipPath = path.join(outputDir, clipName);
@@ -1088,18 +1407,27 @@ function startEmbeddedServer() {
       if (!mediaFolder) return res.status(404).send('No media folder');
       // req.params[0] is already URL-decoded by Express
       const relativePath = req.params[0];
-      const fullPath = path.join(mediaFolder, relativePath);
       // CORS headers for media playback
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Accept-Ranges', 'bytes');
-      // Security: ensure the path stays within the media folder
-      if (!fullPath.startsWith(mediaFolder)) return res.status(403).send('Forbidden');
+      // Reject obvious bad inputs before resolving
+      if (!relativePath || relativePath.includes('\0') || path.isAbsolute(relativePath)) {
+        return res.status(400).send('Invalid path');
+      }
+      // Resolve and verify it stays inside the media folder. `path.join`
+      // alone is unsafe — `mediaFolder + "../"` would still satisfy a
+      // naive `startsWith` check if a sibling dir shares a prefix.
+      const fullPath = path.resolve(mediaFolder, relativePath);
+      const rel = path.relative(mediaFolder, fullPath);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        return res.status(403).send('Forbidden');
+      }
       if (!fs.existsSync(fullPath)) return res.status(404).send('Not found');
       res.sendFile(fullPath);
     });
 
     // Serve static build files
-    // In dev: build/ at project root. In production: app-build/ (renamed to avoid electron-builder exclusion)
+    // Dev: build/ at project root. Production: app-build/ (legacy name, copied by build script)
     const buildPath = isDev
       ? path.join(__dirname, '..', 'build')
       : path.join(__dirname, '..', 'app-build');

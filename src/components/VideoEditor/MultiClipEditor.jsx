@@ -72,7 +72,8 @@ import { FeatherAlignLeft, FeatherAlignCenter, FeatherAlignRight } from '@subfra
 import {
   parseStroke,
   buildStroke,
-  AVAILABLE_FONTS,
+  getAvailableFonts,
+  saveCustomFont,
   makeFieldSetter,
 } from './shared/editorConstants';
 import CloseConfirmOverlay from './shared/CloseConfirmOverlay';
@@ -316,6 +317,7 @@ const MultiClipEditor = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [activeClipIndex, setActiveClipIndex] = useState(0);
+  const [selectedClips, setSelectedClips] = useState([]);
   const [audioDuration, setAudioDuration] = useState(0);
   const [playheadDragging, setPlayheadDragging] = useState(false);
   const wasPlayingBeforePlayheadDrag = useRef(false);
@@ -1441,6 +1443,125 @@ const MultiClipEditor = ({
     toastSuccess,
   ]);
 
+  // ── Clip operations: Combine, Break, Rearrange ──
+
+  const getClipAtPlayhead = useCallback(() => {
+    let elapsed = 0;
+    for (let i = 0; i < clips.length; i++) {
+      const dur = clips[i].duration || 0.5;
+      if (currentTime >= elapsed && currentTime < elapsed + dur) return i;
+      elapsed += dur;
+    }
+    return clips.length > 0 ? clips.length - 1 : -1;
+  }, [clips, currentTime]);
+
+  const getEffectiveClipIndices = useCallback(() => {
+    if (selectedClips.length > 0) return selectedClips;
+    const idx = getClipAtPlayhead();
+    return idx >= 0 ? [idx] : [];
+  }, [selectedClips, getClipAtPlayhead]);
+
+  const handleCombine = useCallback(() => {
+    const indices = getEffectiveClipIndices();
+    if (indices.length < 2) {
+      if (indices.length === 1 && indices[0] < clips.length - 1) {
+        const idx = indices[0];
+        setClips((prev) => {
+          const newClips = [...prev];
+          const clip1 = newClips[idx];
+          const clip2 = newClips[idx + 1];
+          const combined = {
+            ...clip1,
+            duration: (clip1.duration || 0.5) + (clip2.duration || 0.5),
+          };
+          newClips.splice(idx, 2, combined);
+          return newClips;
+        });
+        setSelectedClips([]);
+        toastSuccess('Combined clip with next');
+      } else {
+        toastError('Select clips or position playhead to combine');
+      }
+      return;
+    }
+    const sorted = [...indices].sort((a, b) => a - b);
+    let combineCount = 0;
+    setClips((prev) => {
+      const newClips = [...prev];
+      for (let i = sorted.length - 1; i > 0; i--) {
+        const idx = sorted[i];
+        const prevIdx = sorted[i - 1];
+        if (idx === prevIdx + 1) {
+          const combined = {
+            ...newClips[prevIdx],
+            duration: (newClips[prevIdx].duration || 0.5) + (newClips[idx].duration || 0.5),
+          };
+          newClips.splice(prevIdx, 2, combined);
+          combineCount++;
+        }
+      }
+      return newClips;
+    });
+    setSelectedClips([]);
+    if (combineCount > 0) {
+      toastSuccess(`Combined ${combineCount + 1} clips`);
+    } else {
+      toastError('Select consecutive clips to combine');
+    }
+  }, [clips, getEffectiveClipIndices, toastSuccess, toastError]);
+
+  const handleBreak = useCallback(() => {
+    const clipIndex = getClipAtPlayhead();
+    if (clipIndex < 0) {
+      toastError('Position playhead over a clip to split');
+      return;
+    }
+    let elapsed = 0;
+    for (let i = 0; i < clipIndex; i++) elapsed += clips[i].duration || 0.5;
+    const clip = clips[clipIndex];
+    const clipDuration = clip.duration || 0.5;
+    const splitPoint = currentTime - elapsed;
+    if (splitPoint < 0.1 || splitPoint > clipDuration - 0.1) {
+      toastError('Move playhead away from clip edge to split');
+      return;
+    }
+    const firstHalf = {
+      ...clip,
+      id: `${clip.id || clipIndex}_a`,
+      duration: splitPoint,
+      sourceOffset: clip.sourceOffset || 0,
+    };
+    const secondHalf = {
+      ...clip,
+      id: `${clip.id || clipIndex}_b`,
+      duration: clipDuration - splitPoint,
+      sourceOffset: (clip.sourceOffset || 0) + splitPoint,
+    };
+    setClips((prev) => {
+      const newClips = [...prev];
+      newClips.splice(clipIndex, 1, firstHalf, secondHalf);
+      return newClips;
+    });
+    setSelectedClips([]);
+    toastSuccess('Split clip at playhead');
+  }, [clips, currentTime, getClipAtPlayhead, toastSuccess, toastError]);
+
+  const handleRearrange = useCallback(() => {
+    if (clips.length < 2) {
+      toastError('Need at least 2 clips to rearrange.');
+      return;
+    }
+    setClips((prev) => {
+      const shuffled = [...prev].sort(() => Math.random() - 0.5);
+      return shuffled.map((clip, i) => ({
+        ...clip,
+        startTime: prev[i]?.startTime,
+        duration: prev[i]?.duration || clip.duration,
+      }));
+    });
+    toastSuccess(`Shuffled ${clips.length} clips`);
+  }, [clips, toastSuccess, toastError]);
+
   // ── Audio upload handler — route through trimmer ──
   const handleAudioUpload = useCallback((e) => {
     const file = e.target.files?.[0];
@@ -1828,7 +1949,11 @@ const MultiClipEditor = ({
     if (hasUnsavedWork) {
       setShowCloseConfirm(true);
     } else {
-      clearSession();
+      try {
+        clearSession();
+      } catch (err) {
+        console.warn('Editor cleanup error:', err);
+      }
       onClose();
     }
   }, [hasUnsavedWork, onClose, clearSession]);
@@ -2347,6 +2472,42 @@ const MultiClipEditor = ({
                                 : 'No beats detected'}
                           </Badge>
                         </div>
+                        {/* Clip Actions */}
+                        {clips.length > 0 && (
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              marginBottom: '8px',
+                            }}
+                          >
+                            <Button
+                              variant="neutral-secondary"
+                              size="small"
+                              onClick={handleCombine}
+                              title="Combine selected clip with next"
+                            >
+                              Combine
+                            </Button>
+                            <Button
+                              variant="neutral-secondary"
+                              size="small"
+                              onClick={handleBreak}
+                              title="Split clip at midpoint"
+                            >
+                              Break
+                            </Button>
+                            <Button
+                              variant="neutral-secondary"
+                              size="small"
+                              onClick={handleRearrange}
+                              title="Randomize clip order"
+                            >
+                              Rearrange
+                            </Button>
+                          </div>
+                        )}
                         {clips.length === 0 ? (
                           <div
                             style={{
@@ -4158,6 +4319,34 @@ const MultiClipEditor = ({
                         ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)`
                         : 'No beats detected'}
                   </Badge>
+                  {clips.length > 0 && (
+                    <div className="flex items-center gap-1 mb-2">
+                      <Button
+                        variant="neutral-secondary"
+                        size="small"
+                        onClick={handleCombine}
+                        title="Combine clip with next"
+                      >
+                        Combine
+                      </Button>
+                      <Button
+                        variant="neutral-secondary"
+                        size="small"
+                        onClick={handleBreak}
+                        title="Split clip at midpoint"
+                      >
+                        Break
+                      </Button>
+                      <Button
+                        variant="neutral-secondary"
+                        size="small"
+                        onClick={handleRearrange}
+                        title="Shuffle clip order"
+                      >
+                        Rearrange
+                      </Button>
+                    </div>
+                  )}
                   {clips.length === 0 ? (
                     <div className="text-[11px] text-neutral-600 text-center py-3 bg-neutral-100/30 rounded-md">
                       No clips added yet
@@ -4473,13 +4662,35 @@ const MultiClipEditor = ({
 
                     {/* Font Family */}
                     <div>
-                      <div className="text-[13px] text-neutral-500 mb-1.5">Font Family</div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[13px] text-neutral-500">Font Family</span>
+                        <label className="text-[11px] text-indigo-400 hover:text-indigo-300 cursor-pointer">
+                          + Upload
+                          <input
+                            type="file"
+                            accept=".ttf,.otf,.woff,.woff2"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const name = file.name.replace(/\.(ttf|otf|woff2?)$/i, '');
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                saveCustomFont(name, reader.result);
+                                handleStyleChange({ fontFamily: `'${name}', sans-serif` });
+                              };
+                              reader.readAsDataURL(file);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      </div>
                       <select
                         value={activeStyle.fontFamily || "'Inter', sans-serif"}
                         onChange={(e) => handleStyleChange({ fontFamily: e.target.value })}
                         className="w-full px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-50 text-white text-[13px] outline-none cursor-pointer"
                       >
-                        {AVAILABLE_FONTS.map((f) => (
+                        {getAvailableFonts().map((f) => (
                           <option key={f.name} value={f.value}>
                             {f.name}
                           </option>
@@ -4610,6 +4821,17 @@ const MultiClipEditor = ({
                             bold: true,
                           },
                           {
+                            key: 'italic',
+                            label: 'I',
+                            ariaLabel: 'Italic',
+                            active: activeStyle.fontStyle === 'italic',
+                            toggle: () =>
+                              handleStyleChange({
+                                fontStyle: activeStyle.fontStyle === 'italic' ? 'normal' : 'italic',
+                              }),
+                            italic: true,
+                          },
+                          {
                             key: 'caps',
                             label: 'AA',
                             ariaLabel: 'All caps',
@@ -4647,6 +4869,7 @@ const MultiClipEditor = ({
                             icon={
                               <span
                                 className={`text-xs ${btn.bold ? 'font-bold' : 'font-semibold'}`}
+                                style={btn.italic ? { fontStyle: 'italic' } : undefined}
                               >
                                 {btn.label}
                               </span>

@@ -25,6 +25,7 @@ import {
   getLibrary,
   getCollections,
   getLyrics,
+  subscribeToLyrics,
   subscribeToLibrary,
   subscribeToCollections,
   addToTextBank,
@@ -76,13 +77,20 @@ import EditorTopBar from './shared/EditorTopBar';
 import EditorFooter from './shared/EditorFooter';
 import useCollapsibleSections from './shared/useCollapsibleSections';
 import useUnsavedChanges from './shared/useUnsavedChanges';
-import { parseStroke, buildStroke, AVAILABLE_FONTS } from './shared/editorConstants';
+import {
+  parseStroke,
+  buildStroke,
+  getAvailableFonts,
+  saveCustomFont,
+  initCustomFonts,
+} from './shared/editorConstants';
 
 // Default text style used for template initialization and recovery fallback
 const DEFAULT_TEXT_STYLE = {
   fontSize: 48,
   fontFamily: "'TikTok Sans', sans-serif",
   fontWeight: '600',
+  fontStyle: 'normal',
   color: '#ffffff',
   outline: true,
   outlineColor: '#000000',
@@ -95,6 +103,9 @@ const DEFAULT_TEXT_STYLE = {
  * VideoEditorModal - Flowstage-inspired video editor modal
  * Clean UI with preview, controls, and clip timeline
  */
+// Register custom fonts on module load
+initCustomFonts();
+
 const VideoEditorModal = ({
   category,
   existingVideo,
@@ -109,6 +120,7 @@ const VideoEditorModal = ({
   onClose,
   artistId = null,
   db = null,
+  user: userProp = null,
   showTemplatePicker = false,
   schedulerEditMode = false,
   initialEditorMode = null,
@@ -477,6 +489,11 @@ const VideoEditorModal = ({
         setSidebarCollections(cols.filter((c) => c.type !== 'smart'));
       }),
     );
+    unsubs.push(
+      subscribeToLyrics(db, artistId, (lyrics) => {
+        setLyricsBank(lyrics);
+      }),
+    );
     return () => unsubs.forEach((u) => u());
   }, [db, artistId]);
 
@@ -516,21 +533,25 @@ const VideoEditorModal = ({
       if (category.nicheTextBanks[1]?.length > 0)
         textBank2 = [...extractTexts(category.nicheTextBanks[1])];
     }
-    // Also merge from collections (reads both legacy textBank1/2 AND migrated textBanks[] array)
-    sidebarCollections.forEach((col) => {
-      if (col.textBank1?.length) textBank1 = [...textBank1, ...col.textBank1];
-      if (col.textBank2?.length) textBank2 = [...textBank2, ...col.textBank2];
-      // Read from migrated textBanks[] array (what addToTextBank writes to)
-      if (col.textBanks?.length > 0) {
-        if (col.textBanks[0]?.length) textBank1 = [...textBank1, ...extractTexts(col.textBanks[0])];
-        if (col.textBanks[1]?.length) textBank2 = [...textBank2, ...extractTexts(col.textBanks[1])];
-      }
-    });
+    // In library mode (no niche), merge from all collections
+    if (!category?.projectId) {
+      sidebarCollections.forEach((col) => {
+        if (col.textBank1?.length) textBank1 = [...textBank1, ...col.textBank1];
+        if (col.textBank2?.length) textBank2 = [...textBank2, ...col.textBank2];
+        if (col.textBanks?.length > 0) {
+          if (col.textBanks[0]?.length)
+            textBank1 = [...textBank1, ...extractTexts(col.textBanks[0])];
+          if (col.textBanks[1]?.length)
+            textBank2 = [...textBank2, ...extractTexts(col.textBanks[1])];
+        }
+      });
+    }
+    // In niche mode, only use this niche's nicheTextBanks (already loaded above)
     // Deduplicate
     textBank1 = [...new Set(textBank1)];
     textBank2 = [...new Set(textBank2)];
     return { textBank1, textBank2 };
-  }, [sidebarCollections, category?.nicheTextBanks]);
+  }, [sidebarCollections, category?.nicheTextBanks, category?.projectId]);
 
   const handleAddToTextBank = useCallback(
     (bankNum, text) => {
@@ -631,6 +652,11 @@ const VideoEditorModal = ({
   const [showLyricBankPicker, setShowLyricBankPicker] = useState(false);
   const [loadedBankLyricId, setLoadedBankLyricId] = useState(null); // Track which lyric from bank is loaded
   const [lyricsBank, setLyricsBank] = useState([]);
+  // In niche mode, show only lyrics explicitly tagged with this niche
+  const scopedLyrics = useMemo(() => {
+    if (!category?.id) return lyricsBank;
+    return lyricsBank.filter((l) => l.collectionIds?.includes(category.id));
+  }, [lyricsBank, category?.id]);
 
   // Text overlay editing state
   const [editingTextId, setEditingTextId] = useState(null);
@@ -982,15 +1008,19 @@ const VideoEditorModal = ({
     });
   }, [waveformData, clips, downsample]);
 
-  // Per-clip waveform segments for source audio
+  // Per-clip waveform segments for source audio — bar count scales with clip pixel width
+  const pxPerSec = 40 * timelineScale;
   const perClipSourceWaveforms = useMemo(() => {
     if (!clips.length || !Object.keys(clipWaveforms).length) return [];
     return clips.map((clip) => {
       const clipId = clip.id || clip.sourceId;
       const data = clipWaveforms[clipId] || [];
-      return downsample(data, 30); // max 30 bars per clip segment
+      // ~1 bar per 3 pixels, minimum 4 bars
+      const clipWidthPx = Math.max(4, (clip.duration || 1) * pxPerSec);
+      const barCount = Math.max(4, Math.round(clipWidthPx / 3));
+      return downsample(data, barCount);
     });
-  }, [clips, clipWaveforms, downsample]);
+  }, [clips, clipWaveforms, downsample, pxPerSec, timelineScale]);
 
   // Total clip duration — use the furthest clip end position (supports gaps from free-move)
   const totalClipDuration = useMemo(() => {
@@ -1220,8 +1250,12 @@ const VideoEditorModal = ({
       const ch = canvas.height / (window.devicePixelRatio || 1);
 
       if (!currentClip || !activeVideo || activeVideo.readyState < 2) {
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, cw, ch);
+        // Don't fill black — hold the last drawn frame to avoid flash during clip transitions.
+        // Only fill black if canvas has never been drawn to (no clips at all).
+        if (!currentClip) {
+          ctx.fillStyle = '#000';
+          ctx.fillRect(0, 0, cw, ch);
+        }
       } else {
         // All clips have explicit startTime (free-positioned)
         const clipStartTime = currentClip.startTime || 0;
@@ -1232,8 +1266,13 @@ const VideoEditorModal = ({
             : currentClip.duration || 1;
 
         if (timeInClip >= fileDuration) {
-          ctx.fillStyle = '#000';
-          ctx.fillRect(0, 0, cw, ch);
+          // Hold last frame — don't flash black between clips
+        } else if (
+          activeVideo.videoWidth === 0 ||
+          activeVideo.readyState < 3 ||
+          Math.abs(activeVideo.currentTime - (timeInClip + (currentClip.sourceOffset || 0))) > 0.15
+        ) {
+          // Hold previous frame — video not ready or still seeking to correct position
         } else {
           // Draw with object-fit: cover
           const vw = activeVideo.videoWidth || cw;
@@ -1593,7 +1632,7 @@ const VideoEditorModal = ({
         lyrics,
         textStyle,
         cropMode,
-        duration,
+        duration: timelineDuration || totalClipDuration || duration,
         bpm,
         thumbnail: clips[0]?.thumbnail || null,
         textOverlay: textOverlays[0]?.text || words[0]?.text || lyrics.split('\n')[0] || '',
@@ -2737,6 +2776,8 @@ const VideoEditorModal = ({
         edge,
         startX: e.clientX,
         startDuration: clip.duration || 1,
+        startStartTime: clip.startTime || 0,
+        startSourceOffset: clip.sourceOffset || 0,
       });
     },
     [clips],
@@ -2747,19 +2788,41 @@ const VideoEditorModal = ({
 
     const handleResizeMove = (e) => {
       const deltaX = e.clientX - clipResize.startX;
-      // pixelsPerSecond must match the rendering formula: duration * 40 * timelineScale
       const pixelsPerSecond = 40 * timelineScale;
       const deltaSec = deltaX / pixelsPerSecond;
-      let newDuration;
+      const clip = clips[clipResize.clipIndex];
+      const maxDur = getMaxClipDuration(clip);
+
       if (clipResize.edge === 'right') {
-        newDuration = clipResize.startDuration + deltaSec;
+        const newDuration = Math.max(0.1, Math.min(maxDur, clipResize.startDuration + deltaSec));
+        handleUpdateClipDuration(clipResize.clipIndex, newDuration);
+        // Seek preview to the trim end point so user sees the frame
+        const seekTo = (clip.startTime || 0) + newDuration;
+        handleSeek(seekTo);
       } else {
-        newDuration = clipResize.startDuration - deltaSec;
+        // Left edge: trim start — shift startTime forward, increase sourceOffset, shrink duration
+        const trimAmount = Math.max(
+          -(clipResize.startSourceOffset || clip.sourceOffset || 0), // can't go before source start
+          Math.min(clipResize.startDuration - 0.1, deltaSec), // can't shrink below 0.1s
+        );
+        const newDuration = clipResize.startDuration - trimAmount;
+        const newStartTime = (clipResize.startStartTime || clip.startTime || 0) + trimAmount;
+        const newOffset = (clipResize.startSourceOffset || clip.sourceOffset || 0) + trimAmount;
+        setClips((prev) =>
+          prev.map((c, i) =>
+            i === clipResize.clipIndex
+              ? {
+                  ...c,
+                  duration: newDuration,
+                  startTime: newStartTime,
+                  sourceOffset: Math.max(0, newOffset),
+                }
+              : c,
+          ),
+        );
+        // Seek preview to the trim start point so user sees the frame
+        handleSeek(newStartTime);
       }
-      // Clamp to actual file duration (can't extend beyond source content)
-      const maxDur = getMaxClipDuration(clips[clipResize.clipIndex]);
-      newDuration = Math.max(0.1, Math.min(maxDur, newDuration));
-      handleUpdateClipDuration(clipResize.clipIndex, newDuration);
     };
 
     const handleResizeEnd = () => {
@@ -3381,6 +3444,7 @@ const VideoEditorModal = ({
           onClose={onClose}
           artistId={artistId}
           db={db}
+          user={userProp}
           onSaveLyrics={onSaveLyrics}
           onAddLyrics={onAddLyrics}
           onUpdateLyrics={onUpdateLyrics}
@@ -3903,14 +3967,20 @@ const VideoEditorModal = ({
                   variant="neutral-tertiary"
                   size="small"
                   icon={<FeatherZoomOut />}
-                  onClick={() => setTimelineScale((s) => Math.max(0.5, s - 0.1))}
+                  onClick={(e) => {
+                    setTimelineScale((s) => Math.max(0.5, s - 0.1));
+                    e.currentTarget.blur();
+                  }}
                   aria-label="Zoom out"
                 />
                 <IconButton
                   variant="neutral-tertiary"
                   size="small"
                   icon={<FeatherZoomIn />}
-                  onClick={() => setTimelineScale((s) => Math.min(2, s + 0.1))}
+                  onClick={(e) => {
+                    setTimelineScale((s) => Math.min(2, s + 0.1));
+                    e.currentTarget.blur();
+                  }}
                   aria-label="Zoom in"
                 />
               </div>
@@ -4486,11 +4556,11 @@ const VideoEditorModal = ({
                                         top: 0,
                                         left: 0,
                                         right: 0,
-                                        height: '8px',
+                                        height: '12px',
                                         background:
                                           slipEdit?.active && slipEdit.clipIndex === index
                                             ? 'linear-gradient(90deg, #f59e0b, #fbbf24)'
-                                            : 'linear-gradient(90deg, rgba(245,158,11,0.2), rgba(245,158,11,0.4))',
+                                            : 'linear-gradient(90deg, rgba(245,158,11,0.15), rgba(245,158,11,0.3))',
                                         cursor: 'ew-resize',
                                         zIndex: 6,
                                         borderRadius: '4px 4px 0 0',
@@ -4625,7 +4695,29 @@ const VideoEditorModal = ({
                                       overflow: 'hidden',
                                     }}
                                   />
-                                  {/* Right-edge resize handle */}
+                                  {/* Left-edge resize handle (trim start) */}
+                                  {!clip.locked && (
+                                    <div
+                                      data-no-freemove="true"
+                                      onPointerDown={(e) => handleResizeStart(e, index, 'left')}
+                                      style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        width: '8px',
+                                        height: '100%',
+                                        cursor: 'col-resize',
+                                        zIndex: 3,
+                                        background:
+                                          'linear-gradient(to right, rgba(167,139,250,0.4), transparent)',
+                                        opacity: 0,
+                                        transition: 'opacity 0.15s',
+                                      }}
+                                      onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                                      onMouseLeave={(e) => (e.currentTarget.style.opacity = '0')}
+                                    />
+                                  )}
+                                  {/* Right-edge resize handle (trim end) */}
                                   {!clip.locked && (
                                     <div
                                       data-no-freemove="true"
@@ -5115,12 +5207,14 @@ const VideoEditorModal = ({
                         {bank.name || 'Media Bank'}
                       </option>
                     ))}
-                    <option value="all">All Videos (Library)</option>
-                    {sidebarCollections.map((col) => (
-                      <option key={col.id} value={col.id}>
-                        {col.name}
-                      </option>
-                    ))}
+                    {sidebarCollections
+                      .filter((col) => !category?.projectId || col.projectId === category.projectId)
+                      .map((col) => (
+                        <option key={col.id} value={col.id}>
+                          {col.name}
+                        </option>
+                      ))}
+                    {!category?.projectId && <option value="all">All Videos (Library)</option>}
                   </select>
                   {/* Clip count + actions */}
                   <div className="flex justify-between items-center">
@@ -5285,7 +5379,7 @@ const VideoEditorModal = ({
                 'lyricBank',
                 'Lyric Bank',
                 <LyricBankSection
-                  lyrics={lyricsBank}
+                  lyrics={scopedLyrics}
                   hasAudio={!!selectedAudio}
                   onAddNew={() => {
                     if (!selectedAudio) {
@@ -5315,7 +5409,7 @@ const VideoEditorModal = ({
                     }
                   }}
                   onApplyToTimeline={(lyric) => {
-                    // Load words from lyric, then cut by word + create text overlays in one step
+                    // Load words from lyric onto the timeline without touching clips
                     const lyricWords =
                       lyric.words?.length > 0
                         ? lyric.words
@@ -5335,34 +5429,7 @@ const VideoEditorModal = ({
                     }
                     setLoadedBankLyricId(lyric.id);
                     setWords(lyricWords);
-                    // Cut by word using available clips
-                    const availableClips =
-                      visibleVideos.length > 0 ? visibleVideos : category?.videos || [];
-                    if (!availableClips.length) {
-                      toast.error('No clips in bank. Upload videos first.');
-                      return;
-                    }
-                    const now = Date.now();
-                    // Create clips aligned exactly to word timings
-                    const newClips = lyricWords.map((word, i) => {
-                      const randomClip =
-                        availableClips[Math.floor(Math.random() * availableClips.length)];
-                      const wStart = word.startTime ?? word.start ?? 0;
-                      const wDur = word.duration ?? ((word.end ?? 0) - (word.start ?? 0) || 0.5);
-                      return {
-                        id: `clip_${now}_${i}`,
-                        sourceId: randomClip.id,
-                        url: randomClip.url,
-                        localUrl: randomClip.localUrl,
-                        thumbnail: randomClip.thumbnail,
-                        startTime: wStart,
-                        duration: wDur,
-                        locked: false,
-                        sourceOffset: 0,
-                      };
-                    });
-                    setClips(newClips);
-                    toast.success(`Applied ${newClips.length} clips from lyrics`);
+                    toast.success(`Loaded ${lyricWords.length} words onto timeline`);
                   }}
                   onDeleteLyric={(lyricId) => {
                     if (onDeleteLyrics) onDeleteLyrics(lyricId);
@@ -5550,13 +5617,36 @@ const VideoEditorModal = ({
 
                       {/* Font Family */}
                       <div>
-                        <div className="text-[13px] text-neutral-500 mb-1.5">Font Family</div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[13px] text-neutral-500">Font Family</span>
+                          <label className="text-[11px] text-indigo-400 hover:text-indigo-300 cursor-pointer">
+                            + Upload
+                            <input
+                              type="file"
+                              accept=".ttf,.otf,.woff,.woff2"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                const name = file.name.replace(/\.(ttf|otf|woff2?)$/i, '');
+                                const reader = new FileReader();
+                                reader.onload = () => {
+                                  saveCustomFont(name, reader.result);
+                                  handleStyleChange({ fontFamily: `'${name}', sans-serif` });
+                                  toast.success(`Font "${name}" added`);
+                                };
+                                reader.readAsDataURL(file);
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
+                        </div>
                         <select
                           value={activeStyle.fontFamily || "'TikTok Sans', sans-serif"}
                           onChange={(e) => handleStyleChange({ fontFamily: e.target.value })}
                           className="w-full px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-100 text-white text-[13px] outline-none cursor-pointer"
                         >
-                          {AVAILABLE_FONTS.map((f) => (
+                          {getAvailableFonts().map((f) => (
                             <option key={f.name} value={f.value}>
                               {f.name}
                             </option>
@@ -5583,6 +5673,26 @@ const VideoEditorModal = ({
                           }
                           className="w-full accent-brand-600"
                         />
+                      </div>
+
+                      {/* Font Weight */}
+                      <div>
+                        <div className="text-[13px] text-neutral-500 mb-1.5">Font Weight</div>
+                        <select
+                          className="w-full px-2 py-1.5 bg-black border border-neutral-200 rounded text-white text-[12px] outline-none cursor-pointer"
+                          value={activeStyle.fontWeight || '600'}
+                          onChange={(e) => handleStyleChange({ fontWeight: e.target.value })}
+                        >
+                          <option value="100">Thin (100)</option>
+                          <option value="200">Extra Light (200)</option>
+                          <option value="300">Light (300)</option>
+                          <option value="400">Regular (400)</option>
+                          <option value="500">Medium (500)</option>
+                          <option value="600">Semi Bold (600)</option>
+                          <option value="700">Bold (700)</option>
+                          <option value="800">Extra Bold (800)</option>
+                          <option value="900">Black (900)</option>
+                        </select>
                       </div>
 
                       {/* Text Color + Outline Color */}
@@ -5683,12 +5793,27 @@ const VideoEditorModal = ({
                               key: 'bold',
                               label: 'B',
                               ariaLabel: 'Bold',
-                              active: activeStyle.fontWeight === '700',
+                              active: parseInt(activeStyle.fontWeight || '400') >= 700,
                               toggle: () =>
                                 handleStyleChange({
-                                  fontWeight: activeStyle.fontWeight === '700' ? '400' : '700',
+                                  fontWeight:
+                                    parseInt(activeStyle.fontWeight || '400') >= 700
+                                      ? '400'
+                                      : '700',
                                 }),
                               bold: true,
+                            },
+                            {
+                              key: 'italic',
+                              label: 'I',
+                              ariaLabel: 'Italic',
+                              active: activeStyle.fontStyle === 'italic',
+                              toggle: () =>
+                                handleStyleChange({
+                                  fontStyle:
+                                    activeStyle.fontStyle === 'italic' ? 'normal' : 'italic',
+                                }),
+                              italic: true,
                             },
                             {
                               key: 'caps',
@@ -5728,6 +5853,7 @@ const VideoEditorModal = ({
                               icon={
                                 <span
                                   className={`text-xs ${btn.bold ? 'font-bold' : 'font-semibold'}`}
+                                  style={btn.italic ? { fontStyle: 'italic' } : undefined}
                                 >
                                   {btn.label}
                                 </span>
@@ -5913,7 +6039,7 @@ const VideoEditorModal = ({
 
       <EditorFooter
         lastSaved={lastSaved}
-        onCancel={onClose}
+        onCancel={handleCloseRequest}
         onSaveAll={handleSaveAllAndClose}
         isSavingAll={isSavingAll}
         saveAllCount={allVideos.length}

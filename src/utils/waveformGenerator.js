@@ -162,23 +162,28 @@ export async function generateWaveformFromUrl(url, samples = 200) {
 
 /**
  * Generate waveform for a specific time range of a source (e.g. a clip's portion).
- * Extracts only [0, clipDuration] seconds of the source audio.
+ * Extracts [sourceOffset, sourceOffset + clipDuration] seconds of the source audio.
  * @param {string} url — source video/audio URL
  * @param {number} clipDuration — how many seconds of audio to visualize
  * @param {number} samples — number of amplitude samples
+ * @param {number} sourceOffset — start position within the source (seconds)
  * @returns {Promise<number[]>}
  */
-export async function generateWaveformForClip(url, clipDuration, samples = 200) {
+export async function generateWaveformForClip(url, clipDuration, samples = 200, sourceOffset = 0) {
   if (!url || !clipDuration || clipDuration <= 0) return [];
-  const key = `${url}::clip::${clipDuration.toFixed(2)}::${samples}`;
+  const key = `${url}::clip::${sourceOffset.toFixed(2)}::${clipDuration.toFixed(2)}::${samples}`;
   if (cache.has(key)) return cache.get(key);
   try {
     const buffer = await getAudioBuffer(url);
     const rawData = buffer.getChannelData(0);
     const sampleRate = buffer.sampleRate;
-    // Extract only the first clipDuration seconds
-    const endSample = Math.min(Math.floor(clipDuration * sampleRate), rawData.length);
-    const sliced = rawData.slice(0, endSample);
+    // Extract [sourceOffset, sourceOffset + clipDuration] seconds
+    const startSample = Math.min(Math.floor(sourceOffset * sampleRate), rawData.length);
+    const endSample = Math.min(
+      Math.floor((sourceOffset + clipDuration) * sampleRate),
+      rawData.length,
+    );
+    const sliced = rawData.slice(startSample, endSample);
     const data = sampleWaveform(sliced, samples);
     if (data.length > 0) cache.set(key, data);
     return data;

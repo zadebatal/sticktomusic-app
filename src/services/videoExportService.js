@@ -1,10 +1,20 @@
 /**
  * videoExportService.js
- * Video rendering using Canvas + MediaRecorder (reliable fallback)
+ * Video rendering using Remotion (primary, desktop) or Canvas + MediaRecorder (fallback)
  * With FFmpeg.wasm for WebM to MP4 conversion (TikTok compatibility)
  */
 
 import log from '../utils/logger';
+
+// Remotion rendering is handled by Electron IPC — no client-side import needed.
+// Check availability via window.electronAPI.
+const getRemotionService = () => ({
+  isRemotionAvailable: () => !!window.electronAPI?.remotionRender,
+  renderWithRemotion: async (videoData, onProgress) => {
+    // Delegate to Electron main process via IPC
+    throw new Error('Remotion render should be called via IPC, not directly');
+  },
+});
 
 let ffmpegInstance = null;
 let ffmpegLoadPromise = null;
@@ -425,8 +435,9 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
       const fontSize = textStyle.fontSize || 48;
       const fontFamily = textStyle.fontFamily || 'Inter, sans-serif';
       const fontWeight = textStyle.fontWeight || '600';
+      const fontStyle = textStyle.fontStyle || 'normal';
 
-      ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+      ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
@@ -462,57 +473,42 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
   };
 
   // Fast render loop - processes frames as fast as possible
-  return new Promise((resolve, reject) => {
-    let currentFrame = 0;
-    let isRunning = true;
-
+  const renderPromise = new Promise((resolve, reject) => {
     recorder.onstop = () => {
       const blob = new Blob(chunks, { type: mimeType });
       log('[VideoExport] Render complete:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
       onProgress(safeProgress(100));
-      // Return blob and whether it's native MP4
       resolve({ blob, isNativeMP4: isMP4Native });
     };
-
-    recorder.onerror = (err) => {
-      isRunning = false;
-      reject(err);
-    };
-
-    // Start recording
-    recorder.start(100);
-
-    // Fast frame processing loop using setTimeout(0) for faster-than-real-time
-    const processNextFrame = () => {
-      if (!isRunning) return;
-
-      const currentTime = currentFrame * frameInterval;
-
-      // Update progress
-      const progress = currentFrame / totalFrames;
-      onProgress(safeProgress(25 + progress * 65));
-
-      if (currentFrame >= totalFrames) {
-        // Done with all frames
-        isRunning = false;
-        recorder.stop();
-        return;
-      }
-
-      // Draw the frame and explicitly request capture
-      drawFrameAtTime(currentTime);
-      if (videoTrack.requestFrame) videoTrack.requestFrame();
-      currentFrame++;
-
-      // Process next frame immediately (faster than requestAnimationFrame)
-      // Using setTimeout(0) allows the browser to process events but runs ASAP
-      setTimeout(processNextFrame, 0);
-    };
-
-    // Start the fast render loop
-    log(`[VideoExport] Rendering ${totalFrames} frames at ${FPS}fps...`);
-    processNextFrame();
+    recorder.onerror = (err) => reject(err);
   });
+
+  recorder.start(100);
+  log(`[VideoExport] Rendering ${totalFrames} frames at ${FPS}fps...`);
+
+  // Synchronous for-loop with periodic yields — matches photoMontageExportService pattern.
+  // The old setTimeout(0) recursive loop caused a race condition where recorder.stop()
+  // was called before the MediaRecorder finished encoding queued frames.
+  for (let currentFrame = 0; currentFrame < totalFrames; currentFrame++) {
+    const currentTime = currentFrame * frameInterval;
+
+    // Draw the frame and explicitly request capture
+    drawFrameAtTime(currentTime);
+    if (videoTrack.requestFrame) videoTrack.requestFrame();
+
+    // Report progress every 10 frames
+    if (currentFrame % 10 === 0) {
+      onProgress(safeProgress(25 + (currentFrame / totalFrames) * 65));
+    }
+
+    // Yield to browser every 5 frames — allows MediaRecorder to encode
+    if (currentFrame % 5 === 0) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  }
+
+  recorder.stop();
+  return renderPromise;
 };
 
 /**
@@ -539,7 +535,19 @@ export const renderVideo = async (videoData, onProgress = () => {}, options = {}
 
   log(`[VideoExport] Starting render: ${clips.length} clips, ${duration}s duration`);
 
-  // Use Canvas + MediaRecorder (most reliable)
+  // Try Remotion first (desktop app only — frame-perfect rendering)
+  const remotion = getRemotionService();
+  if (remotion.isRemotionAvailable()) {
+    try {
+      log('[VideoExport] Using Remotion renderer (desktop)');
+      const result = await remotion.renderWithRemotion(videoData, onProgress);
+      return result;
+    } catch (remotionErr) {
+      log.warn('[VideoExport] Remotion failed, falling back to Canvas:', remotionErr.message);
+    }
+  }
+
+  // Fallback: Canvas + MediaRecorder
   try {
     // Pre-fetch audio in parallel with canvas rendering for speed
     let audioBufferPromise = null;

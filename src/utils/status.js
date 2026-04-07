@@ -17,6 +17,7 @@ export const VIDEO_STATUS = Object.freeze({
   DRAFT: 'draft', // Initial creation, editing in progress
   RENDERING: 'rendering', // Video export in progress
   COMPLETED: 'completed', // Export finished, ready for review
+  READY: 'ready', // Marked ready for scheduling
   APPROVED: 'approved', // Operator approved for posting
 });
 
@@ -71,6 +72,7 @@ export function getVideoStatusDisplay(status) {
     [VIDEO_STATUS.DRAFT]: 'Draft',
     [VIDEO_STATUS.RENDERING]: 'Rendering...',
     [VIDEO_STATUS.COMPLETED]: 'Completed',
+    [VIDEO_STATUS.READY]: 'Ready',
     [VIDEO_STATUS.APPROVED]: 'Approved',
   };
   return displays[status] || status;
@@ -86,6 +88,7 @@ export function getVideoStatusColor(status) {
     [VIDEO_STATUS.DRAFT]: '#6B7280', // gray-500
     [VIDEO_STATUS.RENDERING]: '#F59E0B', // amber-500
     [VIDEO_STATUS.COMPLETED]: '#3B82F6', // blue-500
+    [VIDEO_STATUS.READY]: '#10B981', // green-500
     [VIDEO_STATUS.APPROVED]: '#10B981', // green-500
   };
   return colors[status] || '#6B7280';
@@ -101,7 +104,8 @@ export function canTransitionTo(fromStatus, toStatus) {
   const validTransitions = {
     [VIDEO_STATUS.DRAFT]: [VIDEO_STATUS.RENDERING],
     [VIDEO_STATUS.RENDERING]: [VIDEO_STATUS.COMPLETED, VIDEO_STATUS.DRAFT], // Can fail back to draft
-    [VIDEO_STATUS.COMPLETED]: [VIDEO_STATUS.APPROVED, VIDEO_STATUS.DRAFT], // Can be edited
+    [VIDEO_STATUS.COMPLETED]: [VIDEO_STATUS.READY, VIDEO_STATUS.DRAFT], // Can mark ready or edit
+    [VIDEO_STATUS.READY]: [VIDEO_STATUS.DRAFT], // Can revert to draft
     [VIDEO_STATUS.APPROVED]: [VIDEO_STATUS.DRAFT], // Can be un-approved
   };
   return validTransitions[fromStatus]?.includes(toStatus) ?? false;

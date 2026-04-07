@@ -28,7 +28,7 @@ import {
   addToLibraryAsync,
   updateTextBankEntry,
 } from '../../services/libraryService';
-import { uploadFile } from '../../services/firebaseStorage';
+import { uploadFile, uploadFileWithQuota } from '../../services/firebaseStorage';
 import { useToast } from '../ui';
 import LyricBank from './LyricBank';
 import AudioClipSelector from './AudioClipSelector';
@@ -90,6 +90,7 @@ import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
 
 const SlideshowEditor = ({
   db = null,
+  user = null,
   artistId = null,
   category,
   existingSlideshow = null,
@@ -1436,7 +1437,14 @@ const SlideshowEditor = ({
         // Upload trimmed file to Firebase Storage + save to library in background
         if (db && artistId) {
           try {
-            const { url: firebaseUrl, path: storagePath } = await uploadFile(trimmedFile, 'audio');
+            const quotaCtx = { userData: user, userEmail: user?.email };
+            const { url: firebaseUrl, path: storagePath } = await uploadFileWithQuota(
+              trimmedFile,
+              'audio',
+              null,
+              {},
+              quotaCtx,
+            );
             const audioItem = {
               id: trimId,
               type: MEDIA_TYPES.AUDIO,
