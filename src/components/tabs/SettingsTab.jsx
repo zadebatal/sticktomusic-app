@@ -48,6 +48,7 @@ import {
   getDropboxSettings,
   saveDropboxSettings,
 } from '../../services/dropboxService';
+import { sweepOrphanLocalItems } from '../../services/libraryService';
 
 /**
  * SettingsTab — Profile, team management, theme picker, logout.
@@ -58,7 +59,8 @@ const DRIVE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;
 const DROPBOX_APP_KEY = process.env.REACT_APP_DROPBOX_APP_KEY;
 
 // ── Media Library Section (Electron desktop only) ──
-const MediaLibrarySection = ({ db, firestoreArtists }) => {
+const MediaLibrarySection = ({ db, firestoreArtists, currentArtistId }) => {
+  const { success: toastSuccess, error: toastError } = useToast();
   const [folder, setFolder] = useState(null);
   const [connected, setConnected] = useState(false);
   const [diskUsage, setDiskUsage] = useState(null);
@@ -66,6 +68,40 @@ const MediaLibrarySection = ({ db, firestoreArtists }) => {
   const [relocating, setRelocating] = useState(false);
   const [relocateResult, setRelocateResult] = useState(null);
   const [autoImport, setAutoImport] = useState(false);
+  // Orphan sweep state — see sweepOrphanLocalItems in libraryService.js
+  const [sweepConfirm, setSweepConfirm] = useState(false);
+  const [sweeping, setSweeping] = useState(false);
+  const [sweepProgress, setSweepProgress] = useState(null); // { scanned, total, name }
+  const [sweepResult, setSweepResult] = useState(null); // { scanned, offline, alreadyMarked, errors }
+
+  const currentArtistName = (firestoreArtists || []).find((a) => a.id === currentArtistId)?.name;
+
+  const handleRunSweep = async () => {
+    if (!db || !currentArtistId) return;
+    setSweepConfirm(false);
+    setSweeping(true);
+    setSweepProgress({ scanned: 0, total: 0, name: '' });
+    setSweepResult(null);
+    try {
+      const stats = await sweepOrphanLocalItems(db, currentArtistId, {
+        onProgress: (p) => setSweepProgress(p),
+      });
+      setSweepResult(stats);
+      if (stats.offline > 0) {
+        toastSuccess(`Marked ${stats.offline} orphan items as offline`);
+      } else if (stats.alreadyMarked > 0) {
+        toastSuccess(`Already cleaned up — ${stats.alreadyMarked} items marked offline previously`);
+      } else {
+        toastSuccess('No orphan items found — library is clean');
+      }
+    } catch (err) {
+      log.error('[Settings] Sweep failed:', err);
+      toastError(err.message || 'Sweep failed');
+    } finally {
+      setSweeping(false);
+      setSweepProgress(null);
+    }
+  };
 
   useEffect(() => {
     getMediaFolder().then(setFolder);
@@ -198,6 +234,80 @@ const MediaLibrarySection = ({ db, firestoreArtists }) => {
               Relocate scan failed. Check drive connection.
             </span>
           )}
+
+          {/* Orphan sweep — marks library items whose local files no longer
+              exist on disk as syncStatus='offline'. See 94p notes. Per-artist
+              so the user has to be on the artist they want to clean up. */}
+          {currentArtistId && (
+            <div className="flex w-full flex-col gap-2 rounded-lg bg-white/[0.03] px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-col">
+                  <span className="text-caption font-caption text-neutral-300">
+                    Library Maintenance
+                  </span>
+                  <span className="text-[11px] text-neutral-500">
+                    Mark items whose local files are missing as offline
+                    {currentArtistName ? ` (current: ${currentArtistName})` : ''}
+                  </span>
+                </div>
+                <Button
+                  variant="neutral-secondary"
+                  size="small"
+                  onClick={() => setSweepConfirm(true)}
+                  disabled={sweeping}
+                >
+                  {sweeping ? 'Scanning…' : 'Mark Offline Items'}
+                </Button>
+              </div>
+              {sweeping && sweepProgress && (
+                <div className="flex flex-col gap-1">
+                  <div
+                    style={{
+                      width: '100%',
+                      height: 4,
+                      borderRadius: 2,
+                      backgroundColor: 'rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: sweepProgress.total
+                          ? `${(sweepProgress.scanned / sweepProgress.total) * 100}%`
+                          : '0%',
+                        height: '100%',
+                        borderRadius: 2,
+                        backgroundColor: '#6366f1',
+                        transition: 'width 0.2s ease',
+                      }}
+                    />
+                  </div>
+                  <span className="text-[11px] text-neutral-500">
+                    {sweepProgress.scanned} / {sweepProgress.total || '?'} —{' '}
+                    {(sweepProgress.name || '').slice(0, 50)}
+                  </span>
+                </div>
+              )}
+              {sweepResult && (
+                <span className="text-[11px] text-neutral-400">
+                  Scanned {sweepResult.scanned}, marked {sweepResult.offline} offline
+                  {sweepResult.alreadyMarked > 0
+                    ? `, ${sweepResult.alreadyMarked} already-offline`
+                    : ''}
+                  {sweepResult.errors > 0 ? `, ${sweepResult.errors} errors` : ''}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Sweep confirm dialog */}
+          <ConfirmDialog
+            isOpen={sweepConfirm}
+            title="Mark offline library items?"
+            message={`This will scan ${currentArtistName || 'the current artist'}'s library, fire HEAD requests against each local-only item's URL, and mark any 404s as syncStatus='offline'. Reversible — items are not deleted, just relabeled. Safe to re-run.`}
+            confirmLabel="Run Sweep"
+            onConfirm={handleRunSweep}
+            onCancel={() => setSweepConfirm(false)}
+          />
 
           {/* Auto-import toggle */}
           <div className="flex w-full items-center justify-between rounded-lg bg-white/[0.03] px-4 py-3">
@@ -894,7 +1004,13 @@ const SettingsTab = ({
         </div>
 
         {/* ── MEDIA LIBRARY (Electron only) ── */}
-        {isElectronApp() && <MediaLibrarySection db={db} firestoreArtists={firestoreArtists} />}
+        {isElectronApp() && (
+          <MediaLibrarySection
+            db={db}
+            firestoreArtists={firestoreArtists}
+            currentArtistId={artistId}
+          />
+        )}
 
         {/* ── SUBSCRIPTION / ACCOUNT ── */}
         <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-100 bg-neutral-50 p-6">
