@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import useIsMobile from '../../hooks/useIsMobile';
 import { convertImageFilesIfNeeded } from '../../utils/imageConverter';
-import AestheticHome from './AestheticHome';
 import StudioHome from './StudioHome';
 import ContentLibrary from './ContentLibrary';
 import ProjectLanding from './ProjectLanding';
@@ -3902,48 +3901,18 @@ const VideoStudio = ({
           </Suspense>
         )}
 
-        {currentView === 'home' && selectedCategory && (
-          <AestheticHome
-            artists={artists}
-            selectedArtist={selectedArtist}
-            onSelectArtist={setSelectedArtist}
-            categories={artistCategories}
-            selectedCategory={selectedCategory}
-            onSelectCategory={handleSelectCategory}
-            onCreateCategory={handleCreateCategory}
-            // Studio mode (lifted for breadcrumb)
-            studioMode={studioMode}
-            onSetStudioMode={setStudioMode}
-            // Video banks
-            onUploadVideos={handleUploadVideos}
-            onUploadAudio={handleUploadAudio}
-            onSaveAudioClip={handleSaveAudioClip}
-            onEditAudio={handleEditAudio}
-            onDeleteBankVideo={handleDeleteBankVideo}
-            onDeleteBankAudio={handleDeleteBankAudio}
-            onRenameBankVideo={handleRenameBankVideo}
-            onRenameBankAudio={handleRenameBankAudio}
-            // Image banks (for slideshows)
-            onUploadImages={handleUploadImages}
-            onDeleteBankImage={handleDeleteBankImage}
-            // Lyric bank (shared)
-            onAddLyrics={handleAddLyrics}
-            onUpdateLyrics={handleUpdateLyrics}
-            onDeleteLyrics={handleDeleteLyrics}
-            // Actions
-            onCreateContent={handleCreateContent}
-            onMakeVideo={handleMakeVideo}
-            onShowBatchPipeline={() => setShowBatchPipeline(true)}
-            onViewContent={() => {
-              setCurrentView('drafts');
-              setShowEditor(false);
-              setShowSlideshowEditor(false);
-            }}
-            onMakeSlideshow={handleMakeSlideshow}
-            onEditSlideshow={(slideshow) => handleMakeSlideshow(slideshow)}
-            onDeleteSlideshow={handleDeleteSlideshow}
-          />
-        )}
+        {/* AestheticHome render branch removed in 94k cleanup. The condition
+            `currentView === 'home' && selectedCategory` is permanently false in
+            the modern Projects/Niches flow because session restore stopped
+            re-hydrating selectedCategory in 94g. The default home view is now
+            ProjectLanding (rendered at currentView === 'home' && !selectedCategory
+            below). The handler functions in this file that ONLY fed AestheticHome
+            (handleSelectCategory, handleCreateCategory, handleUploadVideos,
+            handleUploadAudio, handleSaveAudioClip, handleDeleteBankVideo, etc.)
+            are now unused — leaving them in place for now so the diff stays
+            surgical, will sweep in a follow-up commit. handleUploadImages still
+            has a SlideshowEditor `onImportToBank` reference but that path is
+            also broken (early-returns on !selectedCategory) — separate fix. */}
 
         {currentView === 'library' && (selectedCategory || libraryCategory) && (
           <ContentLibrary
