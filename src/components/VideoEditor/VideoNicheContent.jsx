@@ -62,6 +62,7 @@ import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
 import { useToast, ConfirmDialog } from '../ui';
 import { isSearchAvailable, searchMedia } from '../../services/mediaSearchService';
 import { uploadLocalItemToCloud } from '../../services/localMediaService';
+import { backfillMissingDurations } from '../../services/mediaProbeService';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
 import { bucketByDuration } from './shared/editorConstants';
 
@@ -141,6 +142,41 @@ const VideoNicheContent = ({
       return next;
     });
   }, []);
+
+  // ── Backfill missing durations ──
+  // Same idea as the AllMediaContent backfill: items without a duration
+  // field end up in the "Unknown Duration" bucket. Probe in the
+  // background and write the result back to the library.
+  const probedSignatureRef = useRef('');
+  useEffect(() => {
+    if (!library || library.length === 0) return;
+    const candidates = library.filter(
+      (m) =>
+        (m.type === 'video' || m.type === 'audio') &&
+        (!m.duration || !isFinite(m.duration) || m.duration <= 0) &&
+        m.syncStatus !== 'offline' &&
+        (m.url || m.localUrl),
+    );
+    if (candidates.length === 0) return;
+    const signature = candidates
+      .map((c) => c.id)
+      .sort()
+      .join('|');
+    if (probedSignatureRef.current === signature) return;
+    probedSignatureRef.current = signature;
+    let cancelled = false;
+    backfillMissingDurations(candidates, {
+      db,
+      artistId,
+      concurrency: 3,
+    }).then(() => {
+      if (cancelled) return;
+      // Refresh handled by the parent's library subscription
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [library, db, artistId]);
 
   // Audio preview playback
   const [playingAudioId, setPlayingAudioId] = useState(null);

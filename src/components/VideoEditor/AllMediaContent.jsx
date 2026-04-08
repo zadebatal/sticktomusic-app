@@ -39,6 +39,7 @@ import { uploadLocalItemToCloud } from '../../services/localMediaService';
 import { useToast, ConfirmDialog } from '../ui';
 import { bucketByDuration } from './shared/editorConstants';
 import { isSearchAvailable, searchMedia } from '../../services/mediaSearchService';
+import { backfillMissingDurations } from '../../services/mediaProbeService';
 import log from '../../utils/logger';
 
 const AllMediaContent = ({
@@ -102,6 +103,49 @@ const AllMediaContent = ({
   useEffect(() => {
     setSelected(new Set());
   }, [mediaScope, mediaSearch, sourceFilter]);
+
+  // ── Backfill missing durations ──
+  // Items imported via the legacy paths (or earlier dev rebuilds) often
+  // lack a duration field and end up in the "Unknown Duration" bucket
+  // when the user enables By Duration sort. Probe them via the browser's
+  // native HTML5 metadata loader and write the result back to the
+  // library. Gated by a ref + signature so it only fires when the set of
+  // missing-duration items actually changes.
+  const probedSignatureRef = useRef('');
+  useEffect(() => {
+    if (!library || library.length === 0) return;
+    const candidates = library.filter(
+      (m) =>
+        (m.type === 'video' || m.type === 'audio') &&
+        (!m.duration || !isFinite(m.duration) || m.duration <= 0) &&
+        m.syncStatus !== 'offline' &&
+        (m.url || m.localUrl),
+    );
+    if (candidates.length === 0) return;
+    const signature = candidates
+      .map((c) => c.id)
+      .sort()
+      .join('|');
+    if (probedSignatureRef.current === signature) return;
+    probedSignatureRef.current = signature;
+    let cancelled = false;
+    backfillMissingDurations(candidates, {
+      db,
+      artistId,
+      concurrency: 3,
+    }).then((result) => {
+      if (cancelled) return;
+      if (result?.updated > 0) {
+        log.info(
+          `[AllMedia] Backfilled duration for ${result.updated} of ${result.probed} probed items`,
+        );
+        onRefreshLibrary?.();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [library, db, artistId, onRefreshLibrary]);
 
   // ── Debounced semantic search ──
   useEffect(() => {
