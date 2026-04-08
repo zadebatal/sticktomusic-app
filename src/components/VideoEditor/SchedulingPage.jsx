@@ -142,6 +142,12 @@ const SchedulingPage = ({
   // on blur or Enter via commitBatchStartDate() (BUG #2 fix).
   const [batchStartDateInput, setBatchStartDateInput] = useState('');
   const [batchStartTime, setBatchStartTime] = useState('14:00');
+  // Mirror text used by the time input — same pattern as the date mirror
+  // above. Native <input type="time"> mangles typed input on macOS Safari
+  // and Chrome (typing "5:55 PM" produces "02:05 PM" because of segmented
+  // input parsing), so we use a free-form text input that commits via
+  // parseTimeText() on blur or Enter.
+  const [batchStartTimeInput, setBatchStartTimeInput] = useState('14:00');
   const [postsPerDay, setPostsPerDay] = useState(2);
   const [spacingMode, setSpacingMode] = useState('even'); // 'even' | 'fixed' | 'random'
   const [spacingMinutes, setSpacingMinutes] = useState(120); // used when spacingMode === 'fixed'
@@ -220,12 +226,85 @@ const SchedulingPage = ({
     setBatchStartDateInput(batchStartDate || '');
   }, [batchStartDateInput, batchStartDate]);
 
-  // Available handles for account picker
+  // Mirror batchStartTime → batchStartTimeInput when external state changes
+  useEffect(() => {
+    setBatchStartTimeInput(batchStartTime);
+  }, [batchStartTime]);
+
+  // Parse free-form time text into HH:MM 24-hour format. Accepts:
+  //   "5:55 PM" / "5:55pm" / "05:55 PM" → "17:55"
+  //   "5:55"  (24h, no suffix)         → "05:55"
+  //   "17:55"                          → "17:55"
+  //   "555" / "1755"                   → "05:55" / "17:55"
+  // Returns null on unparseable input. Used by both batch and per-row time
+  // inputs (BUG-A fix).
+  const parseTimeText = (raw) => {
+    const text = (raw || '').trim();
+    if (!text) return '';
+    // Strip surrounding whitespace and uppercase the AM/PM bit
+    const normalized = text.toUpperCase().replace(/\s+/g, ' ');
+    // 24-hour ISO HH:MM directly
+    const iso24 = normalized.match(/^(\d{1,2}):(\d{2})$/);
+    if (iso24) {
+      const hh = parseInt(iso24[1], 10);
+      const mm = parseInt(iso24[2], 10);
+      if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+        return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+      }
+    }
+    // 12-hour with AM/PM: "5:55 PM" / "5:55PM" / "05:55 AM"
+    const ampm = normalized.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+    if (ampm) {
+      let hh = parseInt(ampm[1], 10);
+      const mm = parseInt(ampm[2], 10);
+      const suffix = ampm[3];
+      if (hh >= 1 && hh <= 12 && mm >= 0 && mm <= 59) {
+        if (suffix === 'PM' && hh !== 12) hh += 12;
+        if (suffix === 'AM' && hh === 12) hh = 0;
+        return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+      }
+    }
+    // Bare digits: "555" → 5:55, "1755" → 17:55, "1230" → 12:30
+    const digits = normalized.replace(/\D/g, '');
+    if (digits.length === 3 || digits.length === 4) {
+      const hh = parseInt(digits.slice(0, digits.length - 2), 10);
+      const mm = parseInt(digits.slice(-2), 10);
+      if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+        return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+      }
+    }
+    return null;
+  };
+
+  const commitBatchStartTime = useCallback(() => {
+    const parsed = parseTimeText(batchStartTimeInput);
+    if (parsed === null) {
+      // Unparseable — revert
+      setBatchStartTimeInput(batchStartTime || '14:00');
+      return;
+    }
+    setBatchStartTime(parsed);
+    setBatchStartTimeInput(parsed);
+  }, [batchStartTimeInput, batchStartTime]);
+
+  // Available handles for account picker — scoped to current artist (BUG-B).
+  // Without this filter, the dropdown listed every connected handle across
+  // every artist in the workspace; picking a non-current-artist account got
+  // a Late.co rejection ("One or more accounts do not belong to this user")
+  // because each artist has its own Late API key. We filter twice for
+  // safety: by artistId if the field is present (Late accounts), AND by
+  // dropping any handles that don't appear in the current artist's
+  // lateAccountIds map (manual accounts).
   const availableHandles = useMemo(() => {
     const handles = new Set();
-    accounts.forEach((acc) => handles.add(acc.handle));
+    const validHandlesInMap = new Set(Object.keys(lateAccountIds || {}));
+    accounts.forEach((acc) => {
+      if (acc.artistId && artistId && acc.artistId !== artistId) return;
+      if (validHandlesInMap.size > 0 && !validHandlesInMap.has(acc.handle)) return;
+      handles.add(acc.handle);
+    });
     return Array.from(handles);
-  }, [accounts]);
+  }, [accounts, artistId, lateAccountIds]);
 
   // Enriched handles with platform context for dropdown labels
   const enrichedHandles = useMemo(() => {
@@ -1608,6 +1687,8 @@ const SchedulingPage = ({
 
     // Apply to each selected post
     for (const post of scheduled) {
+      const existingPost = posts.find((p) => p.id === post.id);
+      const wasFailed = existingPost?.status === POST_STATUS.FAILED;
       const updates = {
         scheduledTime:
           post.scheduledTime instanceof Date
@@ -1616,8 +1697,14 @@ const SchedulingPage = ({
         status: POST_STATUS.SCHEDULED,
       };
 
+      // BUG-D: clear failure state when re-scheduling a failed post so the
+      // row UI updates cleanly and the retry uses the new account.
+      if (wasFailed) {
+        updates.errorMessage = null;
+        updates.postResults = null;
+      }
+
       // Don't auto-merge always-on hashtags - preserve user's explicit hashtag choices
-      const existingPost = posts.find((p) => p.id === post.id);
       const perPostTags = toHashtagArray(existingPost?.hashtags);
       if (perPostTags.length > 0) updates.hashtags = perPostTags;
 
@@ -1680,15 +1767,28 @@ const SchedulingPage = ({
   ]);
 
   // ── Auto-Schedule Ready Content ──
+  // BUG-C: accept any draft that has been rendered (cloudUrl/exportUrl set
+  // OR explicit status==='ready'). The "Ready" badge on draft cards means
+  // "video has been exported to a playable file" — which is exactly what
+  // scheduling needs. Requiring a separate explicit Ready promotion was
+  // confusing and blocked the most common flow (Save in editor → Schedule).
+  const isContentReady = (item) =>
+    item &&
+    !item.deleted &&
+    !item.deletedAt &&
+    (item.status === 'ready' ||
+      !!item.cloudUrl ||
+      !!item.url ||
+      !!item.exportUrl ||
+      !!item.rendered);
+
   const handleAutoScheduleReady = useCallback(async () => {
     if (!db || !artistId) return;
     const content = getCreatedContent(artistId);
     const readyItems = [
-      ...(content.videos || [])
-        .filter((v) => v.status === 'ready')
-        .map((v) => ({ ...v, type: 'video' })),
+      ...(content.videos || []).filter(isContentReady).map((v) => ({ ...v, type: 'video' })),
       ...(content.slideshows || [])
-        .filter((s) => s.status === 'ready')
+        .filter((s) => isContentReady(s) && !s.isTemplate)
         .map((s) => ({ ...s, type: 'slideshow' })),
     ];
     if (readyItems.length === 0) {
@@ -1768,19 +1868,58 @@ const SchedulingPage = ({
     let succeeded = 0;
     let failed = 0;
 
+    // BUG-D: build platform overrides from the batch account selector so
+    // retrying a failed post with a freshly-picked account actually uses
+    // it. Without this, a post that originally failed with the wrong
+    // account would keep retrying with the same wrong account because
+    // post.platforms still held the stale entries.
+    const batchPlatformOverride = {};
+    if (batchAccount) {
+      const mapping = lateAccountIds[batchAccount];
+      if (mapping) {
+        Object.entries(mapping).forEach(([platform, accountId]) => {
+          if (accountId && batchPlatforms[platform]) {
+            batchPlatformOverride[platform] = { accountId, handle: batchAccount };
+          }
+        });
+      }
+    }
+    const hasBatchOverride = Object.keys(batchPlatformOverride).length > 0;
+
     for (const post of publishable) {
-      const platformEntries = Object.entries(post.platforms || {})
+      // Apply batch override on top of existing platforms when present.
+      // For failed posts, this is the recovery path: user picks a new
+      // account, clicks Publish Now, and the new account replaces the
+      // bad one.
+      const effectivePlatforms = hasBatchOverride
+        ? { ...(post.platforms || {}), ...batchPlatformOverride }
+        : post.platforms || {};
+
+      // Persist the effective platforms + clear any prior failure state
+      // so the row UI updates cleanly on retry.
+      if (hasBatchOverride || post.status === POST_STATUS.FAILED) {
+        await handleUpdatePost(post.id, {
+          platforms: effectivePlatforms,
+          errorMessage: null,
+          postResults: null,
+        });
+      }
+
+      const platformEntries = Object.entries(effectivePlatforms)
         .filter(([, v]) => v?.accountId)
         .map(([platform, v]) => ({ platform, accountId: v.accountId }));
 
       if (platformEntries.length === 0) {
         await handleUpdatePost(post.id, {
           status: POST_STATUS.FAILED,
-          errorMessage: 'No platform accounts assigned',
+          errorMessage: 'No platform accounts assigned — pick an account from the bar above',
         });
         failed++;
         continue;
       }
+
+      // Use the freshly-overridden post for downstream logic
+      post.platforms = effectivePlatforms;
 
       const isSlideshow = post.contentType === 'slideshow';
       let videoUrl = post.cloudUrl || post.editorState?.cloudUrl;
@@ -2453,11 +2592,23 @@ const SchedulingPage = ({
                     style={s.miniInput}
                     aria-label="Batch start date"
                   />
+                  {/* Free-form time input — accepts 5:55 PM, 17:55, 555, etc.
+                      Avoids the native <input type="time"> segmented-input
+                      typing bug where 5:55 PM became 02:05 PM (BUG-A). */}
                   <input
-                    type="time"
-                    value={batchStartTime}
-                    onChange={(e) => setBatchStartTime(e.target.value)}
-                    style={{ ...s.miniInput, cursor: 'pointer' }}
+                    type="text"
+                    value={batchStartTimeInput}
+                    onChange={(e) => setBatchStartTimeInput(e.target.value)}
+                    onBlur={commitBatchStartTime}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitBatchStartTime();
+                        e.target.blur();
+                      }
+                    }}
+                    placeholder="HH:MM"
+                    style={{ ...s.miniInput, cursor: 'text' }}
                     aria-label="Batch start time"
                   />
                 </div>
@@ -3028,6 +3179,11 @@ const PostRow = ({
   const [caption, setCaption] = useState(post.caption || '');
   const [schedDate, setSchedDate] = useState('');
   const [schedTime, setSchedTime] = useState('');
+  // Free-form mirror inputs (BUG-A): users type into these directly,
+  // commit on blur via parsePostRowDate/parsePostRowTime. Avoids the
+  // native <input type="date|time"> segmented-input typing bug.
+  const [schedDateInput, setSchedDateInput] = useState('');
+  const [schedTimeInput, setSchedTimeInput] = useState('');
 
   useEffect(() => {
     setCaption(post.caption || '');
@@ -3041,14 +3197,20 @@ const PostRow = ({
         const mm = String(d.getMonth() + 1).padStart(2, '0');
         const dd = String(d.getDate()).padStart(2, '0');
         setSchedDate(`${yyyy}-${mm}-${dd}`);
+        setSchedDateInput(`${yyyy}-${mm}-${dd}`);
         setSchedTime(d.toTimeString().substring(0, 5));
+        setSchedTimeInput(d.toTimeString().substring(0, 5));
       } else {
         setSchedDate('');
+        setSchedDateInput('');
         setSchedTime('');
+        setSchedTimeInput('');
       }
     } else {
       setSchedDate('');
+      setSchedDateInput('');
       setSchedTime('');
+      setSchedTimeInput('');
     }
   }, [post.id, post.caption, post.scheduledTime]);
 
@@ -3062,6 +3224,79 @@ const PostRow = ({
     if (d && t) {
       onUpdate({ scheduledTime: new Date(`${d}T${t}`).toISOString() });
     }
+  };
+
+  // Parse free-form date text in the per-row input. Mirrors the batch
+  // date parser; accepts MM/DD/YYYY or ISO YYYY-MM-DD. (BUG-A.)
+  const parseRowDate = (raw) => {
+    const text = (raw || '').trim();
+    if (!text) return '';
+    const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (iso && !isNaN(new Date(text).getTime())) return text;
+    const mdy = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (mdy) {
+      const isoStr = `${mdy[3]}-${mdy[1].padStart(2, '0')}-${mdy[2].padStart(2, '0')}`;
+      if (!isNaN(new Date(isoStr).getTime())) return isoStr;
+    }
+    return null;
+  };
+
+  // Parse free-form time text in the per-row input. Mirrors the batch
+  // time parser. (BUG-A.)
+  const parseRowTime = (raw) => {
+    const text = (raw || '').trim();
+    if (!text) return '';
+    const normalized = text.toUpperCase().replace(/\s+/g, ' ');
+    const iso24 = normalized.match(/^(\d{1,2}):(\d{2})$/);
+    if (iso24) {
+      const hh = parseInt(iso24[1], 10);
+      const mm = parseInt(iso24[2], 10);
+      if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+        return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+      }
+    }
+    const ampm = normalized.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+    if (ampm) {
+      let hh = parseInt(ampm[1], 10);
+      const mm = parseInt(ampm[2], 10);
+      const suffix = ampm[3];
+      if (hh >= 1 && hh <= 12 && mm >= 0 && mm <= 59) {
+        if (suffix === 'PM' && hh !== 12) hh += 12;
+        if (suffix === 'AM' && hh === 12) hh = 0;
+        return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+      }
+    }
+    const digits = normalized.replace(/\D/g, '');
+    if (digits.length === 3 || digits.length === 4) {
+      const hh = parseInt(digits.slice(0, digits.length - 2), 10);
+      const mm = parseInt(digits.slice(-2), 10);
+      if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+        return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+      }
+    }
+    return null;
+  };
+
+  const commitSchedDate = () => {
+    const parsed = parseRowDate(schedDateInput);
+    if (parsed === null) {
+      setSchedDateInput(schedDate || '');
+      return;
+    }
+    setSchedDate(parsed);
+    setSchedDateInput(parsed);
+    handleScheduleChange(parsed, null);
+  };
+
+  const commitSchedTime = () => {
+    const parsed = parseRowTime(schedTimeInput);
+    if (parsed === null) {
+      setSchedTimeInput(schedTime || '');
+      return;
+    }
+    setSchedTime(parsed);
+    setSchedTimeInput(parsed);
+    handleScheduleChange(null, parsed);
   };
 
   const statusColor =
@@ -3341,26 +3576,38 @@ const PostRow = ({
           >
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
               <input
-                type="date"
-                value={schedDate}
-                onChange={(e) => {
-                  setSchedDate(e.target.value);
-                  handleScheduleChange(e.target.value, null);
+                type="text"
+                value={schedDateInput}
+                onChange={(e) => setSchedDateInput(e.target.value)}
+                onBlur={commitSchedDate}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitSchedDate();
+                    e.target.blur();
+                  }
                 }}
                 onMouseDown={(e) => e.stopPropagation()}
+                placeholder="YYYY-MM-DD"
                 style={{ ...s.inlineDate, flex: 1, minWidth: '120px' }}
                 aria-label="Schedule date"
               />
               <input
-                type="time"
-                value={schedTime}
-                onChange={(e) => {
-                  setSchedTime(e.target.value);
-                  handleScheduleChange(null, e.target.value);
+                type="text"
+                value={schedTimeInput}
+                onChange={(e) => setSchedTimeInput(e.target.value)}
+                onBlur={commitSchedTime}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitSchedTime();
+                    e.target.blur();
+                  }
                 }}
                 onClick={(e) => e.stopPropagation()}
                 onFocus={(e) => e.stopPropagation()}
-                style={{ ...s.inlineTime, flex: 1, minWidth: '90px', cursor: 'pointer' }}
+                placeholder="HH:MM"
+                style={{ ...s.inlineTime, flex: 1, minWidth: '90px', cursor: 'text' }}
                 aria-label="Schedule time"
               />
             </div>
@@ -3405,26 +3652,38 @@ const PostRow = ({
             >
               <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 <input
-                  type="date"
-                  value={schedDate}
-                  onChange={(e) => {
-                    setSchedDate(e.target.value);
-                    handleScheduleChange(e.target.value, null);
+                  type="text"
+                  value={schedDateInput}
+                  onChange={(e) => setSchedDateInput(e.target.value)}
+                  onBlur={commitSchedDate}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitSchedDate();
+                      e.target.blur();
+                    }
                   }}
                   onMouseDown={(e) => e.stopPropagation()}
+                  placeholder="YYYY-MM-DD"
                   style={s.inlineDate}
                   aria-label="Schedule date"
                 />
                 <input
-                  type="time"
-                  value={schedTime}
-                  onChange={(e) => {
-                    setSchedTime(e.target.value);
-                    handleScheduleChange(null, e.target.value);
+                  type="text"
+                  value={schedTimeInput}
+                  onChange={(e) => setSchedTimeInput(e.target.value)}
+                  onBlur={commitSchedTime}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitSchedTime();
+                      e.target.blur();
+                    }
                   }}
                   onClick={(e) => e.stopPropagation()}
                   onFocus={(e) => e.stopPropagation()}
-                  style={{ ...s.inlineTime, cursor: 'pointer' }}
+                  placeholder="HH:MM"
+                  style={{ ...s.inlineTime, cursor: 'text' }}
                   aria-label="Schedule time"
                 />
               </div>
@@ -4118,11 +4377,18 @@ const ExpandedDrawer = ({
     setHashtagBank(updated);
   };
 
+  // Scope handles to the current artist (BUG-B). lateAccountIds is the
+  // per-artist account map; if a handle isn't in there it belongs to a
+  // different artist and Late.co will reject the post.
   const availableHandles = useMemo(() => {
     const handles = new Set();
-    accounts.forEach((acc) => handles.add(acc.handle));
+    const validHandlesInMap = new Set(Object.keys(lateAccountIds || {}));
+    accounts.forEach((acc) => {
+      if (validHandlesInMap.size > 0 && !validHandlesInMap.has(acc.handle)) return;
+      handles.add(acc.handle);
+    });
     return Array.from(handles);
-  }, [accounts]);
+  }, [accounts, lateAccountIds]);
 
   const selectedPlatforms = post.platforms || {};
   const previewImage =
@@ -4691,12 +4957,23 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
     loadContent();
   }, [artistId]);
 
-  // Only show items marked as 'ready' for scheduling
-  const readyVideos = content.videos
-    .filter((v) => v.status === 'ready')
+  // BUG-C: accept any draft that has been rendered (status==='ready' OR
+  // has a usable URL/exportUrl/cloudUrl). Same logic as
+  // handleAutoScheduleReady — see that function for the reasoning.
+  const isItemReady = (item) =>
+    item &&
+    !item.deleted &&
+    !item.deletedAt &&
+    (item.status === 'ready' ||
+      !!item.cloudUrl ||
+      !!item.url ||
+      !!item.exportUrl ||
+      !!item.rendered);
+  const readyVideos = (content.videos || [])
+    .filter(isItemReady)
     .map((v) => ({ ...v, type: 'video' }));
-  const readySlideshows = content.slideshows
-    .filter((s) => s.status === 'ready')
+  const readySlideshows = (content.slideshows || [])
+    .filter((s) => isItemReady(s) && !s.isTemplate)
     .map((s) => ({ ...s, type: 'slideshow' }));
   const allItems = [...readyVideos, ...readySlideshows];
 
