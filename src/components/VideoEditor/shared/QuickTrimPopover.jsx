@@ -68,10 +68,21 @@ const QuickTrimPopover = ({ item, initialTrimStart = 0, initialTrimEnd, onSave, 
         const pct = Math.max(0, Math.min(1, x / rect.width));
         const time = pct * getEffectiveDuration();
 
+        let scrubTime;
         if (handle === 'start') {
-          setTrimStart(Math.min(time, trimEnd - 0.1));
+          scrubTime = Math.min(time, trimEnd - 0.1);
+          setTrimStart(scrubTime);
         } else {
-          setTrimEnd(Math.max(time, trimStart + 0.1));
+          scrubTime = Math.max(time, trimStart + 0.1);
+          setTrimEnd(scrubTime);
+        }
+
+        // Live-scrub the preview video to act as a playhead
+        const vid = videoRef.current;
+        if (vid && isFinite(scrubTime)) {
+          try {
+            vid.currentTime = scrubTime;
+          } catch {}
         }
       };
 

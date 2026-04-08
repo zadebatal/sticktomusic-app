@@ -17,8 +17,10 @@ import {
   saveCollections,
   saveCollectionToFirestore,
   deleteCollectionAsync,
+  deleteCollectionFromFirestore,
   markCollectionPendingDeletion,
   clearPendingDeletion,
+  getPendingDeletionIds,
   subscribeToCollections,
   subscribeToLibrary,
   subscribeToCreatedContent,
@@ -124,6 +126,8 @@ const ProjectLanding = ({
     setLibrary(getLibrary(artistId));
     setCreatedContent(getCreatedContent(artistId));
     const unsubs = [];
+    let cancelled = false;
+    let deferredUnsub = null;
     if (db) {
       let firstSnapshot = true;
       unsubs.push(
@@ -137,9 +141,25 @@ const ProjectLanding = ({
       );
       unsubs.push(subscribeToLibrary(db, artistId, setLibrary));
       unsubs.push(subscribeToCreatedContent(db, artistId, setCreatedContent));
-      unsubs.push(subscribeToScheduledPosts(db, artistId, setScheduledPosts));
+
+      // Defer scheduledPosts subscription past initial paint to reduce
+      // Firestore SDK contention on Studio mount (handoff §3a). Polling and
+      // upcomingPosts both gracefully handle the staggered arrival.
+      const startScheduledPostsSub = () => {
+        if (cancelled) return;
+        deferredUnsub = subscribeToScheduledPosts(db, artistId, setScheduledPosts);
+      };
+      if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(startScheduledPostsSub, { timeout: 1000 });
+      } else {
+        setTimeout(startScheduledPostsSub, 250);
+      }
     }
-    return () => unsubs.forEach((u) => u && u());
+    return () => {
+      cancelled = true;
+      unsubs.forEach((u) => u && u());
+      if (deferredUnsub) deferredUnsub();
+    };
   }, [db, artistId]);
 
   // One-time poll: check if any overdue scheduled posts have already gone live on Late.co
@@ -160,6 +180,45 @@ const ProjectLanding = ({
       if (event.type === 'failed') toastError(`"${event.contentName}" failed to post`);
     });
   }, [db, artistId, scheduledPosts, toastSuccess, toastError]);
+
+  // Self-heal failed Firestore deletes (QA-95-07).
+  // If a previous session marked collections as pending-deletion but the
+  // Firestore delete didn't actually land (network error, transient failure),
+  // those collections come back via the subscription on next mount as
+  // "zombies". We re-fire deleteCollectionFromFirestore for any pending IDs
+  // that still appear in the live `collections` snapshot. Gated by a ref so
+  // it only runs once per artist mount.
+  const selfHealRef = useRef(false);
+  useEffect(() => {
+    if (selfHealRef.current || !db || !artistId || !firestoreReady) return;
+    if (collections.length === 0) return; // wait for first snapshot
+    selfHealRef.current = true;
+
+    const pendingIds = getPendingDeletionIds();
+    if (pendingIds.length === 0) return;
+
+    const liveIdsInSnapshot = new Set(collections.map((c) => c.id));
+    const stillPresent = pendingIds.filter((id) => liveIdsInSnapshot.has(id));
+    if (stillPresent.length === 0) return;
+
+    log.warn(
+      `[ProjectLanding] Self-heal: ${stillPresent.length} pending-delete collections re-appeared in Firestore — retrying delete`,
+    );
+    (async () => {
+      let healed = 0;
+      for (const id of stillPresent) {
+        try {
+          const ok = await deleteCollectionFromFirestore(db, artistId, id);
+          if (ok) healed++;
+        } catch (err) {
+          log.error('[ProjectLanding] Self-heal delete failed for', id, err);
+        }
+      }
+      if (healed > 0) {
+        toastSuccess(`Cleaned up ${healed} orphan project${healed !== 1 ? 's' : ''}`);
+      }
+    })();
+  }, [db, artistId, firestoreReady, collections, toastSuccess]);
 
   // Clean orphaned project pool mediaIds (ghost media fix)
   const orphanCleanRef = useRef(false);
@@ -361,6 +420,7 @@ const ProjectLanding = ({
       // Mark niches as pending deletion too
       for (const n of niches) markCollectionPendingDeletion(n.id);
 
+      const cloudFailures = [];
       try {
         // Cascade-delete all drafts in project niches
         const content = getCreatedContent(artistId);
@@ -377,9 +437,10 @@ const ProjectLanding = ({
           }
         }
 
-        // Delete niches themselves
+        // Delete niches themselves — track any cloud failures so caller can warn user
         for (const n of niches) {
-          await deleteCollectionAsync(db, artistId, n.id);
+          const r = await deleteCollectionAsync(db, artistId, n.id);
+          if (db && r.cloudOk === false) cloudFailures.push(n.id);
         }
 
         // Mark that user has explicitly deleted projects (prevents migration re-creation)
@@ -389,13 +450,15 @@ const ProjectLanding = ({
         }
 
         // Delete project root via libraryService (handles both localStorage + Firestore)
-        await deleteCollectionAsync(db, artistId, projectId);
+        const rootResult = await deleteCollectionAsync(db, artistId, projectId);
+        if (db && rootResult.cloudOk === false) cloudFailures.push(projectId);
 
         // DO NOT clearPendingDeletion here — the Firestore subscription may not
         // have received the delete yet. If we clear the pending flag too early,
         // the subscription's safety guard re-adds the collection from the stale
         // Firestore snapshot. The pending IDs live in memory and are naturally
         // cleared on page refresh, by which time Firestore has caught up.
+        return { cloudFailures };
       } catch (err) {
         log.error('[ProjectLanding] Delete project failed:', err);
         // Clear pending markers on error so items reappear
@@ -411,8 +474,17 @@ const ProjectLanding = ({
   const handleDeleteProject = useCallback(
     async (projectId) => {
       try {
-        await deleteProjectCore(projectId);
-        toastSuccess('Project deleted');
+        const result = await deleteProjectCore(projectId);
+        if (result?.cloudFailures?.length > 0) {
+          // Cloud delete failed for at least one item — surface so user knows
+          // it didn't actually persist (and the self-heal effect will retry
+          // on next mount)
+          toastError(
+            `Project deleted locally — cloud sync failed (${result.cloudFailures.length} item${result.cloudFailures.length !== 1 ? 's' : ''}). Will retry on next launch.`,
+          );
+        } else {
+          toastSuccess('Project deleted');
+        }
       } catch (err) {
         toastError(`Failed to delete project: ${err.message}`);
       }
@@ -433,6 +505,7 @@ const ProjectLanding = ({
     const allCols = collections.filter((c) => c.type !== 'smart' && !c.id?.startsWith('smart_'));
     let deleted = 0;
     const allDeletedIds = new Set();
+    const failedIds = [];
 
     // Step 1: Delete from Firestore directly
     for (const projectId of ids) {
@@ -458,16 +531,21 @@ const ProjectLanding = ({
         deleted++;
       } catch (err) {
         log.error('[BatchDelete] Failed:', projectId, err);
+        failedIds.push(projectId);
       }
     }
 
-    // Step 2: Update component state directly (don't rely on localStorage)
-    setCollections((prev) => prev.filter((c) => !allDeletedIds.has(c.id)));
+    // Step 2: Update component state directly (don't rely on localStorage).
+    // Don't drop locally what failed in the cloud — leave failed items visible
+    // so user knows the delete didn't take. Self-heal effect will retry on
+    // next mount.
+    const successfullyDeleted = new Set([...allDeletedIds].filter((id) => !failedIds.includes(id)));
+    setCollections((prev) => prev.filter((c) => !successfullyDeleted.has(c.id)));
 
     // Step 3: Best-effort localStorage cleanup (may fail if quota exceeded — that's OK)
     try {
       const collectionsKey = `stm_collections_${artistId}`;
-      const cleaned = allCols.filter((c) => !allDeletedIds.has(c.id));
+      const cleaned = allCols.filter((c) => !successfullyDeleted.has(c.id));
       localStorage.removeItem(collectionsKey);
       localStorage.setItem(collectionsKey, JSON.stringify(cleaned));
     } catch (e) {
@@ -477,7 +555,12 @@ const ProjectLanding = ({
     setSelectedProjectIds(new Set());
     setIsBatchDeleting(false);
     if (deleted > 0) toastSuccess(`Deleted ${deleted} project${deleted !== 1 ? 's' : ''}`);
-  }, [artistId, db, collections, toastSuccess]);
+    if (failedIds.length > 0) {
+      toastError(
+        `${failedIds.length} delete${failedIds.length !== 1 ? 's' : ''} failed — will retry on next launch`,
+      );
+    }
+  }, [artistId, db, collections, toastSuccess, toastError]);
 
   // Quick-schedule a draft
   const handleQuickSchedule = useCallback(async () => {

@@ -1,6 +1,6 @@
 {
   "name": "sticktomusic-app",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "The Content Engine for Music Artists",
   "author": "StickToMusic <zadebatal@gmail.com>",
   "private": true,
@@ -69,9 +69,6 @@
     "electron-dev": "node electron/start.js",
     "electron-build": "npm run build && electron-builder --mac",
     "electron-publish": "npm run build && electron-builder --mac --publish always",
-    "test:e2e": "npx playwright test",
-    "test:e2e:headed": "npx playwright test --headed",
-    "test:e2e:ui": "npx playwright test --ui",
     "prepare": "husky",
     "analyze": "source-map-explorer 'build/static/js/*.js'"
   },
@@ -96,8 +93,6 @@
     ]
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.11.1",
-    "@playwright/test": "^1.58.2",
     "electron": "^33.4.11",
     "electron-builder": "^25.1.8",
     "firebase-tools": "^15.5.1",

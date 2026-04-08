@@ -137,6 +137,10 @@ const SchedulingPage = ({
   const [batchAccount, setBatchAccount] = useState('');
   const [batchPlatforms, setBatchPlatforms] = useState({}); // { tiktok: true, instagram: true, ... }
   const [batchStartDate, setBatchStartDate] = useState('');
+  // Mirror text used by the date input — kept separate so partial typing
+  // doesn't fight with the controlled ISO state. Commits to batchStartDate
+  // on blur or Enter via commitBatchStartDate() (BUG #2 fix).
+  const [batchStartDateInput, setBatchStartDateInput] = useState('');
   const [batchStartTime, setBatchStartTime] = useState('14:00');
   const [postsPerDay, setPostsPerDay] = useState(2);
   const [spacingMode, setSpacingMode] = useState('even'); // 'even' | 'fixed' | 'random'
@@ -174,6 +178,47 @@ const SchedulingPage = ({
   );
   const selectedCount = selectedPostIds.size;
   const hasSelection = selectedCount > 0;
+
+  // Mirror batchStartDate → batchStartDateInput when external state changes
+  useEffect(() => {
+    setBatchStartDateInput(batchStartDate);
+  }, [batchStartDate]);
+
+  // Parse free-form date text (MM/DD/YYYY, M/D/YYYY, or ISO YYYY-MM-DD) and
+  // commit to the controlled batchStartDate state. Reverts to last good value
+  // if the input is unparseable. Called on blur or Enter (BUG #2 fix).
+  const commitBatchStartDate = useCallback(() => {
+    const text = (batchStartDateInput || '').trim();
+    if (!text) {
+      setBatchStartDate('');
+      return;
+    }
+    // ISO YYYY-MM-DD (browser picker output)
+    const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (iso) {
+      const d = new Date(text);
+      if (!isNaN(d.getTime())) {
+        setBatchStartDate(text);
+        return;
+      }
+    }
+    // MM/DD/YYYY or M/D/YYYY (typed)
+    const mdy = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (mdy) {
+      const mm = mdy[1].padStart(2, '0');
+      const dd = mdy[2].padStart(2, '0');
+      const yyyy = mdy[3];
+      const isoStr = `${yyyy}-${mm}-${dd}`;
+      const d = new Date(isoStr);
+      if (!isNaN(d.getTime())) {
+        setBatchStartDate(isoStr);
+        setBatchStartDateInput(isoStr);
+        return;
+      }
+    }
+    // Unparseable — revert to last good value
+    setBatchStartDateInput(batchStartDate || '');
+  }, [batchStartDateInput, batchStartDate]);
 
   // Available handles for account picker
   const availableHandles = useMemo(() => {
@@ -2387,10 +2432,24 @@ const SchedulingPage = ({
               <div style={{ ...s.bulkSection, ...(isMobile ? { width: '100%' } : {}) }}>
                 <label style={s.miniLabel}>Batch Start Date & Time</label>
                 <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                  {/* Free-form text input — accepts MM/DD/YYYY or YYYY-MM-DD,
+                      parses on blur or Enter via commitBatchStartDate. Avoids
+                      the native <input type="date"> typing-segment bug where
+                      typed digits would overflow into "10202"-style garbage
+                      while React's controlled value fought the browser. */}
                   <input
-                    type="date"
-                    value={batchStartDate}
-                    onChange={(e) => setBatchStartDate(e.target.value)}
+                    type="text"
+                    value={batchStartDateInput}
+                    onChange={(e) => setBatchStartDateInput(e.target.value)}
+                    onBlur={commitBatchStartDate}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitBatchStartDate();
+                        e.target.blur();
+                      }
+                    }}
+                    placeholder="MM/DD/YYYY"
                     style={s.miniInput}
                     aria-label="Batch start date"
                   />

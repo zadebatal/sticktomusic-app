@@ -773,11 +773,55 @@ ipcMain.handle('set-onboarding-complete', (_event, value) => {
 });
 
 // ── IPC: Local yt-dlp Download ──
+//
+// yt-dlp resolution priority (handoff §3d):
+// 1. Mutable copy in app userData (allows `yt-dlp -U` self-update)
+// 2. Bundled binary in electron/bin (immutable inside signed .app)
+// 3. System-installed yt-dlp via PATH
+//
+// On first launch we copy the bundled binary to userData so the user can
+// keep it fresh as YouTube rotates bot detection. The bundled copy stays
+// as a signed/sealed fallback.
+function getUserDataYtdlpPath() {
+  try {
+    const userBinDir = path.join(app.getPath('userData'), 'bin');
+    return path.join(userBinDir, 'yt-dlp');
+  } catch {
+    return null;
+  }
+}
+
+function ensureUserDataYtdlp() {
+  try {
+    const userPath = getUserDataYtdlpPath();
+    if (!userPath) return null;
+    if (fs.existsSync(userPath)) return userPath;
+
+    // Copy bundled → userData (one-time)
+    const bundled = path.join(__dirname, 'bin', 'yt-dlp');
+    if (!fs.existsSync(bundled)) return null;
+
+    fs.mkdirSync(path.dirname(userPath), { recursive: true });
+    fs.copyFileSync(bundled, userPath);
+    fs.chmodSync(userPath, 0o755);
+    console.log(`[ytdlp] Copied bundled binary to userData: ${userPath}`);
+    return userPath;
+  } catch (err) {
+    console.warn(`[ytdlp] ensureUserDataYtdlp failed: ${err.message}`);
+    return null;
+  }
+}
+
 function getYtdlpPath() {
-  // Bundled binary in electron/bin, or system-installed
+  // Prefer userData copy (mutable, can self-update)
+  const userPath = ensureUserDataYtdlp();
+  if (userPath && fs.existsSync(userPath)) return userPath;
+
+  // Fall back to bundled binary in electron/bin (immutable)
   const bundled = path.join(__dirname, 'bin', 'yt-dlp');
   if (fs.existsSync(bundled)) return bundled;
-  // Fall back to system yt-dlp
+
+  // Last resort: system-installed yt-dlp
   try {
     const systemPath = execSync('which yt-dlp').toString().trim();
     if (systemPath) return systemPath;
@@ -787,6 +831,39 @@ function getYtdlpPath() {
 
 ipcMain.handle('ytdlp-available', () => {
   return getYtdlpPath() !== null;
+});
+
+// Self-update the userData copy via `yt-dlp -U`. Safe because the userData
+// copy isn't part of the code-signed bundle. Returns the new version string
+// or throws on failure.
+ipcMain.handle('ytdlp-self-update', async () => {
+  const userPath = ensureUserDataYtdlp();
+  if (!userPath || !fs.existsSync(userPath)) {
+    throw new Error('yt-dlp userData copy not available');
+  }
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process');
+    const proc = spawn(userPath, ['-U']);
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (d) => {
+      stdout += d.toString();
+    });
+    proc.stderr.on('data', (d) => {
+      stderr += d.toString();
+    });
+    proc.on('close', (code) => {
+      if (code !== 0) return reject(new Error(`yt-dlp -U failed: ${stderr.slice(-300)}`));
+      // Get version after update
+      try {
+        const version = require('child_process').execSync(`"${userPath}" --version`).toString().trim();
+        resolve({ version, output: stdout.trim() });
+      } catch (err) {
+        resolve({ version: 'unknown', output: stdout.trim() });
+      }
+    });
+    proc.on('error', (err) => reject(err));
+  });
 });
 
 ipcMain.handle('ytdlp-download', async (_event, url, outputDir, options = {}) => {

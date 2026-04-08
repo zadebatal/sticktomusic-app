@@ -540,12 +540,22 @@ const PagesTab = ({
   }, [latePages.length, mergedPagesByArtist]);
 
   const totalHandles = useMemo(() => {
+    // Count handles AFTER linkGroup clustering — two handles linked together
+    // count as one user-visible handle, matching the rendered card count.
     let count = 0;
-    Object.values(mergedPagesByArtist).forEach((handles) => {
-      count += Object.keys(handles).length;
+    Object.entries(mergedPagesByArtist).forEach(([artistId, handles]) => {
+      const seenClusters = new Set();
+      Object.keys(handles).forEach((normHandle) => {
+        const linkGroupId = getLinkGroupId(artistId, normHandle);
+        const key = linkGroupId ? `link:${linkGroupId}` : `solo:${normHandle}`;
+        if (!seenClusters.has(key)) {
+          seenClusters.add(key);
+          count++;
+        }
+      });
     });
     return count;
-  }, [mergedPagesByArtist]);
+  }, [mergedPagesByArtist, linkGroups]);
 
   const toggleArtist = (artistId) => {
     setExpandedArtists((prev) => ({ ...prev, [artistId]: !prev[artistId] }));
@@ -691,6 +701,44 @@ const PagesTab = ({
             {visibleArtists.map((artist) => {
               const artistMerged = mergedPagesByArtist[artist.id] || {};
               const handleEntries = Object.entries(artistMerged);
+
+              // Cluster linked handles into a single visual row. Two normalized
+              // handles like @your.daily.dose.of.pain.7 (Instagram) and
+              // @your.daily.dose.of.pain7 (TikTok+YT) live in different
+              // mergedPagesByArtist keys because the dots differ, but if the
+              // user has linked them via the linkGroups system they should
+              // appear as ONE card with all platforms inside.
+              const clusteredEntries = (() => {
+                const clusters = new Map();
+                for (const [normHandle, group] of handleEntries) {
+                  const linkGroupId = getLinkGroupId(artist.id, normHandle);
+                  const clusterKey = linkGroupId ? `link:${linkGroupId}` : `solo:${normHandle}`;
+                  const existing = clusters.get(clusterKey);
+                  if (existing) {
+                    existing.pages.push(...group.pages);
+                    existing.manualEntries.push(...group.manualEntries);
+                    existing.linkedHandles.push({
+                      norm: normHandle,
+                      display: group.displayHandle,
+                    });
+                  } else {
+                    clusters.set(clusterKey, {
+                      clusterKey,
+                      linkGroupId,
+                      // Use the original group's display handle as the
+                      // "primary" — the row will show all linked handles
+                      // beneath when there's more than one.
+                      displayHandle: group.displayHandle,
+                      normalizedHandle: normHandle,
+                      pages: [...group.pages],
+                      manualEntries: [...group.manualEntries],
+                      linkedHandles: [{ norm: normHandle, display: group.displayHandle }],
+                    });
+                  }
+                }
+                return [...clusters.entries()].map(([clusterKey, group]) => [clusterKey, group]);
+              })();
+
               const hasPages = handleEntries.some(([, g]) => g.pages.length > 0);
               const hasAnyEntries = handleEntries.length > 0;
               const isUnconfigured =
@@ -752,7 +800,7 @@ const PagesTab = ({
                         </h2>
                         <p className={`text-xs ${t.textSecondary}`}>
                           {hasAnyEntries
-                            ? `${handleEntries.length} handle${handleEntries.length !== 1 ? 's' : ''}${artistFollowers > 0 ? ` · ${formatFollowers(artistFollowers)} followers` : ''}`
+                            ? `${clusteredEntries.length} handle${clusteredEntries.length !== 1 ? 's' : ''}${artistFollowers > 0 ? ` · ${formatFollowers(artistFollowers)} followers` : ''}`
                             : isUnconfigured
                               ? 'Late not connected'
                               : 'No pages found'}
@@ -852,9 +900,16 @@ const PagesTab = ({
                           )}
 
                           <div className={`divide-y ${t.borderSubtle}`}>
-                            {handleEntries.map(([normalizedHandle, group]) => {
-                              const { displayHandle, pages, manualEntries } = group;
-                              const handleKey = `${artist.id}:${normalizedHandle}`;
+                            {clusteredEntries.map(([clusterKey, group]) => {
+                              const {
+                                displayHandle,
+                                pages,
+                                manualEntries,
+                                linkedHandles = [],
+                                normalizedHandle,
+                              } = group;
+                              const isCluster = linkedHandles.length > 1;
+                              const handleKey = `${artist.id}:${clusterKey}`;
                               const isHandleExpanded = expandedHandles[handleKey] || false;
                               const totalHandleFollowers = pages.reduce(
                                 (s, p) => s + (p.followers || 0),
@@ -904,13 +959,26 @@ const PagesTab = ({
                                         </div>
                                       )}
                                       <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 flex-wrap">
                                           <span
                                             className={`font-semibold text-sm ${t.textPrimary}`}
                                           >
                                             {displayHandle}
                                           </span>
-                                          {getLinkGroupId(artist.id, normalizedHandle) && (
+                                          {isCluster &&
+                                            linkedHandles
+                                              .filter((h) => h.norm !== normalizedHandle)
+                                              .map((h) => (
+                                                <span
+                                                  key={h.norm}
+                                                  className={`text-xs ${t.textSecondary}`}
+                                                  title="Linked alias"
+                                                >
+                                                  · {h.display}
+                                                </span>
+                                              ))}
+                                          {(isCluster ||
+                                            getLinkGroupId(artist.id, normalizedHandle)) && (
                                             <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400">
                                               linked
                                             </span>

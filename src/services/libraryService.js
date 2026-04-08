@@ -123,6 +123,16 @@ export const clearPendingDeletion = (id) => {
 };
 export const isCollectionPendingDeletion = (id) => pendingDeletionMap.has(id);
 
+/**
+ * Returns a snapshot of all currently-pending-deletion collection IDs across
+ * artists. Used by ProjectLanding's self-heal effect (QA-95-07): if a delete
+ * was issued in a previous session but didn't actually land in Firestore, the
+ * pending ID is still in the map. On next mount we re-fire the Firestore
+ * delete for any pending IDs that show up in the live snapshot — this makes
+ * failed deletes self-recover instead of zombie-resurrecting.
+ */
+export const getPendingDeletionIds = () => [...pendingDeletionMap.keys()];
+
 // ============================================================================
 // RECENT COLLECTION WRITES (protects against subscription overwriting fresh data)
 // The subscription handler reads Firestore + localStorage, but the Firestore data
@@ -3685,12 +3695,20 @@ export const deleteCollectionAsync = async (db, artistId, collectionId) => {
   // ALWAYS delete from Firestore — don't gate on local result, otherwise projects
   // that only exist in the Firestore subscription cache (never written to
   // localStorage) cannot be deleted at all.
-  let syncedToCloud = false;
+  //
+  // Returns granular result so callers can distinguish:
+  //   - localOk: localStorage delete succeeded (or collection wasn't cached)
+  //   - cloudOk: Firestore delete confirmed (true), failed (false), or N/A (null when no db)
+  //   - success: at least one path succeeded
+  // Callers should error-toast when cloudOk === false because that means the
+  // delete didn't actually persist and the doc will reappear on next sync.
+  let cloudOk = null;
   if (db && artistId) {
-    syncedToCloud = await deleteCollectionFromFirestore(db, artistId, collectionId);
+    cloudOk = await deleteCollectionFromFirestore(db, artistId, collectionId);
   }
 
-  return { success: localResult || syncedToCloud, syncedToCloud };
+  const success = localResult || cloudOk === true;
+  return { success, localOk: !!localResult, cloudOk, syncedToCloud: cloudOk === true };
 };
 
 /**

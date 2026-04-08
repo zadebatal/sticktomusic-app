@@ -308,6 +308,8 @@ const AllMediaView = ({ db, artistId, onBack }) => {
   const [library, setLibrary] = useState(() => (artistId ? getLibrary(artistId) : []));
   const [selected, setSelected] = useState(new Set());
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
+  const [sortBy, setSortBy] = useState('date'); // 'date' | 'name' | 'duration' | 'type'
+  const [sourceFilter, setSourceFilter] = useState('all'); // 'all' | 'cloud' | 'local' | 'offline'
   const lastClickedRef = useRef(null);
 
   useEffect(() => {
@@ -316,14 +318,76 @@ const AllMediaView = ({ db, artistId, onBack }) => {
     setSelected(new Set());
   }, [artistId]);
 
+  // Clear selection when filters change
+  useEffect(() => {
+    setSelected(new Set());
+  }, [sourceFilter, sortBy]);
+
   // Re-read library after deletes
   const refreshLibrary = useCallback(() => {
     if (artistId) setLibrary(getLibrary(artistId));
   }, [artistId]);
 
-  const photos = useMemo(() => library.filter((m) => m.type === MEDIA_TYPES.IMAGE), [library]);
-  const videos = useMemo(() => library.filter((m) => m.type === MEDIA_TYPES.VIDEO), [library]);
-  const audio = useMemo(() => library.filter((m) => m.type === MEDIA_TYPES.AUDIO), [library]);
+  // Apply source filter (cloud / local / offline / all)
+  const matchesSource = useCallback(
+    (m) => {
+      if (sourceFilter === 'all') return true;
+      const status = m.syncStatus
+        ? m.syncStatus
+        : m.url
+          ? 'cloud'
+          : m.localUrl || m.localPath
+            ? 'local'
+            : 'cloud';
+      if (sourceFilter === 'cloud') return status === 'cloud' || status === 'synced';
+      if (sourceFilter === 'local') return status === 'local';
+      if (sourceFilter === 'offline') return status === 'offline';
+      return true;
+    },
+    [sourceFilter],
+  );
+
+  // Sort comparator (newest, name, duration, type)
+  const sortItems = useCallback(
+    (items) => {
+      const arr = [...items];
+      switch (sortBy) {
+        case 'name':
+          arr.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+          break;
+        case 'duration':
+          arr.sort((a, b) => (b.duration || 0) - (a.duration || 0));
+          break;
+        case 'type':
+          arr.sort((a, b) => (a.type || '').localeCompare(b.type || ''));
+          break;
+        case 'date':
+        default:
+          arr.sort(
+            (a, b) =>
+              new Date(b.createdAt || b.metadata?.importedAt || 0).getTime() -
+              new Date(a.createdAt || a.metadata?.importedAt || 0).getTime(),
+          );
+          break;
+      }
+      return arr;
+    },
+    [sortBy],
+  );
+
+  const filteredLibrary = useMemo(() => library.filter(matchesSource), [library, matchesSource]);
+  const photos = useMemo(
+    () => sortItems(filteredLibrary.filter((m) => m.type === MEDIA_TYPES.IMAGE)),
+    [filteredLibrary, sortItems],
+  );
+  const videos = useMemo(
+    () => sortItems(filteredLibrary.filter((m) => m.type === MEDIA_TYPES.VIDEO)),
+    [filteredLibrary, sortItems],
+  );
+  const audio = useMemo(
+    () => sortItems(filteredLibrary.filter((m) => m.type === MEDIA_TYPES.AUDIO)),
+    [filteredLibrary, sortItems],
+  );
 
   const getThumb = (item) => {
     if (item.thumbnailUrl) return item.thumbnailUrl;
@@ -602,10 +666,16 @@ const AllMediaView = ({ db, artistId, onBack }) => {
       className="flex w-full flex-col items-start bg-black px-8 py-8 overflow-hidden"
       style={{ maxHeight: '100%' }}
     >
-      <div className="flex w-full items-center justify-between mb-6">
+      <div className="flex w-full items-center justify-between mb-3 flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <span className="text-heading-2 font-heading-2 text-[#ffffffff]">All Media</span>
-          <span className="text-caption font-caption text-neutral-500">{library.length} items</span>
+          <span className="text-caption font-caption text-neutral-500">
+            {filteredLibrary.length}
+            {sourceFilter !== 'all' || library.length !== filteredLibrary.length
+              ? ` of ${library.length}`
+              : ''}{' '}
+            items
+          </span>
         </div>
         <div className="flex items-center gap-2">
           {selected.size > 0 && (
@@ -647,6 +717,48 @@ const AllMediaView = ({ db, artistId, onBack }) => {
             </button>
           )}
         </div>
+      </div>
+      {/* Controls row: sort + source filter (QA-95-08) */}
+      <div className="flex w-full items-center gap-3 mb-5 flex-wrap">
+        <span className="text-[10px] uppercase tracking-wide text-neutral-500">Sort</span>
+        {[
+          { value: 'date', label: 'Newest' },
+          { value: 'name', label: 'Name' },
+          { value: 'duration', label: 'Duration' },
+          { value: 'type', label: 'Type' },
+        ].map((opt) => (
+          <button
+            key={opt.value}
+            className={`rounded-full px-3 py-1 text-caption font-caption-bold border border-solid cursor-pointer transition-colors ${
+              sortBy === opt.value
+                ? 'bg-indigo-500/15 border-indigo-400 text-indigo-200'
+                : 'bg-transparent border-neutral-200 text-neutral-400 hover:text-white'
+            }`}
+            onClick={() => setSortBy(opt.value)}
+          >
+            {opt.label}
+          </button>
+        ))}
+        <div className="w-px h-5 bg-neutral-200 mx-2" />
+        <span className="text-[10px] uppercase tracking-wide text-neutral-500">Source</span>
+        {[
+          { value: 'all', label: 'All' },
+          { value: 'cloud', label: 'Cloud' },
+          { value: 'local', label: 'Local' },
+          { value: 'offline', label: 'Offline' },
+        ].map((opt) => (
+          <button
+            key={opt.value}
+            className={`rounded-full px-3 py-1 text-caption font-caption-bold border border-solid cursor-pointer transition-colors ${
+              sourceFilter === opt.value
+                ? 'bg-indigo-500/15 border-indigo-400 text-indigo-200'
+                : 'bg-transparent border-neutral-200 text-neutral-400 hover:text-white'
+            }`}
+            onClick={() => setSourceFilter(opt.value)}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
       <div className="flex w-full gap-6 flex-1 min-h-0">
         <Column title="Photos" items={photos} type="image" />
@@ -2342,86 +2454,6 @@ const VideoStudio = ({
     [selectedCategory, currentArtistId, schedulerEditPostId, db],
   );
 
-  // ============================================
-  // IMAGE BANK HANDLERS (for Slideshow mode)
-  // ============================================
-
-  // Upload images to Image A or Image B bank
-  const handleUploadImages = useCallback(
-    async (files, bank = 'A') => {
-      if (!selectedCategory) return;
-
-      const convertedFiles = await convertImageFilesIfNeeded(Array.from(files));
-      const bankKey = bank === 'A' ? 'imagesA' : 'imagesB';
-      setUploadProgress({ type: 'image', current: 0, total: convertedFiles.length });
-
-      const uploadedImages = [];
-      for (let i = 0; i < convertedFiles.length; i++) {
-        const file = convertedFiles[i];
-        try {
-          setUploadProgress({
-            type: 'image',
-            current: i + 1,
-            total: files.length,
-            name: file.name,
-            progress: 0,
-          });
-
-          // Upload to Firebase Storage (with quota check)
-          const quotaCtx = { userData: user, userEmail: user?.email };
-          const { url, path } = await uploadFileWithQuota(
-            file,
-            'images',
-            (progress) => {
-              setUploadProgress((prev) => ({ ...prev, progress }));
-            },
-            {},
-            quotaCtx,
-          );
-
-          // Create local blob for preview
-          const localUrl = URL.createObjectURL(file);
-
-          uploadedImages.push({
-            id: `img_${Date.now()}_${i}`,
-            name: file.name,
-            url,
-            localUrl,
-            storagePath: path,
-            width: 0, // Could detect with Image() if needed
-            height: 0,
-            createdAt: new Date().toISOString(),
-          });
-        } catch (error) {
-          log.error('Failed to upload image:', file.name, error);
-        }
-      }
-
-      if (uploadedImages.length > 0) {
-        setCategories((prev) =>
-          prev.map((cat) =>
-            cat.id === selectedCategory.id
-              ? { ...cat, [bankKey]: [...(cat[bankKey] || []), ...uploadedImages] }
-              : cat,
-          ),
-        );
-
-        setSelectedCategory((prev) =>
-          prev
-            ? {
-                ...prev,
-                [bankKey]: [...(prev[bankKey] || []), ...uploadedImages],
-              }
-            : prev,
-        );
-      }
-
-      setUploadProgress(null);
-    },
-    [selectedCategory],
-  );
-
-  // Delete image from bank
   // Delete a slideshow (soft-delete: stays in Firestore with deletedAt, removed from UI)
   const handleDeleteSlideshow = useCallback(
     (slideshowId) => {
@@ -3231,6 +3263,12 @@ const VideoStudio = ({
       <main style={styles.main}>
         {currentView === 'home' && !selectedCategory && (
           <ProjectLanding
+            // Force a fresh mount on artist switch. Without `key` the component
+            // would re-render with stale collections/library/createdContent
+            // state from the previous artist for the brief window between the
+            // prop change and the useEffect resubscribing — causing visible
+            // cross-tenant data flashes (QA-95-06).
+            key={`projlanding-${currentArtistId || 'none'}`}
             db={db}
             artistId={currentArtistId}
             latePages={latePages}
@@ -3260,6 +3298,10 @@ const VideoStudio = ({
 
         {currentView === 'project' && activeProjectId && (
           <ProjectWorkspace
+            // Same artist-key remount pattern as ProjectLanding (QA-95-06).
+            // Subscribes to per-artist data internally — without `key` it can
+            // briefly render previous artist's project under the new artist.
+            key={`projworkspace-${currentArtistId || 'none'}-${activeProjectId}`}
             db={db}
             user={user}
             artistId={currentArtistId}
@@ -3387,10 +3429,8 @@ const VideoStudio = ({
 
         {/* AestheticHome render branch removed in 94k. Default home view is
             now ProjectLanding (renders at currentView === 'home' &&
-            !selectedCategory below). All handler functions that fed
-            AestheticHome were swept in 94o — only handleUploadImages remains
-            because it has a SlideshowEditor `onImportToBank` reference (also
-            broken in modern flow, separate fix). */}
+            !selectedCategory below). All AestheticHome handler functions
+            were swept in 94o (11 handlers) and 94w (handleUploadImages). */}
 
         {currentView === 'library' && (selectedCategory || libraryCategory) && (
           <ContentLibrary
@@ -3587,7 +3627,6 @@ const VideoStudio = ({
                 }}
                 onSchedulePost={schedulerEditPostId ? null : onSchedulePost}
                 onAddLyrics={handleAddLyrics}
-                onImportToBank={handleUploadImages}
                 lateAccountIds={lateAccountIds}
                 schedulerEditMode={!!schedulerEditPostId}
               />

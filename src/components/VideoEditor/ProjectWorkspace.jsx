@@ -1606,10 +1606,18 @@ const ProjectWorkspace = ({
 
       {/* Niche tabs */}
       <div className="flex w-full items-center gap-0 border-b border-solid border-neutral-200 bg-black px-6 overflow-x-auto">
-        {niches.map((niche) => {
+        {niches.map((niche, nicheIdx) => {
           const isActive = niche.id === activeNicheId && !showAllMedia && !showCaptionPage;
           const fmt = niche.formats?.[0];
           const draftCount = nicheDraftCounts[niche.id] || 0;
+          // Disambiguate duplicate niche names in display only — do NOT
+          // mutate niche.name in storage. Adds (2), (3), etc. when an
+          // earlier niche in the same project shares the name (handoff §5c).
+          const earlierSameName = niches
+            .slice(0, nicheIdx)
+            .filter((n) => n.name === niche.name).length;
+          const displayName =
+            earlierSameName > 0 ? `${niche.name} (${earlierSameName + 1})` : niche.name;
           return (
             <div
               key={niche.id}
@@ -1649,7 +1657,7 @@ const ProjectWorkspace = ({
                   onClick={(e) => e.stopPropagation()}
                 />
               ) : (
-                <span className="text-body-bold font-body-bold">{niche.name}</span>
+                <span className="text-body-bold font-body-bold">{displayName}</span>
               )}
               {draftCount > 0 && (
                 <span

@@ -67,7 +67,9 @@ const AllMediaContent = ({
   const [semanticResults, setSemanticResults] = useState(null); // null = no active search, [] = no results
   const [isSearching, setIsSearching] = useState(false);
   const [sortBy, setSortBy] = useState('date'); // 'name' | 'date' | 'duration' | 'type'
+  const [sourceFilter, setSourceFilter] = useState('all'); // 'all' | 'cloud' | 'local' | 'offline'
   const [showMoveToBankModal, setShowMoveToBankModal] = useState(false);
+  const [isBulkUploading, setIsBulkUploading] = useState(false);
 
   // ── Selection state ──
   const [selected, setSelected] = useState(new Set());
@@ -96,10 +98,10 @@ const AllMediaContent = ({
     });
   }, []);
 
-  // Clear selection when scope/search changes
+  // Clear selection when scope/search/source changes
   useEffect(() => {
     setSelected(new Set());
-  }, [mediaScope, mediaSearch]);
+  }, [mediaScope, mediaSearch, sourceFilter]);
 
   // ── Debounced semantic search ──
   useEffect(() => {
@@ -215,6 +217,50 @@ const AllMediaContent = ({
     },
     [isDragging],
   );
+
+  // ── Upload-to-Cloud (bulk) ──
+  const handleBulkUploadToCloud = useCallback(async () => {
+    if (selected.size === 0 || isBulkUploading) return;
+    const allMedia = [...(projectMedia || []), ...(library || [])];
+    const candidates = [...selected]
+      .map((id) => allMedia.find((m) => m.id === id))
+      .filter((m) => m && (!m.url || m.syncStatus === 'local'));
+    if (candidates.length === 0) {
+      toastSuccess('Selected items are already in the cloud');
+      return;
+    }
+    setIsBulkUploading(true);
+    let uploaded = 0;
+    let failed = 0;
+    const quotaCtx = { userData: user, userEmail: user?.email };
+    for (const item of candidates) {
+      try {
+        const result = await uploadLocalItemToCloud(db, artistId, artistName, item, quotaCtx);
+        if (result) uploaded++;
+        else failed++;
+      } catch (err) {
+        log.error('[AllMedia] Bulk upload failed for', item.id, err);
+        failed++;
+      }
+    }
+    if (uploaded > 0)
+      toastSuccess(`Uploaded ${uploaded} item${uploaded !== 1 ? 's' : ''} to cloud`);
+    if (failed > 0) toastError(`${failed} upload${failed !== 1 ? 's' : ''} failed`);
+    setIsBulkUploading(false);
+    onRefreshLibrary?.();
+  }, [
+    selected,
+    isBulkUploading,
+    projectMedia,
+    library,
+    user,
+    db,
+    artistId,
+    artistName,
+    toastSuccess,
+    toastError,
+    onRefreshLibrary,
+  ]);
 
   // ── Upload-to-Cloud (per-item) ──
   const handleUploadToCloud = useCallback(
@@ -348,7 +394,32 @@ const AllMediaContent = ({
     return library.filter((item) => (activeNiche.mediaIds || []).includes(item.id));
   }, [activeNiche, library]);
 
-  const scopedMedia = mediaScope === 'niche' ? nicheMedia : projectMedia;
+  const rawScopedMedia = mediaScope === 'niche' ? nicheMedia : projectMedia;
+
+  // Apply source filter (cloud / local / offline / all). Items WITHOUT a
+  // syncStatus default to "cloud" if they have a remote URL, "local" if they
+  // only have a localPath/localUrl, otherwise "all".
+  const matchesSourceFilter = useCallback(
+    (m) => {
+      if (sourceFilter === 'all') return true;
+      const status = m.syncStatus
+        ? m.syncStatus
+        : m.url
+          ? 'cloud'
+          : m.localUrl || m.localPath
+            ? 'local'
+            : 'cloud';
+      if (sourceFilter === 'cloud') return status === 'cloud' || status === 'synced';
+      if (sourceFilter === 'local') return status === 'local';
+      if (sourceFilter === 'offline') return status === 'offline';
+      return true;
+    },
+    [sourceFilter],
+  );
+  const scopedMedia = useMemo(
+    () => rawScopedMedia.filter(matchesSourceFilter),
+    [rawScopedMedia, matchesSourceFilter],
+  );
   const scopedImages = useMemo(() => scopedMedia.filter((m) => m.type === 'image'), [scopedMedia]);
   const scopedVideos = useMemo(() => scopedMedia.filter((m) => m.type === 'video'), [scopedMedia]);
 
@@ -547,6 +618,16 @@ const AllMediaContent = ({
               <Button
                 variant="brand-secondary"
                 size="small"
+                icon={<FeatherUpload />}
+                onClick={handleBulkUploadToCloud}
+                disabled={isBulkUploading}
+                title="Upload selected local clips to the cloud"
+              >
+                {isBulkUploading ? 'Uploading...' : 'Upload to Cloud'}
+              </Button>
+              <Button
+                variant="brand-secondary"
+                size="small"
                 icon={<FeatherFolder />}
                 onClick={() => {
                   const name = prompt('Folder name:');
@@ -638,6 +719,21 @@ const AllMediaContent = ({
             </ToggleGroup.Item>
           </ToggleGroup>
         )}
+        {/* Source filter chips: All / Cloud / Local / Offline */}
+        <ToggleGroup value={sourceFilter} onValueChange={(v) => v && setSourceFilter(v)}>
+          <ToggleGroup.Item icon={null} value="all">
+            All
+          </ToggleGroup.Item>
+          <ToggleGroup.Item icon={null} value="cloud">
+            Cloud
+          </ToggleGroup.Item>
+          <ToggleGroup.Item icon={null} value="local">
+            Local
+          </ToggleGroup.Item>
+          <ToggleGroup.Item icon={null} value="offline">
+            Offline
+          </ToggleGroup.Item>
+        </ToggleGroup>
         <Button
           variant={showDurationBuckets ? 'brand-secondary' : 'neutral-secondary'}
           size="small"
@@ -645,17 +741,21 @@ const AllMediaContent = ({
         >
           By Duration
         </Button>
-        <select
-          className="rounded border border-solid border-neutral-200 bg-black px-2 py-1 text-caption font-caption text-white outline-none cursor-pointer"
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value)}
-          title="Sort media"
-        >
-          <option value="date">Sort: Newest</option>
-          <option value="name">Sort: Name</option>
-          <option value="duration">Sort: Duration</option>
-          <option value="type">Sort: Type</option>
-        </select>
+        {/* Sort selector — styled to match Subframe controls instead of native <select> */}
+        <ToggleGroup value={sortBy} onValueChange={(v) => v && setSortBy(v)}>
+          <ToggleGroup.Item icon={null} value="date">
+            Newest
+          </ToggleGroup.Item>
+          <ToggleGroup.Item icon={null} value="name">
+            Name
+          </ToggleGroup.Item>
+          <ToggleGroup.Item icon={null} value="duration">
+            Duration
+          </ToggleGroup.Item>
+          <ToggleGroup.Item icon={null} value="type">
+            Type
+          </ToggleGroup.Item>
+        </ToggleGroup>
         {isSearchAvailable() && (
           <ToggleGroup value={searchMode} onValueChange={(v) => v && setSearchMode(v)}>
             <ToggleGroup.Item icon={null} value="name">
@@ -911,36 +1011,6 @@ const AllMediaContent = ({
         )}
       </div>
 
-      {/* Selection bar — fixed at bottom when items selected */}
-      {selected.size > 0 && (
-        <div className="flex w-full items-center justify-between px-8 py-3 border-t border-neutral-200 bg-[#0a0a0f]">
-          <span className="text-caption font-caption text-neutral-400">
-            {selected.size} of {visibleMedia.length} selected
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="neutral-tertiary"
-              size="small"
-              onClick={() => setSelected(new Set(visibleMedia.map((m) => m.id)))}
-            >
-              Select All ({visibleMedia.length})
-            </Button>
-            <Button variant="neutral-tertiary" size="small" onClick={() => setSelected(new Set())}>
-              Deselect All
-            </Button>
-            <Button
-              variant="destructive-secondary"
-              size="small"
-              icon={<FeatherTrash2 />}
-              onClick={handleDeleteSelected}
-              disabled={isDeleting}
-            >
-              {isDeleting ? 'Deleting...' : `Delete ${selected.size}`}
-            </Button>
-          </div>
-        </div>
-      )}
-
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
         title={confirmDialog.title}
@@ -1094,6 +1164,10 @@ const AllMediaContent = ({
         onTrim={(item) => {
           setPreviewItem(null);
           setTrimItemId(item.id);
+        }}
+        onDelete={(item) => {
+          setPreviewItem(null);
+          handleDelete(item);
         }}
         onPrev={(() => {
           if (!previewItem) return undefined;

@@ -1378,6 +1378,27 @@ const VideoNicheContent = ({
                 // Pseudo-bank object for renderBankTile when in 'all' mode
                 const tileBank = activeBank || { id: '__all__' };
 
+                // Hide the unmigrated legacy "All Media" default bank from the chip bar.
+                // migrateToMediaBanks creates a single bank named "All Media" with the
+                // deterministic id 'mb_<collId.slice(0,12)>' from collection.mediaIds.
+                // The synthetic union pill already shows the same items, so rendering
+                // both creates two identical-looking "All Media" chips. The bank still
+                // exists in data — it just isn't shown as its own chip when it's the
+                // only bank.
+                const legacyDefaultBankId = `mb_${(niche?.id || 'default').slice(0, 12)}`;
+                const isLegacyDefaultBank = (bank) =>
+                  bank?.name === 'All Media' &&
+                  bank?.id === legacyDefaultBankId &&
+                  mediaBanks.length === 1;
+                const visibleMediaBanks = mediaBanks.filter((b) => !isLegacyDefaultBank(b));
+
+                // Canonical count: library-resolved, audio-excluded. Same denominator
+                // as activeBankMediaAll so the chip badge, the sub-label badge, and
+                // any header pill all match.
+                const canonicalAllMediaCount = library.filter(
+                  (item) => allBankMediaIds.has(item.id) && item.type !== 'audio',
+                ).length;
+
                 return (
                   <>
                     {/* === Tab pill bar === */}
@@ -1392,9 +1413,10 @@ const VideoNicheContent = ({
                         onClick={() => setActiveBankId('all')}
                       >
                         All Media
-                        <Badge variant="neutral">{allBankMediaIds.size}</Badge>
+                        <Badge variant="neutral">{canonicalAllMediaCount}</Badge>
                       </button>
-                      {mediaBanks.map((bank, bankIdx) => {
+                      {visibleMediaBanks.map((bank) => {
+                        const bankIdx = mediaBanks.indexOf(bank);
                         const color = getBankColor(bankIdx);
                         const isActive = activeBankId === bank.id;
                         const isIncluded = selectedBankIds === null || selectedBankIds.has(bank.id);
@@ -1578,13 +1600,14 @@ const VideoNicheContent = ({
                             All Media
                           </span>
                           <Badge variant="neutral">
-                            {bankSearch.trim() &&
-                            activeBankMedia.length !== activeBankMediaAll.length
-                              ? `${activeBankMedia.length}/${activeBankMediaAll.length}`
-                              : activeBankMedia.length}
+                            {bankSearch.trim() && activeBankMedia.length !== canonicalAllMediaCount
+                              ? `${activeBankMedia.length}/${canonicalAllMediaCount}`
+                              : canonicalAllMediaCount}
                           </Badge>
                           <span className="text-caption font-caption text-neutral-500">
-                            Union of all banks · double-click to preview · click to select
+                            {visibleMediaBanks.length === 0
+                              ? 'No banks yet · use + Add Bank to organize · double-click to preview'
+                              : 'Union of all banks · double-click to preview · click to select'}
                           </span>
                         </>
                       )}
@@ -1597,8 +1620,13 @@ const VideoNicheContent = ({
                           {bankSelectedIds.size} selected
                         </span>
                         <div className="flex-1" />
-                        {mediaBanks.length > 1 &&
-                          mediaBanks
+                        {/* Move-to-bank buttons only make sense when the user
+                            is operating on a specific source bank. When they
+                            select from the synthetic union ('__all__') there
+                            isn't a defined source, so don't offer move targets. */}
+                        {selectionBankId !== '__all__' &&
+                          mediaBanks.length > 1 &&
+                          visibleMediaBanks
                             .filter((b) => b.id !== selectionBankId)
                             .map((targetBank) => {
                               const tColor = getBankColor(mediaBanks.indexOf(targetBank));
@@ -1617,8 +1645,10 @@ const VideoNicheContent = ({
                                 </button>
                               );
                             })}
-                        {/* Move to New Bank — inline input */}
-                        {mediaBanks.length < MAX_MEDIA_BANKS &&
+                        {/* Move to New Bank — inline input. Same gating as
+                            Move-to-X buttons: needs a defined source bank. */}
+                        {selectionBankId !== '__all__' &&
+                          mediaBanks.length < MAX_MEDIA_BANKS &&
                           (newBankInputOpen ? (
                             <div className="flex items-center gap-1">
                               <input

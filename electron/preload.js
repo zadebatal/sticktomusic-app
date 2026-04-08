@@ -92,6 +92,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ytdlpAvailable: () => ipcRenderer.invoke('ytdlp-available'),
   ytdlpDownload: (url, outputDir, options) => ipcRenderer.invoke('ytdlp-download', url, outputDir, options),
   ytdlpInfo: (url) => ipcRenderer.invoke('ytdlp-info', url),
+  ytdlpSelfUpdate: () => ipcRenderer.invoke('ytdlp-self-update'),
   onYtdlpProgress: (cb) => {
     ipcRenderer.on('ytdlp-progress', (_event, data) => cb(data));
   },
