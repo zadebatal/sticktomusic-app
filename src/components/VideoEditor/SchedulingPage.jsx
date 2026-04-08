@@ -10,6 +10,7 @@ import {
   addManyScheduledPosts,
 } from '../../services/scheduledPostsService';
 import { getTemplates, generateFromTemplate } from '../../services/contentTemplateService';
+import { getLinkGroups, expandLinkedAccounts } from '../../utils/pageLinkGroups';
 
 import { useToast, ConfirmDialog } from '../ui';
 import {
@@ -306,40 +307,105 @@ const SchedulingPage = ({
     return Array.from(handles);
   }, [accounts, artistId, lateAccountIds]);
 
-  // Enriched handles with platform context for dropdown labels
-  const enrichedHandles = useMemo(() => {
-    return availableHandles.map((handle) => {
-      const mapping = lateAccountIds[handle] || {};
-      const platforms = Object.keys(mapping).filter((p) => mapping[p]);
-      const platformNames = platforms.map((p) => PLATFORM_LABELS[p] || p).join(', ');
+  // Linked-handle clusters for the dropdown. When the user has linked two
+  // handles via the Pages tab (e.g. @your.daily.dose.of.pain.7 + @pain7),
+  // they should appear as ONE dropdown entry that, when selected, posts
+  // to all platforms across all linked siblings. The cluster's "primary"
+  // is the alphabetically-first handle for determinism.
+  const handleClusters = useMemo(() => {
+    if (availableHandles.length === 0) return [];
+    const groups = getLinkGroups();
+    // Index linkGroupId per handle
+    const handleToGroup = new Map();
+    Object.entries(groups).forEach(([gid, members]) => {
+      members.forEach((m) => {
+        if (m.artistId === artistId) {
+          handleToGroup.set(m.handle.replace(/^@/, '').toLowerCase(), gid);
+        }
+      });
+    });
+    // Bucket the visible handles into clusters by linkGroupId. Solo handles
+    // get a unique synthetic clusterKey so they each render as their own row.
+    const clustersByKey = new Map();
+    for (const h of availableHandles) {
+      const norm = h.replace(/^@/, '').toLowerCase();
+      const gid = handleToGroup.get(norm);
+      const clusterKey = gid ? `link:${gid}` : `solo:${h}`;
+      const bucket = clustersByKey.get(clusterKey) || {
+        clusterKey,
+        linkGroupId: gid || null,
+        members: [],
+      };
+      bucket.members.push(h);
+      clustersByKey.set(clusterKey, bucket);
+    }
+    // Materialize each cluster: pick a primary, collect all platforms from
+    // all members, build a label.
+    return Array.from(clustersByKey.values()).map((cluster) => {
+      const sortedMembers = [...cluster.members].sort();
+      const primary = sortedMembers[0];
+      const allPlatforms = new Set();
+      const platformByHandle = {};
+      sortedMembers.forEach((h) => {
+        const mapping = lateAccountIds[h] || {};
+        const enabled = Object.keys(mapping).filter((p) => mapping[p]);
+        platformByHandle[h] = enabled;
+        enabled.forEach((p) => allPlatforms.add(p));
+      });
+      const platformList = Array.from(allPlatforms);
+      const platformNames = platformList.map((p) => PLATFORM_LABELS[p] || p).join(', ');
+      const linkedSuffix = sortedMembers.length > 1 ? ` + ${sortedMembers.length - 1} linked` : '';
+      const label = platformNames
+        ? `@${primary}${linkedSuffix} (${platformNames})`
+        : `@${primary}${linkedSuffix}`;
       return {
-        handle,
-        platforms,
-        label: platformNames ? `@${handle} (${platformNames})` : `@${handle}`,
+        clusterKey: cluster.clusterKey,
+        primary,
+        members: sortedMembers,
+        platforms: platformList,
+        platformByHandle,
+        label,
+        isLinked: sortedMembers.length > 1,
       };
     });
-  }, [availableHandles, lateAccountIds]);
+  }, [availableHandles, artistId, lateAccountIds]);
 
-  // Linked platforms for the currently selected batch account
-  const linkedPlatforms = useMemo(() => {
-    if (!batchAccount) return [];
-    const mapping = lateAccountIds[batchAccount] || {};
-    return Object.keys(mapping).filter((p) => mapping[p]);
-  }, [batchAccount, lateAccountIds]);
+  // Enriched handles for the dropdown — one entry per cluster, primary
+  // handle as the value (so existing batchAccount string state stays
+  // backward-compatible). Selecting a primary expands to all linked
+  // siblings via expandLinkedAccounts at the post-build step.
+  const enrichedHandles = useMemo(
+    () =>
+      handleClusters.map((c) => ({
+        handle: c.primary,
+        platforms: c.platforms,
+        label: c.label,
+      })),
+    [handleClusters],
+  );
 
-  // Auto-enable all linked platforms when account changes
+  // Find the cluster the currently-selected batchAccount belongs to.
+  const activeCluster = useMemo(
+    () => handleClusters.find((c) => c.members.includes(batchAccount)) || null,
+    [handleClusters, batchAccount],
+  );
+
+  // All platforms across the active cluster's linked members.
+  const linkedPlatforms = useMemo(() => activeCluster?.platforms || [], [activeCluster]);
+
+  // Auto-enable all linked platforms when account changes (now spans the
+  // entire cluster, not just the primary handle).
   useEffect(() => {
-    if (!batchAccount) {
+    if (!batchAccount || !activeCluster) {
       setBatchPlatforms({});
       return;
     }
-    const mapping = lateAccountIds[batchAccount] || {};
     const enabled = {};
-    Object.keys(mapping).forEach((p) => {
-      if (mapping[p]) enabled[p] = true;
+    activeCluster.platforms.forEach((p) => {
+      enabled[p] = true;
     });
     setBatchPlatforms(enabled);
-  }, [batchAccount, lateAccountIds]);
+  }, [batchAccount, activeCluster]);
 
   // ── Live preview: compute projected schedule times for selected posts ──
   const previewTimes = useMemo(() => {
@@ -1672,17 +1738,18 @@ const SchedulingPage = ({
       });
     }
 
-    // Build account/platform assignments from batchAccount + batchPlatforms
+    // Build account/platform assignments from batchAccount + batchPlatforms.
+    // expandLinkedAccounts walks the user's link groups so picking one
+    // handle posts to all linked siblings (e.g. picking the IG-linked
+    // handle also fires the linked TT/YT handles).
     let platformUpdate = {};
     if (batchAccount) {
-      const mapping = lateAccountIds[batchAccount];
-      if (mapping) {
-        Object.entries(mapping).forEach(([platform, accountId]) => {
-          if (accountId && batchPlatforms[platform]) {
-            platformUpdate[platform] = { accountId, handle: batchAccount };
-          }
-        });
-      }
+      const expanded = expandLinkedAccounts(batchAccount, artistId, lateAccountIds);
+      expanded.accountIds.forEach(({ platform, accountId, handle }) => {
+        if (accountId && batchPlatforms[platform]) {
+          platformUpdate[platform] = { accountId, handle };
+        }
+      });
     }
 
     // Apply to each selected post
@@ -1873,16 +1940,17 @@ const SchedulingPage = ({
     // it. Without this, a post that originally failed with the wrong
     // account would keep retrying with the same wrong account because
     // post.platforms still held the stale entries.
+    //
+    // Uses expandLinkedAccounts so picking one handle fans out to all
+    // linked siblings — same logic as the schedule path.
     const batchPlatformOverride = {};
     if (batchAccount) {
-      const mapping = lateAccountIds[batchAccount];
-      if (mapping) {
-        Object.entries(mapping).forEach(([platform, accountId]) => {
-          if (accountId && batchPlatforms[platform]) {
-            batchPlatformOverride[platform] = { accountId, handle: batchAccount };
-          }
-        });
-      }
+      const expanded = expandLinkedAccounts(batchAccount, artistId, lateAccountIds);
+      expanded.accountIds.forEach(({ platform, accountId, handle }) => {
+        if (accountId && batchPlatforms[platform]) {
+          batchPlatformOverride[platform] = { accountId, handle };
+        }
+      });
     }
     const hasBatchOverride = Object.keys(batchPlatformOverride).length > 0;
 
