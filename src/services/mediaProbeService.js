@@ -21,8 +21,15 @@ const AUDIO_EXT = /\.(mp3|m4a|wav|aac|ogg|opus|flac)(\?|$)/i;
 /**
  * Probe a single media file's duration via the browser's native metadata
  * loader. Resolves to a number (seconds) or null on failure/timeout.
+ *
+ * Notes:
+ * - We do NOT set crossOrigin="anonymous". The metadata read works fine
+ *   on Firebase Storage URLs without CORS preflights, and setting it was
+ *   causing every Boon clip to silently fail in v1.7.5.
+ * - 15s timeout (was 8s) — some HLS / large-mp4 metadata reads take a
+ *   beat over slow connections.
  */
-export function probeMediaDuration(url, { timeoutMs = 8000, isVideo = null } = {}) {
+export function probeMediaDuration(url, { timeoutMs = 15000, isVideo = null } = {}) {
   return new Promise((resolve) => {
     if (!url) return resolve(null);
     let detectedVideo = isVideo;
@@ -39,7 +46,6 @@ export function probeMediaDuration(url, { timeoutMs = 8000, isVideo = null } = {
     }
     el.preload = 'metadata';
     el.muted = true;
-    el.crossOrigin = 'anonymous';
     let done = false;
     const finish = (value) => {
       if (done) return;
@@ -105,8 +111,16 @@ export async function backfillMissingDurations(
     return { probed: 0, updated: 0, skipped: items.length };
   }
 
+  // Use console.log directly so it shows up in DevTools without depending
+  // on the logger's filter level. Helps the user verify the probe is
+  // actually running when they crack open the inspector.
+  console.log(
+    `[mediaProbe] starting backfill for ${candidates.length} items (concurrency=${concurrency})`,
+  );
+
   let probed = 0;
   let updated = 0;
+  let failed = 0;
   const queue = [...candidates];
 
   async function worker() {
@@ -126,14 +140,18 @@ export async function backfillMissingDurations(
               updated++;
               onItemUpdated?.(item.id, duration);
             } catch (err) {
+              failed++;
               log.warn('[mediaProbe] persist failed for', item.id, err?.message || err);
             }
           } else {
             updated++;
             onItemUpdated?.(item.id, duration);
           }
+        } else {
+          failed++;
         }
       } catch (err) {
+        failed++;
         log.warn('[mediaProbe] probe failed for', item.id, err?.message || err);
       }
     }
@@ -142,5 +160,8 @@ export async function backfillMissingDurations(
   const workers = Array.from({ length: Math.min(concurrency, candidates.length) }, worker);
   await Promise.all(workers);
 
-  return { probed, updated, skipped: items.length - candidates.length };
+  console.log(
+    `[mediaProbe] backfill done: ${updated} updated / ${probed} probed / ${failed} failed`,
+  );
+  return { probed, updated, failed, skipped: items.length - candidates.length };
 }
