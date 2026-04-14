@@ -5,26 +5,26 @@
  * Downloads new files -> uploads to Firebase Storage -> adds to niche media banks.
  */
 
+import log from '../utils/logger';
 import {
-  listFiles as driveListFiles,
-  downloadFile as driveDownloadFile,
-  isAuthenticated as isDriveAuth,
-} from './googleDriveService';
-import {
-  listFiles as dbxListFiles,
-  downloadFile as dbxDownloadFile,
-  isAuthenticated as isDbxAuth,
   detectMediaType as dbxDetectMediaType,
+  downloadFile as dbxDownloadFile,
+  listFiles as dbxListFiles,
+  isAuthenticated as isDbxAuth,
 } from './dropboxService';
 import { uploadFile, uploadFileWithQuota } from './firebaseStorage';
 import {
-  createMediaItem,
-  addToLibraryAsync,
+  downloadFile as driveDownloadFile,
+  listFiles as driveListFiles,
+  isAuthenticated as isDriveAuth,
+} from './googleDriveService';
+import {
   addToCollection,
+  addToLibraryAsync,
   assignToMediaBank,
+  createMediaItem,
 } from './libraryService';
-import { isElectronApp, saveMediaLocally, getLocalMediaUrl } from './localMediaService';
-import log from '../utils/logger';
+import { getLocalMediaUrl, isElectronApp, saveMediaLocally } from './localMediaService';
 
 // ── Constants ──
 
@@ -121,7 +121,7 @@ export async function getNewFiles(provider, folderId, lastSyncAt) {
 
   if (provider === 'google_drive') {
     // Paginate through all results
-    let pageToken = undefined;
+    let pageToken;
     do {
       const result = await driveListFiles(folderId, { pageSize: 100, pageToken });
       const files = (result.files || [])
@@ -137,7 +137,7 @@ export async function getNewFiles(provider, folderId, lastSyncAt) {
     } while (pageToken);
   } else if (provider === 'dropbox') {
     // Paginate through all results
-    let cursor = undefined;
+    let cursor;
     let hasMore = true;
     while (hasMore) {
       const result = await dbxListFiles(folderId, { limit: 100, cursor });

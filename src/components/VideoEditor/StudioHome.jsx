@@ -10,74 +10,74 @@
  * - Audio-optional workflow
  */
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import useIsMobile from '../../hooks/useIsMobile';
-import { convertImageIfNeeded, isHeicFile, isTiffFile } from '../../utils/imageConverter';
-import { convertAudioIfNeeded, isAudioFile } from '../../utils/audioConverter';
-import { runPool } from '../../utils/uploadPool';
-// OnboardingModal removed - auto-setup happens in VideoStudio
-import { useTheme } from '../../contexts/ThemeContext';
-import LibraryBrowser from './LibraryBrowser';
-import CollectionPicker from './CollectionPicker';
-import AudioClipSelector from './AudioClipSelector';
-import LyricBank from './LyricBank';
-import CloudImportButton from './CloudImportButton';
-import TextBankPanel from './TextBankPanel';
-import { useToast, ConfirmDialog } from '../ui';
-import { Button } from '../../ui/components/Button';
-import { IconButton } from '../../ui/components/IconButton';
 import {
-  FeatherTrash2,
-  FeatherEye,
   FeatherCalendar,
+  FeatherEye,
   FeatherFilm,
   FeatherImage,
+  FeatherTrash2,
 } from '@subframe/core';
+import { motion } from 'framer-motion';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+// OnboardingModal removed - auto-setup happens in VideoStudio
+import { useTheme } from '../../contexts/ThemeContext';
+import useIsMobile from '../../hooks/useIsMobile';
+import { getMediaDuration, uploadFile } from '../../services/firebaseStorage';
 import {
-  getLibrary,
-  getCollections,
-  getCollectionMedia,
-  getCreatedContent,
   addCreatedSlideshow,
-  saveCreatedContentAsync,
-  getLyrics,
-  subscribeToLyrics,
   addLyricsAsync,
-  updateLyricsAsync,
-  deleteLyricsAsync,
-  incrementUseCount,
-  addToCollectionAsync,
-  saveCollectionToFirestore,
-  MEDIA_TYPES,
-  // Firestore async functions
-  subscribeToLibrary,
-  subscribeToCollections,
-  addToLibraryAsync,
   addManyToLibraryAsync,
-  removeFromLibraryAsync,
-  updateLibraryItemAsync,
-  migrateToFirestore,
-  // Dynamic bank system
-  migrateCollectionBanks,
-  getBankColor,
-  getBankLabel,
+  addToCollectionAsync,
+  addToLibraryAsync,
   // Text bank functions
   addToTextBank,
+  deleteLyricsAsync,
+  getBankColor,
+  getBankLabel,
+  getCollectionMedia,
+  getCollections,
+  getCreatedContent,
+  getLibrary,
+  getLyrics,
+  getTextBankStyle,
+  getTextBankText,
+  incrementUseCount,
+  MEDIA_TYPES,
+  // Dynamic bank system
+  migrateCollectionBanks,
+  migrateToFirestore,
+  removeFromLibraryAsync,
   removeFromTextBank,
-  updateTextBank,
+  saveCollectionToFirestore,
+  saveCreatedContentAsync,
+  subscribeToCollections,
   // Created content subscription
   subscribeToCreatedContent,
-  getTextBankText,
-  getTextBankStyle,
+  // Firestore async functions
+  subscribeToLibrary,
+  subscribeToLyrics,
+  updateLibraryItemAsync,
+  updateLyricsAsync,
+  updateTextBank,
 } from '../../services/libraryService';
 import {
   migrateThumbnails,
   migrateVideoThumbnails,
   THUMB_VERSION,
 } from '../../services/thumbnailService';
-import { uploadFile, getMediaDuration } from '../../services/firebaseStorage';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { convertAudioIfNeeded, isAudioFile } from '../../utils/audioConverter';
+import { convertImageIfNeeded, isHeicFile, isTiffFile } from '../../utils/imageConverter';
 import log from '../../utils/logger';
+import { runPool } from '../../utils/uploadPool';
+import { ConfirmDialog, useToast } from '../ui';
+import AudioClipSelector from './AudioClipSelector';
+import CloudImportButton from './CloudImportButton';
+import CollectionPicker from './CollectionPicker';
+import LibraryBrowser from './LibraryBrowser';
+import LyricBank from './LyricBank';
+import TextBankPanel from './TextBankPanel';
 
 const StudioHome = ({
   db = null, // Firestore instance for cross-device sync
@@ -170,8 +170,9 @@ const StudioHome = ({
   // H-07: Track blob URLs for cleanup on unmount
   const blobUrlsRef = useRef([]);
   useEffect(() => {
+    const urls = blobUrlsRef.current;
     return () => {
-      blobUrlsRef.current.forEach((url) => {
+      urls.forEach((url) => {
         try {
           URL.revokeObjectURL(url);
         } catch (e) {

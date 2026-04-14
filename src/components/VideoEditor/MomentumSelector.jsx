@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { FeatherCheck, FeatherX } from '@subframe/core';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
-import { FeatherX, FeatherCheck } from '@subframe/core';
-import {
-  computeEnergyCurve,
-  detectSegments,
-  detectOnsets,
-  generateCutPoints,
-  analyzeMomentum,
-} from '../../utils/momentumAnalyzer';
 import log from '../../utils/logger';
+import {
+  analyzeMomentum,
+  computeEnergyCurve,
+  detectOnsets,
+  detectSegments,
+  generateCutPoints,
+} from '../../utils/momentumAnalyzer';
 
 const PRESETS = [
   { id: 'hype', label: 'Hype', desc: 'Fast, aggressive cuts' },

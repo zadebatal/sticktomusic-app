@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import { FeatherX } from '@subframe/core';
+import React, { useMemo, useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { IconButton } from '../../ui/components/IconButton';
-import { FeatherX } from '@subframe/core';
 
 /**
  * TemplatePicker - First screen when opening the video editor

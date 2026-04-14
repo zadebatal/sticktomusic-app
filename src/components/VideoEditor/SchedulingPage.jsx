@@ -1,71 +1,122 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import * as SubframeCore from '@subframe/core';
 import {
-  POST_STATUS,
-  PLATFORM_LABELS,
-  PLATFORM_COLORS,
-  updateScheduledPost,
-  deleteScheduledPost,
-  subscribeToScheduledPosts,
-  reorderPosts,
-  addManyScheduledPosts,
-} from '../../services/scheduledPostsService';
-import { getTemplates, generateFromTemplate } from '../../services/contentTemplateService';
-import { getLinkGroups, expandLinkedAccounts } from '../../utils/pageLinkGroups';
-
-import { useToast, ConfirmDialog } from '../ui';
+  FeatherCalendar,
+  FeatherChevronDown,
+  FeatherChevronLeft,
+  FeatherChevronRight,
+  FeatherChevronUp,
+  FeatherEdit,
+  FeatherEdit2,
+  FeatherGripVertical,
+  FeatherList,
+  FeatherLock,
+  FeatherMusic,
+  FeatherPause,
+  FeatherPlay,
+  FeatherPlus,
+  FeatherRefreshCw,
+  FeatherRotateCcw,
+  FeatherSend,
+  FeatherShuffle,
+  FeatherTrash2,
+  FeatherUnlock,
+  FeatherUploadCloud,
+  FeatherUser,
+  FeatherX,
+} from '@subframe/core';
+import { getAuth } from 'firebase/auth';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
+import useIsMobile from '../../hooks/useIsMobile';
+import { generateFromTemplate, getTemplates } from '../../services/contentTemplateService';
+import { uploadFile, uploadFileWithQuota } from '../../services/firebaseStorage';
 import {
-  getCreatedContent,
-  getCollections,
-  getCollectionHashtagBank,
   getCollectionCaptionBank,
+  getCollectionHashtagBank,
+  getCollections,
+  getCreatedContent,
   getLibrary,
-  getProjects,
   getProjectNiches,
+  getProjects,
 } from '../../services/libraryService';
-import { renderVideo } from '../../services/videoExportService';
+import { startPolling } from '../../services/postStatusPolling';
+import {
+  addManyScheduledPosts,
+  deleteScheduledPost,
+  PLATFORM_COLORS,
+  PLATFORM_LABELS,
+  POST_STATUS,
+  reorderPosts,
+  subscribeToScheduledPosts,
+  updateScheduledPost,
+} from '../../services/scheduledPostsService';
 import {
   exportSlideshowAsImages,
   generateSlideThumbnail,
 } from '../../services/slideshowExportService';
-import { uploadFile, uploadFileWithQuota } from '../../services/firebaseStorage';
-import { startPolling } from '../../services/postStatusPolling';
-import { getAuth } from 'firebase/auth';
-import log from '../../utils/logger';
-import { useTheme } from '../../contexts/ThemeContext';
-import useIsMobile from '../../hooks/useIsMobile';
-import { Button } from '../../ui/components/Button';
+import { renderVideo } from '../../services/videoExportService';
 import { Badge } from '../../ui/components/Badge';
-import { IconButton } from '../../ui/components/IconButton';
-import { ToggleGroup } from '../../ui/components/ToggleGroup';
-import { Loader } from '../../ui/components/Loader';
+import { Button } from '../../ui/components/Button';
 import { DropdownMenu } from '../../ui/components/DropdownMenu';
-import {
-  FeatherPlus,
-  FeatherShuffle,
-  FeatherPause,
-  FeatherPlay,
-  FeatherList,
-  FeatherCalendar,
-  FeatherChevronDown,
-  FeatherTrash2,
-  FeatherX,
-  FeatherUser,
-  FeatherGripVertical,
-  FeatherEdit,
-  FeatherEdit2,
-  FeatherSend,
-  FeatherRotateCcw,
-  FeatherLock,
-  FeatherUnlock,
-  FeatherChevronUp,
-  FeatherChevronLeft,
-  FeatherChevronRight,
-  FeatherMusic,
-  FeatherUploadCloud,
-  FeatherRefreshCw,
-} from '@subframe/core';
+import { IconButton } from '../../ui/components/IconButton';
+import { Loader } from '../../ui/components/Loader';
+import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import log from '../../utils/logger';
+import { expandLinkedAccounts, getLinkGroups } from '../../utils/pageLinkGroups';
+import { ConfirmDialog, useToast } from '../ui';
 import UploadFinishedMediaModal from './UploadFinishedMediaModal';
-import * as SubframeCore from '@subframe/core';
+
+// Parse free-form time text into HH:MM 24-hour format. Accepts:
+//   "5:55 PM" / "5:55pm" / "05:55 PM" → "17:55"
+//   "5:55"  (24h, no suffix)         → "05:55"
+//   "17:55"                          → "17:55"
+//   "555" / "1755"                   → "05:55" / "17:55"
+// Returns null on unparseable input. Used by both batch and per-row time
+// inputs (BUG-A fix).
+const parseTimeText = (raw) => {
+  const text = (raw || '').trim();
+  if (!text) return '';
+  // Strip surrounding whitespace and uppercase the AM/PM bit
+  const normalized = text.toUpperCase().replace(/\s+/g, ' ');
+  // 24-hour ISO HH:MM directly
+  const iso24 = normalized.match(/^(\d{1,2}):(\d{2})$/);
+  if (iso24) {
+    const hh = parseInt(iso24[1], 10);
+    const mm = parseInt(iso24[2], 10);
+    if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+      return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    }
+  }
+  // 12-hour with AM/PM: "5:55 PM" / "5:55PM" / "05:55 AM"
+  const ampm = normalized.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+  if (ampm) {
+    let hh = parseInt(ampm[1], 10);
+    const mm = parseInt(ampm[2], 10);
+    const suffix = ampm[3];
+    if (hh >= 1 && hh <= 12 && mm >= 0 && mm <= 59) {
+      if (suffix === 'PM' && hh !== 12) hh += 12;
+      if (suffix === 'AM' && hh === 12) hh = 0;
+      return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    }
+  }
+  // Bare digits: "555" → 5:55, "1755" → 17:55, "1230" → 12:30
+  const digits = normalized.replace(/\D/g, '');
+  if (digits.length === 3 || digits.length === 4) {
+    const hh = parseInt(digits.slice(0, digits.length - 2), 10);
+    const mm = parseInt(digits.slice(-2), 10);
+    if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+      return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    }
+  }
+  return null;
+};
+
+// Check if a draft/content item is ready for scheduling (has been exported).
+const isContentReady = (item) =>
+  item &&
+  !item.deleted &&
+  !item.deletedAt &&
+  (item.status === 'ready' || !!item.cloudUrl || !!item.url || !!item.exportUrl || !!item.rendered);
 
 /**
  * SchedulingPage — Batch-First Command Center
@@ -117,6 +168,7 @@ const SchedulingPage = ({
     if (initialStatusFilter) setStatusFilter(initialStatusFilter);
   }, [initialStatusFilter]);
   // Reset all batch/selection state when artist changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset only on artistId change, not initialStatusFilter
   useEffect(() => {
     setSelectedPostIds(new Set());
     setBatchAccount('');
@@ -126,7 +178,7 @@ const SchedulingPage = ({
     setStatusFilter(initialStatusFilter || 'all');
     setExpandedPostId(null);
     setPreviewingPost(null);
-  }, [artistId]); // Only reset on artist change, not when initialStatusFilter changes
+  }, [artistId]);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
   const [previewingPost, setPreviewingPost] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -231,51 +283,6 @@ const SchedulingPage = ({
   useEffect(() => {
     setBatchStartTimeInput(batchStartTime);
   }, [batchStartTime]);
-
-  // Parse free-form time text into HH:MM 24-hour format. Accepts:
-  //   "5:55 PM" / "5:55pm" / "05:55 PM" → "17:55"
-  //   "5:55"  (24h, no suffix)         → "05:55"
-  //   "17:55"                          → "17:55"
-  //   "555" / "1755"                   → "05:55" / "17:55"
-  // Returns null on unparseable input. Used by both batch and per-row time
-  // inputs (BUG-A fix).
-  const parseTimeText = (raw) => {
-    const text = (raw || '').trim();
-    if (!text) return '';
-    // Strip surrounding whitespace and uppercase the AM/PM bit
-    const normalized = text.toUpperCase().replace(/\s+/g, ' ');
-    // 24-hour ISO HH:MM directly
-    const iso24 = normalized.match(/^(\d{1,2}):(\d{2})$/);
-    if (iso24) {
-      const hh = parseInt(iso24[1], 10);
-      const mm = parseInt(iso24[2], 10);
-      if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
-        return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-      }
-    }
-    // 12-hour with AM/PM: "5:55 PM" / "5:55PM" / "05:55 AM"
-    const ampm = normalized.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
-    if (ampm) {
-      let hh = parseInt(ampm[1], 10);
-      const mm = parseInt(ampm[2], 10);
-      const suffix = ampm[3];
-      if (hh >= 1 && hh <= 12 && mm >= 0 && mm <= 59) {
-        if (suffix === 'PM' && hh !== 12) hh += 12;
-        if (suffix === 'AM' && hh === 12) hh = 0;
-        return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-      }
-    }
-    // Bare digits: "555" → 5:55, "1755" → 17:55, "1230" → 12:30
-    const digits = normalized.replace(/\D/g, '');
-    if (digits.length === 3 || digits.length === 4) {
-      const hh = parseInt(digits.slice(0, digits.length - 2), 10);
-      const mm = parseInt(digits.slice(-2), 10);
-      if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
-        return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-      }
-    }
-    return null;
-  };
 
   const commitBatchStartTime = useCallback(() => {
     const parsed = parseTimeText(batchStartTimeInput);
@@ -489,8 +496,8 @@ const SchedulingPage = ({
     const unsubscribe = subscribeToScheduledPosts(db, artistId, (newPosts) => {
       // Recalculate draft IDs on every update (not just once at init)
       // so orphan detection stays fresh after draft deletions
-      let draftIds = new Set();
-      let contentMap = new Map();
+      const draftIds = new Set();
+      const contentMap = new Map();
       try {
         const content = getCreatedContent(artistId);
         (content.videos || []).forEach((v) => {
@@ -604,7 +611,7 @@ const SchedulingPage = ({
       unsubscribe();
       stopPolling();
     };
-  }, [db, artistId]);
+  }, [db, artistId, toastSuccess, toastError]);
 
   // ── Backfill latePostId from Late.co for posts missing it ──
   // Runs once per artist (re-runs on artist switch)
@@ -1276,7 +1283,7 @@ const SchedulingPage = ({
         },
       });
     },
-    [posts, db, artistId, expandedPostId, onDeleteLatePost, toastSuccess],
+    [posts, db, artistId, expandedPostId, onDeleteLatePost, toastSuccess, toastError],
   );
 
   // ── Delete Selected Posts ──
@@ -1627,7 +1634,7 @@ const SchedulingPage = ({
       posts,
       onSchedulePost,
       onDeleteLatePost,
-      alwaysOnHashtags,
+      getPostBank,
       handleUpdatePost,
       autoRenderPost,
       toastSuccess,
@@ -1742,7 +1749,7 @@ const SchedulingPage = ({
     // expandLinkedAccounts walks the user's link groups so picking one
     // handle posts to all linked siblings (e.g. picking the IG-linked
     // handle also fires the linked TT/YT handles).
-    let platformUpdate = {};
+    const platformUpdate = {};
     if (batchAccount) {
       const expanded = expandLinkedAccounts(batchAccount, artistId, lateAccountIds);
       expanded.accountIds.forEach(({ platform, accountId, handle }) => {
@@ -1827,28 +1834,14 @@ const SchedulingPage = ({
     batchAccount,
     batchPlatforms,
     lateAccountIds,
-    alwaysOnHashtags,
     toastSuccess,
+    toastError,
+    toastInfo,
     onSchedulePost,
     handlePublishPost,
   ]);
 
   // ── Auto-Schedule Ready Content ──
-  // BUG-C: accept any draft that has been rendered (cloudUrl/exportUrl set
-  // OR explicit status==='ready'). The "Ready" badge on draft cards means
-  // "video has been exported to a playable file" — which is exactly what
-  // scheduling needs. Requiring a separate explicit Ready promotion was
-  // confusing and blocked the most common flow (Save in editor → Schedule).
-  const isContentReady = (item) =>
-    item &&
-    !item.deleted &&
-    !item.deletedAt &&
-    (item.status === 'ready' ||
-      !!item.cloudUrl ||
-      !!item.url ||
-      !!item.exportUrl ||
-      !!item.rendered);
-
   const handleAutoScheduleReady = useCallback(async () => {
     if (!db || !artistId) return;
     const content = getCreatedContent(artistId);
@@ -2165,7 +2158,10 @@ const SchedulingPage = ({
     posts,
     selectedPostIds,
     onSchedulePost,
-    alwaysOnHashtags,
+    artistId,
+    batchAccount,
+    batchPlatforms,
+    lateAccountIds,
     handleUpdatePost,
     autoRenderPost,
     toastSuccess,
@@ -3253,6 +3249,7 @@ const PostRow = ({
   const [schedDateInput, setSchedDateInput] = useState('');
   const [schedTimeInput, setSchedTimeInput] = useState('');
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: post.id is intentional — resets local state when row identity changes
   useEffect(() => {
     setCaption(post.caption || '');
     if (post.scheduledTime) {
@@ -4385,6 +4382,7 @@ const ExpandedDrawer = ({
   const [showSaveSet, setShowSaveSet] = useState(false);
   const [newSetName, setNewSetName] = useState('');
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: post.id is intentional — resets local state when row identity changes
   useEffect(() => {
     setHashtags(toHashtagArray(post.hashtags).join(' '));
     setCaption(post.caption || '');

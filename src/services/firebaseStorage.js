@@ -3,15 +3,15 @@
  * Handles persistent file uploads to Firebase Storage
  */
 
-import { initializeApp, getApps } from 'firebase/app';
+import { getApps, initializeApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
 import {
+  deleteObject,
+  getDownloadURL,
   getStorage,
   ref,
   uploadBytesResumable,
-  getDownloadURL,
-  deleteObject,
 } from 'firebase/storage';
-import { getFirestore } from 'firebase/firestore';
 import log from '../utils/logger';
 import { checkQuotaBeforeUpload, incrementStorageUsed } from './storageQuotaService';
 
@@ -64,7 +64,7 @@ const storage = getStorage(firebaseApp);
 const db = getFirestore(firebaseApp);
 
 // Export for use in other services
-export { firebaseApp, db };
+export { db, firebaseApp };
 
 /**
  * Upload a file to Firebase Storage

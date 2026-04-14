@@ -1,13 +1,13 @@
 import React from 'react';
 import { toast as sonnerToast } from 'sonner';
+import { getPlatformConfig, getPlatformKeys } from '../../config/platforms';
+import { getCategoryNames } from '../../services/contentTemplateService';
+import lateApi from '../../services/lateApiService';
+import useArtistStore from '../../stores/useArtistStore';
 import useContentStore from '../../stores/useContentStore';
 import useUIStore from '../../stores/useUIStore';
-import useArtistStore from '../../stores/useArtistStore';
-import lateApi from '../../services/lateApiService';
-import { getCategoryNames } from '../../services/contentTemplateService';
-import { getPlatformConfig, getPlatformKeys } from '../../config/platforms';
-import { EmptyState as SharedEmptyState } from '../ui';
 import log from '../../utils/logger';
+import { EmptyState as SharedEmptyState } from '../ui';
 
 export default function ContentTab({
   user = null,
@@ -142,12 +142,12 @@ export default function ContentTab({
     const startDate = new Date(batchForm.weekStart);
 
     // Create a pool of videos tagged by type
-    let artistPool = [...artistVideosList].map((url, i) => ({
+    const artistPool = [...artistVideosList].map((url, i) => ({
       url,
       type: 'artist',
       num: i + 1,
     }));
-    let adjacentPool = [...adjacentVideosList].map((url, i) => ({
+    const adjacentPool = [...adjacentVideosList].map((url, i) => ({
       url,
       type: 'adjacent',
       num: i + 1,

@@ -12,24 +12,24 @@
  * IMPORTANT: Attribution is probabilistic, NOT causation.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import log from '../../utils/logger';
+import React, { useCallback, useEffect, useState } from 'react';
 import { getStoredAnalytics } from '../../services/analyticsService';
-import { Button } from '../../ui/components/Button';
-import {
-  getSpotifyOverview,
-  getSpotifyTimeline,
-  syncSpotifyData,
-  getSpotifyConfig,
-  saveSpotifyConfig,
-  calculateMomentumScore,
-} from '../../services/spotifyService';
 import {
   computeAttribution,
+  getSongAttributionSummary,
   getTopGrowthDrivers,
   getVideoAttributionSummary,
-  getSongAttributionSummary,
 } from '../../services/spotifyAttributionService';
+import {
+  calculateMomentumScore,
+  getSpotifyConfig,
+  getSpotifyOverview,
+  getSpotifyTimeline,
+  saveSpotifyConfig,
+  syncSpotifyData,
+} from '../../services/spotifyService';
+import { Button } from '../../ui/components/Button';
+import log from '../../utils/logger';
 
 // ============================================
 // CONFIDENCE BADGE
@@ -644,19 +644,7 @@ export const SpotifyTab = ({ artistId }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
 
-  useEffect(() => {
-    const loadConfig = () => {
-      const stored = getSpotifyConfig(artistId);
-      if (stored?.spotifyArtistId) {
-        setIsConfigured(true);
-        setConfig(stored);
-        loadData();
-      }
-    };
-    loadConfig();
-  }, [artistId]);
-
-  const loadData = () => {
+  const loadData = useCallback(() => {
     try {
       const overviewData = getSpotifyOverview(artistId);
       setOverview(overviewData);
@@ -671,7 +659,19 @@ export const SpotifyTab = ({ artistId }) => {
     } catch (error) {
       log.error('Error loading Spotify data:', error);
     }
-  };
+  }, [artistId]);
+
+  useEffect(() => {
+    const loadConfig = () => {
+      const stored = getSpotifyConfig(artistId);
+      if (stored?.spotifyArtistId) {
+        setIsConfigured(true);
+        setConfig(stored);
+        loadData();
+      }
+    };
+    loadConfig();
+  }, [artistId, loadData]);
 
   const handleSync = async () => {
     if (!config) return;

@@ -1,54 +1,54 @@
-import React, { useState, useEffect, useCallback } from 'react';
 import {
-  isElectronApp,
-  getMediaFolder,
-  selectMediaFolder,
-  isDriveConnected,
-  getDiskUsage,
-  relocateOfflineFiles,
-  openInFinder,
-} from '../../services/localMediaService';
-import { formatBytes } from '../../services/syncService';
-import SyncModal from '../SyncModal';
-import { doc, setDoc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
-import { shouldShowPaymentUI } from '../../services/subscriptionService';
-import { useToast, ConfirmDialog } from '../ui';
-import { Button } from '../../ui/components/Button';
-import { Badge } from '../../ui/components/Badge';
-import { TextField } from '../../ui/components/TextField';
-import {
-  FeatherLogOut,
   FeatherAlertTriangle,
-  FeatherCloud,
-  FeatherUsers,
-  FeatherUser,
-  FeatherCreditCard,
-  FeatherMail,
-  FeatherCheck,
   FeatherCamera,
+  FeatherCheck,
+  FeatherCloud,
+  FeatherCreditCard,
   FeatherEdit2,
-  FeatherTrash2,
   FeatherHardDrive,
+  FeatherLogOut,
+  FeatherMail,
+  FeatherTrash2,
+  FeatherUser,
+  FeatherUsers,
 } from '@subframe/core';
-import { formatStorageSize } from '../../services/storageQuotaService';
-import ProfilePictureUpload from '../ProfilePictureUpload';
-import log from '../../utils/logger';
+import { getAuth } from 'firebase/auth';
+import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  initGoogleDrive,
-  authenticate as driveAuth,
-  disconnect as driveDisconnect,
-  getDriveSettings,
-  saveDriveSettings,
-} from '../../services/googleDriveService';
-import {
-  initDropbox,
   authenticate as dbxAuth,
   disconnect as dbxDisconnect,
   getDropboxSettings,
+  initDropbox,
   saveDropboxSettings,
 } from '../../services/dropboxService';
+import {
+  authenticate as driveAuth,
+  disconnect as driveDisconnect,
+  getDriveSettings,
+  initGoogleDrive,
+  saveDriveSettings,
+} from '../../services/googleDriveService';
 import { sweepOrphanLocalItems } from '../../services/libraryService';
+import {
+  getDiskUsage,
+  getMediaFolder,
+  isDriveConnected,
+  isElectronApp,
+  openInFinder,
+  relocateOfflineFiles,
+  selectMediaFolder,
+} from '../../services/localMediaService';
+import { formatStorageSize } from '../../services/storageQuotaService';
+import { shouldShowPaymentUI } from '../../services/subscriptionService';
+import { formatBytes } from '../../services/syncService';
+import { Badge } from '../../ui/components/Badge';
+import { Button } from '../../ui/components/Button';
+import { TextField } from '../../ui/components/TextField';
+import log from '../../utils/logger';
+import ProfilePictureUpload from '../ProfilePictureUpload';
+import SyncModal from '../SyncModal';
+import { ConfirmDialog, useToast } from '../ui';
 
 /**
  * SettingsTab — Profile, team management, theme picker, logout.

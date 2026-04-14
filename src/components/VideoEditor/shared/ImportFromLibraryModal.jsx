@@ -10,10 +10,11 @@
  * @param {Function} onImport - (selectedIds: string[]) => void
  * @param {Function} onClose - Close callback
  */
-import React, { useState, useMemo } from 'react';
-import { Button } from '../../../ui/components/Button';
+
+import { FeatherCheck, FeatherFilm, FeatherImage, FeatherMusic, FeatherX } from '@subframe/core';
+import React, { useMemo, useState } from 'react';
 import { Badge } from '../../../ui/components/Badge';
-import { FeatherX, FeatherCheck, FeatherFilm, FeatherImage, FeatherMusic } from '@subframe/core';
+import { Button } from '../../../ui/components/Button';
 
 const ImportFromLibraryModal = ({
   artistId,

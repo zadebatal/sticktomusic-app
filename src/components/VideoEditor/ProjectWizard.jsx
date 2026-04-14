@@ -3,29 +3,30 @@
  * Eager data creation: project created after Step 1, niches after Step 2, banks populated in Step 3.
  * Cancel cleans up created project + niches.
  */
-import React, { useState, useCallback, useMemo, useRef } from 'react';
-import { Stepper } from '../../ui/components/Stepper';
-import { Button } from '../../ui/components/Button';
-import { IconButton } from '../../ui/components/IconButton';
-import { FeatherX, FeatherArrowLeft } from '@subframe/core';
+
+import { FeatherArrowLeft, FeatherX } from '@subframe/core';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import useIsMobile from '../../hooks/useIsMobile';
 import {
-  createProject,
-  createNiche,
-  saveCollectionToFirestore,
-  deleteCollectionAsync,
-  markCollectionPendingDeletion,
   clearPendingDeletion,
-  PIPELINE_COLORS,
+  createNiche,
+  createProject,
+  deleteCollectionAsync,
   getProjectNiches,
   getUserCollections,
+  markCollectionPendingDeletion,
+  PIPELINE_COLORS,
   saveCollections,
+  saveCollectionToFirestore,
 } from '../../services/libraryService';
+import { createNicheFolder, createProjectFolder } from '../../services/localProjectService';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { Stepper } from '../../ui/components/Stepper';
 import { useToast } from '../ui';
-import useIsMobile from '../../hooks/useIsMobile';
+import WizardStepBanks from './wizard/WizardStepBanks';
 import WizardStepName from './wizard/WizardStepName';
 import WizardStepNiches from './wizard/WizardStepNiches';
-import WizardStepBanks from './wizard/WizardStepBanks';
-import { createProjectFolder, createNicheFolder } from '../../services/localProjectService';
 
 const STEPS = [
   { label: 'Name', stepNumber: '1' },
@@ -77,7 +78,7 @@ const ProjectWizard = ({
     } catch (err) {
       toastError('Failed to create project');
     }
-  }, [artistId, db, projectName, toastError]);
+  }, [artistId, db, projectName, toastError, artistName]);
 
   // Step 2 → 3: Create niches for selected formats
   const handleStep2Next = useCallback(async () => {
@@ -110,7 +111,16 @@ const ProjectWizard = ({
     } catch (err) {
       toastError('Failed to create niches');
     }
-  }, [artistId, db, projectId, selectedFormats, createdNicheMap, toastError]);
+  }, [
+    artistId,
+    db,
+    projectId,
+    selectedFormats,
+    createdNicheMap,
+    toastError,
+    artistName,
+    projectName,
+  ]);
 
   // Step 2 back → Step 1: can't un-create the project, but we allow name editing
   const handleStep2Back = useCallback(() => {

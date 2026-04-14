@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import useIsMobile from '../../hooks/useIsMobile';
 import { convertImageFilesIfNeeded } from '../../utils/imageConverter';
-import StudioHome from './StudioHome';
 import ContentLibrary from './ContentLibrary';
 import ProjectLanding from './ProjectLanding';
 import ProjectWorkspace from './ProjectWorkspace';
+import StudioHome from './StudioHome';
 
 // Lazy-load heavy editor/page components (only one visible at a time)
 const VideoEditorModal = React.lazy(() => import('./VideoEditorModal'));
@@ -15,76 +15,86 @@ const SlideshowEditor = React.lazy(() => import('./SlideshowEditor'));
 const SchedulingPage = React.lazy(() => import('./SchedulingPage'));
 const StudioLibrary = React.lazy(() => import('./StudioLibrary'));
 const ProjectWizard = React.lazy(() => import('./ProjectWizard'));
+
+import { FeatherX } from '@subframe/core';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { useTheme } from '../../contexts/ThemeContext';
 // OnboardingModal removed - auto-setup Music Artist template instead
 import {
+  deleteFile,
+  generateThumbnail,
+  getMediaDuration,
   uploadFile,
   uploadFileWithQuota,
-  deleteFile,
-  getMediaDuration,
-  generateThumbnail,
 } from '../../services/firebaseStorage';
-import { decrementStorageUsed } from '../../services/storageQuotaService';
-import { generateSlideThumbnail } from '../../services/slideshowExportService';
 import {
-  saveCategories,
-  loadCategories,
-  savePresets,
-  loadPresets,
+  addCreatedSlideshow,
+  addCreatedSlideshowAsync,
+  addCreatedVideo,
+  addLyricsAsync,
+  completeOnboarding,
+  deleteCreatedSlideshow,
+  deleteCreatedSlideshowAsync,
+  deleteCreatedVideo,
+  deleteLyricsAsync,
+  FORMAT_TEMPLATES,
+  getCreatedContent,
+  getDeletedContentAsync,
+  getLibrary,
+  getOnboardingStatus,
+  getPipelineBankLabel,
+  getUserCollections,
+  loadCreatedContentAsync,
+  MEDIA_TYPES,
+  migrateCollectionBanks,
+  migrateDraftsToNiches,
+  migrateToProjects,
+  permanentlyDeleteContentAsync,
+  removeFromLibraryAsync,
+  restoreCreatedContentAsync,
+  STARTER_TEMPLATES,
+  saveClipperSession,
+  saveCreatedContent,
+  saveCreatedContentAsync,
+  softDeleteCreatedVideoAsync,
+  subscribeToCreatedContent,
+  subscribeToLibrary,
+  updateCreatedSlideshow,
+  updateCreatedVideo,
+  updateLyricsAsync,
+} from '../../services/libraryService';
+import { deletePostsByContentId, updateScheduledPost } from '../../services/scheduledPostsService';
+import { generateSlideThumbnail } from '../../services/slideshowExportService';
+import { decrementStorageUsed } from '../../services/storageQuotaService';
+import {
   cleanupStorage,
-  saveArtistCategories,
-  loadArtistCategories,
-  saveArtistPresets,
-  loadArtistPresets,
-  setLastArtistId,
   getLastArtistId,
   hasLegacyData,
+  loadArtistCategories,
+  loadArtistPresets,
+  loadCategories,
+  loadPresets,
   migrateToArtistStorage,
+  saveArtistCategories,
+  saveArtistPresets,
+  saveCategories,
+  savePresets,
+  setLastArtistId,
 } from '../../services/storageService';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
-import { FeatherX } from '@subframe/core';
-import {
-  getOnboardingStatus,
-  completeOnboarding,
-  getLibrary,
-  getCreatedContent,
-  saveCreatedContent,
-  addCreatedVideo,
-  updateCreatedVideo,
-  deleteCreatedVideo,
-  addCreatedSlideshow,
-  updateCreatedSlideshow,
-  deleteCreatedSlideshow,
-  addCreatedSlideshowAsync,
-  deleteCreatedSlideshowAsync,
-  softDeleteCreatedVideoAsync,
-  restoreCreatedContentAsync,
-  getDeletedContentAsync,
-  permanentlyDeleteContentAsync,
-  loadCreatedContentAsync,
-  saveCreatedContentAsync,
-  addLyricsAsync,
-  updateLyricsAsync,
-  deleteLyricsAsync,
-  MEDIA_TYPES,
-  STARTER_TEMPLATES,
-  FORMAT_TEMPLATES,
-  migrateToProjects,
-  migrateDraftsToNiches,
-  saveClipperSession,
-  getPipelineBankLabel,
-  migrateCollectionBanks,
-  subscribeToCreatedContent,
-  removeFromLibraryAsync,
-  getUserCollections,
-  subscribeToLibrary,
-} from '../../services/libraryService';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { updateScheduledPost, deletePostsByContentId } from '../../services/scheduledPostsService';
-import { VIDEO_STATUS } from '../../utils/status';
-import { useToast, ConfirmDialog } from '../ui';
 import log from '../../utils/logger';
-import { useTheme } from '../../contexts/ThemeContext';
+import { VIDEO_STATUS } from '../../utils/status';
+import { ConfirmDialog, useToast } from '../ui';
+
+// Format → editor mode mapping (module-level constant for stable hook deps)
+const FORMAT_TO_EDITOR = {
+  montage: 'montage',
+  solo_clip: 'solo-clip',
+  multi_clip: 'multi-clip',
+  photo_montage: 'photo-montage',
+  clipper: 'clipper',
+};
 
 // Firestore sync helpers for categories - ensures cross-device access
 const FIRESTORE_CATEGORY_DOC = 'studioData';
@@ -471,7 +481,7 @@ const AllMediaView = ({ db, artistId, onBack }) => {
         setConfirmDialog({ isOpen: false });
       },
     });
-  }, [selected, db, artistId, refreshLibrary, toastSuccess, toastError]);
+  }, [selected, db, artistId, refreshLibrary, toastSuccess]);
 
   const selectAll = useCallback(() => {
     setSelected(new Set(library.map((i) => i.id)));
@@ -916,7 +926,7 @@ const VideoStudio = ({
       log('[VideoStudio] Syncing artistId from parent:', initialArtistId);
       setCurrentArtistId(initialArtistId);
     }
-  }, [initialArtistId]);
+  }, [initialArtistId, currentArtistId]);
 
   // Update parent when artist changes
   const handleArtistIdChange = (newArtistId) => {
@@ -1384,7 +1394,7 @@ const VideoStudio = ({
         })
         .catch((err) => log.error('[VideoStudio] Project migration failed:', err));
     }
-  }, [currentArtistId]);
+  }, [currentArtistId, db]);
 
   // Save to localStorage + Firestore when categories change
   useEffect(() => {
@@ -1526,7 +1536,7 @@ const VideoStudio = ({
       if (saved.activeProjectNicheId) setActiveProjectNicheId(saved.activeProjectNicheId);
     }
     setSessionRestored(true);
-  }, [categories, sessionRestored]);
+  }, [categories, sessionRestored, currentArtistId]);
 
   // Save session state when navigation changes
   useEffect(() => {
@@ -1561,7 +1571,7 @@ const VideoStudio = ({
   // Handlers
   const handleCreateContent = useCallback(() => {
     setCurrentView('library');
-  }, []);
+  }, [setCurrentView]);
 
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [initialEditorMode, setInitialEditorMode] = useState(null);
@@ -1576,13 +1586,7 @@ const VideoStudio = ({
   }, []);
 
   // Format-based routing: legacy → format picker, slideshow → workspace, video → editor
-  const FORMAT_TO_EDITOR = {
-    montage: 'montage',
-    solo_clip: 'solo-clip',
-    multi_clip: 'multi-clip',
-    photo_montage: 'photo-montage',
-    clipper: 'clipper',
-  };
+  // (constant moved to module scope — see FORMAT_TO_EDITOR above)
 
   // Remix: create a new draft with one dimension swapped
   const handleRemixDraft = useCallback(
@@ -1655,7 +1659,7 @@ const VideoStudio = ({
       // Force editor closed even if cleanup fails
       setShowEditor(false);
     }
-  }, [activePipelineIdForEditor, activeProjectId]);
+  }, [activePipelineIdForEditor, activeProjectId, setCurrentView]);
 
   // Clipper session save callback
   const handleSaveClipperSession = useCallback(
@@ -1836,7 +1840,15 @@ const VideoStudio = ({
       setCurrentView('drafts');
       setStudioMode('videos');
     },
-    [selectedCategory, currentArtistId, schedulerEditPostId, db, libraryMedia.audio],
+    [
+      selectedCategory,
+      currentArtistId,
+      schedulerEditPostId,
+      db,
+      firestoreLibrary,
+      pullFromCollection,
+      setCurrentView,
+    ],
   );
 
   // Save lyrics template to an audio track
@@ -1941,7 +1953,7 @@ const VideoStudio = ({
         });
       }
     },
-    [selectedCategory, currentArtistId, db, toastError],
+    [selectedCategory, currentArtistId, db, toastError, user],
   );
 
   // Restore a soft-deleted content item from trash
@@ -2180,7 +2192,7 @@ const VideoStudio = ({
         setStudioMode('slideshows'); // Ensure studioMode is set for breadcrumb
       }
     },
-    [selectedCategory, currentArtistId, setCategories, setSelectedCategory, setCurrentView],
+    [selectedCategory, setCategories, setSelectedCategory, toastError, toastSuccess],
   );
 
   const handleEditMultipleSlideshows = useCallback((items) => {
@@ -2224,7 +2236,7 @@ const VideoStudio = ({
         setCurrentView('project', { projectId: activeProjectId, nicheId });
       }
     }
-  }, [activePipelineIdForEditor, activeProjectId]);
+  }, [activePipelineIdForEditor, activeProjectId, setCurrentView]);
 
   const handleSaveSlideshow = useCallback(
     async (slideshowData) => {
@@ -2451,7 +2463,15 @@ const VideoStudio = ({
       setShowSlideshowEditor(false);
       setEditingSlideshow(null);
     },
-    [selectedCategory, currentArtistId, schedulerEditPostId, db],
+    [
+      selectedCategory,
+      currentArtistId,
+      schedulerEditPostId,
+      db,
+      libraryMedia.audio,
+      pullFromCollection,
+      setCurrentView,
+    ],
   );
 
   // Delete a slideshow (soft-delete: stays in Firestore with deletedAt, removed from UI)
@@ -3610,26 +3630,33 @@ const VideoStudio = ({
             transition={{ duration: 0.15 }}
           >
             <Suspense fallback={null}>
-              <SlideshowEditor
-                db={db}
-                artistId={currentArtistId}
-                category={slideshowCategory}
-                existingSlideshow={editingSlideshow}
-                initialImages={selectedLibraryMedia?.images || []}
-                initialAudio={selectedLibraryMedia?.audio || null}
-                initialLyrics={selectedLibraryMedia?.lyrics || []}
-                initialSelectedBanks={selectedLibraryMedia?.selectedBanks || null}
-                batchMode={slideshowBatchMode}
-                onSave={handleSaveSlideshow}
+              <EditorErrorBoundary
                 onClose={() => {
                   handleCloseSlideshowEditor();
                   setSchedulerEditPostId(null);
                 }}
-                onSchedulePost={schedulerEditPostId ? null : onSchedulePost}
-                onAddLyrics={handleAddLyrics}
-                lateAccountIds={lateAccountIds}
-                schedulerEditMode={!!schedulerEditPostId}
-              />
+              >
+                <SlideshowEditor
+                  db={db}
+                  artistId={currentArtistId}
+                  category={slideshowCategory}
+                  existingSlideshow={editingSlideshow}
+                  initialImages={selectedLibraryMedia?.images || []}
+                  initialAudio={selectedLibraryMedia?.audio || null}
+                  initialLyrics={selectedLibraryMedia?.lyrics || []}
+                  initialSelectedBanks={selectedLibraryMedia?.selectedBanks || null}
+                  batchMode={slideshowBatchMode}
+                  onSave={handleSaveSlideshow}
+                  onClose={() => {
+                    handleCloseSlideshowEditor();
+                    setSchedulerEditPostId(null);
+                  }}
+                  onSchedulePost={schedulerEditPostId ? null : onSchedulePost}
+                  onAddLyrics={handleAddLyrics}
+                  lateAccountIds={lateAccountIds}
+                  schedulerEditMode={!!schedulerEditPostId}
+                />
+              </EditorErrorBoundary>
             </Suspense>
           </motion.div>
         )}

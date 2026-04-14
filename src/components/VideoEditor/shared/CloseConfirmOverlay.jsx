@@ -1,6 +1,6 @@
 import React from 'react';
-import { Button } from '../../../ui/components/Button';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { Button } from '../../../ui/components/Button';
 
 /**
  * CloseConfirmOverlay — Shown when user tries to close an editor with unsaved work.

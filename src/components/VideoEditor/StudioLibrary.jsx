@@ -2,42 +2,43 @@
  * StudioLibrary — Horizontal nav + media grid for browsing all artist media
  * Pipeline albums, All Media, Unassigned bucket, type filtering, search, sort
  */
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import useIsMobile from '../../hooks/useIsMobile';
+
+import * as SubframeCore from '@subframe/core';
 import {
-  getLibrary,
-  getCollections,
-  getCreatedContent,
-  subscribeToCollections,
-  subscribeToLibrary,
-  subscribeToCreatedContent,
-  addToLibraryAsync,
-  addToCollectionAsync,
-  MEDIA_TYPES,
-} from '../../services/libraryService';
-import { uploadFile, generateThumbnail } from '../../services/firebaseStorage';
-import { convertImageIfNeeded } from '../../utils/imageConverter';
-import { convertAudioIfNeeded } from '../../utils/audioConverter';
-import { runPool } from '../../utils/uploadPool';
-import { Button } from '../../ui/components/Button';
-import { Badge } from '../../ui/components/Badge';
-import { TextField } from '../../ui/components/TextField';
-import { DropdownMenu } from '../../ui/components/DropdownMenu';
-import { useToast } from '../ui';
-import {
-  FeatherSearch,
-  FeatherGrid,
-  FeatherMusic,
-  FeatherUpload,
-  FeatherFileQuestion,
-  FeatherPlay,
-  FeatherPause,
   FeatherArrowDownUp,
   FeatherChevronDown,
-  FeatherFolder,
+  FeatherFileQuestion,
   FeatherFilm,
+  FeatherFolder,
+  FeatherGrid,
+  FeatherMusic,
+  FeatherPause,
+  FeatherPlay,
+  FeatherSearch,
+  FeatherUpload,
 } from '@subframe/core';
-import * as SubframeCore from '@subframe/core';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import useIsMobile from '../../hooks/useIsMobile';
+import { generateThumbnail, uploadFile } from '../../services/firebaseStorage';
+import {
+  addToCollectionAsync,
+  addToLibraryAsync,
+  getCollections,
+  getCreatedContent,
+  getLibrary,
+  MEDIA_TYPES,
+  subscribeToCollections,
+  subscribeToCreatedContent,
+  subscribeToLibrary,
+} from '../../services/libraryService';
+import { Badge } from '../../ui/components/Badge';
+import { Button } from '../../ui/components/Button';
+import { DropdownMenu } from '../../ui/components/DropdownMenu';
+import { TextField } from '../../ui/components/TextField';
+import { convertAudioIfNeeded } from '../../utils/audioConverter';
+import { convertImageIfNeeded } from '../../utils/imageConverter';
+import { runPool } from '../../utils/uploadPool';
+import { useToast } from '../ui';
 import CloudImportButton from './CloudImportButton';
 
 // Format duration (seconds → "m:ss")

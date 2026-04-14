@@ -2,28 +2,29 @@
  * ClipperNicheContent — Clip bank display for clipper niches
  * Shows saved clipper sessions from niche, exported clips by bank, create button, audio picker
  */
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import log from '../../utils/logger';
-import { Button } from '../../ui/components/Button';
-import { IconButton } from '../../ui/components/IconButton';
-import { Badge } from '../../ui/components/Badge';
+
 import {
-  FeatherPlay,
-  FeatherScissors,
   FeatherChevronDown,
   FeatherChevronRight,
-  FeatherX,
-  FeatherUpload,
-  FeatherDownloadCloud,
   FeatherDatabase,
+  FeatherDownloadCloud,
+  FeatherPlay,
+  FeatherScissors,
+  FeatherUpload,
+  FeatherX,
 } from '@subframe/core';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  deleteClipperSession,
   getBankColor,
   getPipelineBankLabel,
-  deleteClipperSession,
   removeFromCollection,
   updateLibraryItemAsync,
 } from '../../services/libraryService';
+import { Badge } from '../../ui/components/Badge';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import log from '../../utils/logger';
 
 const formatTimePrecise = (seconds) => {
   if (!Number.isFinite(seconds)) return '0:00.0';

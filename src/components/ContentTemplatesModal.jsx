@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import {
-  getCategoryNames,
-  generateFromTemplate,
-  saveCategory,
   deleteCategory,
+  generateFromTemplate,
+  getCategoryNames,
   resetToDefaults,
+  saveCategory,
 } from '../services/contentTemplateService';
 import log from '../utils/logger';
 

@@ -5,8 +5,8 @@
  * Renders each slide to canvas with text overlays, then uploads to Firebase.
  */
 
-import { uploadFile } from './firebaseStorage';
 import log from '../utils/logger';
+import { uploadFile } from './firebaseStorage';
 
 // Canvas dimensions based on aspect ratio
 const DIMENSIONS = {

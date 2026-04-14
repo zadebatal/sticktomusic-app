@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
-import { normalizeBeatsToTrimRange } from '../utils/timelineNormalization';
+import { useCallback, useState } from 'react';
 import log from '../utils/logger';
+import { normalizeBeatsToTrimRange } from '../utils/timelineNormalization';
 
 /**
  * Custom hook for beat detection in audio files.

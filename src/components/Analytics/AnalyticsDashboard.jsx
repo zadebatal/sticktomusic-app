@@ -1,51 +1,51 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import * as SubframeCore from '@subframe/core';
 import {
-  getStoredAnalytics,
-  calculateTotalStats,
-  getTopVideos,
-  getSongPerformance,
-  getCategoryPerformance,
-  getAccountPerformance,
-  getTimeSeriesData,
-  getSongAnalytics,
-  needsSync,
-  addMockData,
-} from '../../services/analyticsService';
-import {
-  SpotifyMomentumCard,
-  GrowthDriversCard,
-  TimelineOverlayChart,
-  SpotifyTab,
-  ConfidenceBadge,
-} from './SpotifyComponents';
-import {
-  getVideoAttributionSummary,
-  getSongAttributionSummary,
-  computeAttribution,
-} from '../../services/spotifyAttributionService';
-import log from '../../utils/logger';
-import useIsMobile from '../../hooks/useIsMobile';
-import { Button } from '../../ui/components/Button';
-import { Badge } from '../../ui/components/Badge';
-import { Loader } from '../../ui/components/Loader';
-import { ToggleGroup } from '../../ui/components/ToggleGroup';
-import { DropdownMenu } from '../../ui/components/DropdownMenu';
-import {
-  FeatherRefreshCw,
   FeatherArrowLeft,
-  FeatherTrendingUp,
   FeatherBarChart,
   FeatherBarChart2,
-  FeatherMusic,
-  FeatherFilm,
-  FeatherHeadphones,
-  FeatherUser,
   FeatherChevronDown,
   FeatherEye,
+  FeatherFilm,
+  FeatherHeadphones,
   FeatherHeart,
   FeatherMessageCircle,
+  FeatherMusic,
+  FeatherRefreshCw,
+  FeatherTrendingUp,
+  FeatherUser,
 } from '@subframe/core';
-import * as SubframeCore from '@subframe/core';
+import React, { useCallback, useEffect, useState } from 'react';
+import useIsMobile from '../../hooks/useIsMobile';
+import {
+  addMockData,
+  calculateTotalStats,
+  getAccountPerformance,
+  getCategoryPerformance,
+  getSongAnalytics,
+  getSongPerformance,
+  getStoredAnalytics,
+  getTimeSeriesData,
+  getTopVideos,
+  needsSync,
+} from '../../services/analyticsService';
+import {
+  computeAttribution,
+  getSongAttributionSummary,
+  getVideoAttributionSummary,
+} from '../../services/spotifyAttributionService';
+import { Badge } from '../../ui/components/Badge';
+import { Button } from '../../ui/components/Button';
+import { DropdownMenu } from '../../ui/components/DropdownMenu';
+import { Loader } from '../../ui/components/Loader';
+import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import log from '../../utils/logger';
+import {
+  ConfidenceBadge,
+  GrowthDriversCard,
+  SpotifyMomentumCard,
+  SpotifyTab,
+  TimelineOverlayChart,
+} from './SpotifyComponents';
 
 /**
  * AnalyticsDashboard - Main analytics view
@@ -483,11 +483,14 @@ const AnalyticsDashboard = ({
 
       {/* Empty state — no analytics data */}
       {!hasRealData && (
-        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-          <FeatherBarChart2 className="w-12 h-12 text-zinc-600" />
-          <h3 className="text-lg font-semibold text-white">No analytics data yet</h3>
-          <p className="text-sm text-zinc-400 max-w-xs">
-            Schedule and post content to start tracking performance
+        <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
+          <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-zinc-800/60 mb-2">
+            <FeatherBarChart2 className="w-8 h-8 text-zinc-500" />
+          </div>
+          <h3 className="text-xl font-semibold text-white">No analytics data yet</h3>
+          <p className="text-sm text-zinc-400 max-w-sm leading-relaxed">
+            Once you schedule and post content, performance data will appear here — track views,
+            engagement, and growth across all your platforms.
           </p>
         </div>
       )}

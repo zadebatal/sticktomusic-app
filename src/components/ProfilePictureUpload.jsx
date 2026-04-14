@@ -1,11 +1,11 @@
-import React, { useState, useCallback, useRef } from 'react';
-import Cropper from 'react-easy-crop';
+import { FeatherX } from '@subframe/core';
 import { getAuth, updateProfile } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
-import getCroppedImg from '../utils/cropImage';
+import React, { useCallback, useRef, useState } from 'react';
+import Cropper from 'react-easy-crop';
 import { uploadFile } from '../services/firebaseStorage';
 import { Button } from '../ui/components/Button';
-import { FeatherX } from '@subframe/core';
+import getCroppedImg from '../utils/cropImage';
 import log from '../utils/logger';
 
 /**

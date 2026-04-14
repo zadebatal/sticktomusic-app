@@ -1,8 +1,8 @@
-import React, { useEffect, useCallback, useState, useRef, createContext, useContext } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { toast as sonnerToast, Toaster } from 'sonner';
-import { motion, AnimatePresence } from 'framer-motion';
-import log from '../../utils/logger';
 import useIsMobile from '../../hooks/useIsMobile';
+import log from '../../utils/logger';
 
 /**
  * Shared UI Components for StickToMusic

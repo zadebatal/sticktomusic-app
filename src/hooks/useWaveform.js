@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  clearWaveformCache,
+  generateWaveformData,
   generateWaveformDataWithDuration,
   generateWaveformForClip,
-  generateWaveformData,
-  clearWaveformCache,
 } from '../utils/waveformGenerator';
 
 /**

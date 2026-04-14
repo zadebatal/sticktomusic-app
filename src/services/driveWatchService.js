@@ -38,7 +38,7 @@ const ALL_MEDIA_EXTS = new Set([...VIDEO_EXTS, ...AUDIO_EXTS, ...IMAGE_EXTS]);
 // ── Module state ──
 
 let _callbacks = [];
-let _debouncers = new Map(); // filename -> timeoutId
+const _debouncers = new Map(); // filename -> timeoutId
 let _removeListener = null; // cleanup fn returned by onFileChanged
 let _watching = false;
 

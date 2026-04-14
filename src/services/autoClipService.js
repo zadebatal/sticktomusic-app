@@ -6,9 +6,9 @@
  * per song with clips auto-assigned to media banks.
  */
 
-import { recognizeSong } from './lyricsLookupService';
-import { createNiche, addMediaBank, assignToMediaBank } from './libraryService';
 import log from '../utils/logger';
+import { addMediaBank, assignToMediaBank, createNiche } from './libraryService';
+import { recognizeSong } from './lyricsLookupService';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

@@ -5,8 +5,8 @@
  * Consumers import directly from this file (not re-exported from libraryService).
  */
 
-import { MEDIA_TYPES, updateLibraryItemAsync } from './libraryService';
 import log from '../utils/logger';
+import { MEDIA_TYPES, updateLibraryItemAsync } from './libraryService';
 
 // ── Image Loading ──
 

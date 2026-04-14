@@ -2,52 +2,53 @@
  * SlideshowNicheContent — Banks, text entries, preview & generate panel for a slideshow niche.
  * Extracted from PipelineWorkspace center+right panels.
  */
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+
 import {
-  getPipelineBankLabel,
-  migrateCollectionBanks,
-  assignToBank,
-  removeFromBank,
-  addToTextBank,
-  removeFromTextBank,
-  updateTextBankEntry,
-  getTextBankText,
-  getTextBankStyle,
-  getBankColor,
-  updateNicheAudioId,
-  updateLibraryItemAsync,
-  addToLibraryAsync,
-  addToCollectionAsync,
-  addToProjectPool,
-  MEDIA_TYPES,
-} from '../../services/libraryService';
-import { uploadFile } from '../../services/firebaseStorage';
-import LyricDistributor from './shared/LyricDistributor';
-import AudioClipSelector from './AudioClipSelector';
-import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
-import { useToast } from '../ui';
-import { Button } from '../../ui/components/Button';
-import { IconButton } from '../../ui/components/IconButton';
-import { Badge } from '../../ui/components/Badge';
-import { IconWithBackground } from '../../ui/components/IconWithBackground';
-import {
-  FeatherPlus,
-  FeatherX,
-  FeatherType,
-  FeatherPlay,
-  FeatherSquare,
-  FeatherImage,
-  FeatherMusic,
-  FeatherZap,
-  FeatherTrash2,
+  FeatherCheck,
   FeatherChevronDown,
   FeatherChevronRight,
   FeatherDatabase,
   FeatherEdit2,
-  FeatherCheck,
+  FeatherImage,
   FeatherMic,
+  FeatherMusic,
+  FeatherPlay,
+  FeatherPlus,
   FeatherScissors,
+  FeatherSquare,
+  FeatherTrash2,
+  FeatherType,
+  FeatherX,
+  FeatherZap,
 } from '@subframe/core';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
+import { uploadFile } from '../../services/firebaseStorage';
+import {
+  addToCollectionAsync,
+  addToLibraryAsync,
+  addToProjectPool,
+  addToTextBank,
+  assignToBank,
+  getBankColor,
+  getPipelineBankLabel,
+  getTextBankStyle,
+  getTextBankText,
+  MEDIA_TYPES,
+  migrateCollectionBanks,
+  removeFromBank,
+  removeFromTextBank,
+  updateLibraryItemAsync,
+  updateNicheAudioId,
+  updateTextBankEntry,
+} from '../../services/libraryService';
+import { Badge } from '../../ui/components/Badge';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { IconWithBackground } from '../../ui/components/IconWithBackground';
+import { useToast } from '../ui';
+import AudioClipSelector from './AudioClipSelector';
+import LyricDistributor from './shared/LyricDistributor';
 
 // Bank header colors keyed by label
 const BANK_HEADER_COLORS = {

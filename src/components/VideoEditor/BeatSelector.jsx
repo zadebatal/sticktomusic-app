@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import { FeatherCheck, FeatherX } from '@subframe/core';
+import React, { useMemo, useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
-import { FeatherX, FeatherCheck } from '@subframe/core';
 
 /**
  * BeatSelector - Select which beats to cut on
@@ -42,7 +42,7 @@ const BeatSelector = ({ beats = [], bpm = 120, duration = 30, onApply, onCancel 
     });
 
     return measuresArray;
-  }, [beats, bpm]);
+  }, [beats]);
 
   // Toggle beat selection
   const toggleBeat = (beatIndex) => {

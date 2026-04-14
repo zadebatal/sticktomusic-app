@@ -26,12 +26,18 @@ service firebase.storage {
 
     // Artist-scoped paths: users can only write to their accessible artists
     // Path pattern: artists/{artistId}/...
+    // Write requires auth + the user's UID must exist in the artist's allowedUsers
+    // or the user must be a conductor/operator (checked via allowedUsers collection)
     match /artists/{artistId}/{allPaths=**} {
       allow read: if true; // Download URLs already contain security tokens
       allow write: if isAuthenticated()
                    && isValidSize()
-                   && isValidContentType();
-      allow delete: if isAuthenticated();
+                   && isValidContentType()
+                   && (firestore.exists(/databases/(default)/documents/artists/$(artistId)/allowedUsers/$(request.auth.uid))
+                       || firestore.exists(/databases/(default)/documents/allowedUsers/$(request.auth.uid)));
+      allow delete: if isAuthenticated()
+                    && (firestore.exists(/databases/(default)/documents/artists/$(artistId)/allowedUsers/$(request.auth.uid))
+                        || firestore.exists(/databases/(default)/documents/allowedUsers/$(request.auth.uid)));
     }
 
     // Thumbnails path (shared, used by thumbnail migration)

@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 
 /**
  * usePixelTimeline — Shared hook for pixel-based timeline rendering.

@@ -11,24 +11,24 @@
  * - Clip recycling (prioritize fresh footage)
  */
 
-import React, { useState, useCallback, useRef } from 'react';
-import { Button } from '../../ui/components/Button';
-import { IconButton } from '../../ui/components/IconButton';
-import { Badge } from '../../ui/components/Badge';
-import { FeatherX, FeatherUpload, FeatherMusic, FeatherPlay, FeatherZap } from '@subframe/core';
-import { useToast } from '../ui';
+import { FeatherMusic, FeatherPlay, FeatherUpload, FeatherX, FeatherZap } from '@subframe/core';
+import React, { useCallback, useRef, useState } from 'react';
+import { uploadFile } from '../../services/firebaseStorage';
 import {
-  createNiche,
   addMediaBank,
+  addToCollection,
+  addToLibraryAsync,
   assignToMediaBank,
   createMediaItem,
-  addToLibraryAsync,
-  addToCollection,
+  createNiche,
 } from '../../services/libraryService';
-import { uploadFile } from '../../services/firebaseStorage';
-import { convertImageIfNeeded } from '../../utils/imageConverter';
+import { Badge } from '../../ui/components/Badge';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
 import { convertAudioIfNeeded } from '../../utils/audioConverter';
+import { convertImageIfNeeded } from '../../utils/imageConverter';
 import log from '../../utils/logger';
+import { useToast } from '../ui';
 
 const SUPPORTED_VIDEO = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'];
 const SUPPORTED_IMAGE = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/tiff'];

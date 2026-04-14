@@ -7,15 +7,18 @@
 
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
   setDoc,
   updateDoc,
-  deleteDoc,
   writeBatch,
-  onSnapshot,
-  serverTimestamp,
 } from 'firebase/firestore';
 import log from '../utils/logger';
 
@@ -189,7 +192,9 @@ export const saveCreatedContent = (artistId, content) => {
       );
       try {
         localStorage.removeItem(getCreatedContentKey(artistId));
-      } catch (_) {}
+      } catch (e) {
+        console.warn('Silent catch:', e.message || e);
+      }
     } else {
       log.error('Error saving created content:', error);
     }
@@ -416,7 +421,7 @@ export const loadCreatedContentAsync = async (db, artistId) => {
     }
 
     const collectionRef = collection(db, 'artists', artistId, 'library', 'data', 'createdContent');
-    const snapshot = await getDocs(collectionRef);
+    const snapshot = await getDocs(query(collectionRef, orderBy('createdAt', 'desc'), limit(500)));
 
     const videos = [];
     const slideshows = [];
@@ -629,7 +634,7 @@ export const getDeletedContentAsync = async (db, artistId) => {
   if (!db || !artistId) return { videos: [], slideshows: [] };
   try {
     const collectionRef = collection(db, 'artists', artistId, 'library', 'data', 'createdContent');
-    const snapshot = await getDocs(collectionRef);
+    const snapshot = await getDocs(query(collectionRef, orderBy('createdAt', 'desc'), limit(500)));
 
     const videos = [];
     const slideshows = [];

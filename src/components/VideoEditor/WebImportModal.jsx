@@ -5,25 +5,26 @@
  * Preview shows a browsable selection grid for profiles/playlists/galleries.
  * Uses webImportService for all backend communication.
  */
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Button } from '../../ui/components/Button';
-import { Badge } from '../../ui/components/Badge';
-import { FeatherX, FeatherLink, FeatherDownload, FeatherAlertCircle } from '@subframe/core';
-import { IconButton } from '../../ui/components/IconButton';
+
+import { FeatherAlertCircle, FeatherDownload, FeatherLink, FeatherX } from '@subframe/core';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { getBankColor, getBankLabel } from '../../services/libraryService';
 import {
-  detectPlatform,
-  isUrlSupported,
   analyzeUrl,
-  startDownload,
-  pollUntilComplete,
-  startRip,
+  detectPlatform,
+  downloadLocally,
+  getLocalVideoInfo,
   isLocalDownloadAvailable,
   isLocalRipAvailable,
-  getLocalVideoInfo,
-  downloadLocally,
+  isUrlSupported,
+  pollUntilComplete,
   ripLocally,
+  startDownload,
+  startRip,
 } from '../../services/webImportService';
-import { getBankColor, getBankLabel } from '../../services/libraryService';
+import { Badge } from '../../ui/components/Badge';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
 import log from '../../utils/logger';
 
 const STATES = {
@@ -272,10 +273,10 @@ const WebImportModal = ({
     metadata,
     hasItems,
     isMultiItem,
-    isVideo,
     selectedItems,
     ripMode,
     onComplete,
+    outputDir,
   ]);
 
   const handleClose = useCallback(() => {

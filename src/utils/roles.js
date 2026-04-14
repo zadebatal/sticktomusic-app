@@ -1,4 +1,5 @@
 import log from '../utils/logger';
+
 /**
  * roles.js - Role/Permission Utilities
  *

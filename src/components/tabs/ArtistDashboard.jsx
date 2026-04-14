@@ -1,47 +1,47 @@
-import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { doc, updateDoc } from 'firebase/firestore';
-import { useToast } from '../ui';
 import {
-  getTierForSets,
-  computeSocialSetsUsed,
-  shouldShowPaymentUI,
-} from '../../services/subscriptionService';
-import {
-  PLATFORM_META,
-  ALL_PLATFORMS,
-  getProfileUrl,
-  formatFollowers,
-} from '../../utils/platformUtils';
-import {
-  subscribeToScheduledPosts,
-  POST_STATUS,
-  PLATFORM_COLORS,
-} from '../../services/scheduledPostsService';
-import {
-  subscribeToCreatedContent,
-  getProjects,
-  getProjectNiches,
-} from '../../services/libraryService';
-import { getLateProfiles, createLateProfile, getConnectUrl } from '../../services/lateService';
-import log from '../../utils/logger';
-import { Button } from '../../ui/components/Button';
-import { Badge } from '../../ui/components/Badge';
-import { IconButton } from '../../ui/components/IconButton';
-import { IconWithBackground } from '../../ui/components/IconWithBackground';
-import {
+  FeatherCalendar,
+  FeatherCamera,
+  FeatherEdit2,
   FeatherEye,
   FeatherHeart,
-  FeatherCalendar,
+  FeatherLayers,
+  FeatherMusic,
+  FeatherPlay,
+  FeatherSend,
   FeatherTrendingUp,
   FeatherVideo,
-  FeatherPlay,
-  FeatherEdit2,
-  FeatherLayers,
-  FeatherSend,
-  FeatherMusic,
-  FeatherCamera,
   FeatherX,
 } from '@subframe/core';
+import { doc, updateDoc } from 'firebase/firestore';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createLateProfile, getConnectUrl, getLateProfiles } from '../../services/lateService';
+import {
+  getProjectNiches,
+  getProjects,
+  subscribeToCreatedContent,
+} from '../../services/libraryService';
+import {
+  PLATFORM_COLORS,
+  POST_STATUS,
+  subscribeToScheduledPosts,
+} from '../../services/scheduledPostsService';
+import {
+  computeSocialSetsUsed,
+  getTierForSets,
+  shouldShowPaymentUI,
+} from '../../services/subscriptionService';
+import { Badge } from '../../ui/components/Badge';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { IconWithBackground } from '../../ui/components/IconWithBackground';
+import log from '../../utils/logger';
+import {
+  ALL_PLATFORMS,
+  formatFollowers,
+  getProfileUrl,
+  PLATFORM_META,
+} from '../../utils/platformUtils';
+import { useToast } from '../ui';
 
 /** Returns a human-readable relative time string (e.g. "2 days ago") */
 const getTimeAgo = (date) => {
@@ -145,7 +145,10 @@ const ArtistDashboard = ({
   const artistPages = latePages;
 
   // Manual accounts for this artist
-  const manualAccounts = manualAccountsByArtist?.[artistId] || [];
+  const manualAccounts = useMemo(
+    () => manualAccountsByArtist?.[artistId] || [],
+    [manualAccountsByArtist, artistId],
+  );
 
   // Per-group "add platform" picker state (null or group index)
   const [addingPlatformFor, setAddingPlatformFor] = useState(null);

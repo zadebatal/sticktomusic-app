@@ -1,15 +1,15 @@
-"use client";
+'use client';
+
 /*
  * Documentation:
  * Radio Group — https://app.subframe.com/529172180c1b/library?component=Radio+Group_c4b6300e-20b4-4f3e-8b9f-379a046674ca
  */
 
-import React from "react";
-import * as SubframeCore from "@subframe/core";
-import * as SubframeUtils from "../utils";
+import * as SubframeCore from '@subframe/core';
+import React from 'react';
+import * as SubframeUtils from '../utils';
 
-interface OptionProps
-  extends React.ComponentProps<typeof SubframeCore.RadioGroup.Item> {
+interface OptionProps extends React.ComponentProps<typeof SubframeCore.RadioGroup.Item> {
   label?: React.ReactNode;
   disabled?: boolean;
   checked?: boolean;
@@ -17,14 +17,8 @@ interface OptionProps
 }
 
 const Option = React.forwardRef<HTMLButtonElement, OptionProps>(function Option(
-  {
-    label,
-    disabled = false,
-    checked = false,
-    className,
-    ...otherProps
-  }: OptionProps,
-  ref
+  { label, disabled = false, checked = false, className, ...otherProps }: OptionProps,
+  ref,
 ) {
   return (
     <SubframeCore.RadioGroup.Item
@@ -35,8 +29,8 @@ const Option = React.forwardRef<HTMLButtonElement, OptionProps>(function Option(
     >
       <button
         className={SubframeUtils.twClassNames(
-          "group/0f804ad9 flex cursor-pointer items-center gap-2 border-none bg-transparent text-left disabled:cursor-default",
-          className
+          'group/0f804ad9 flex cursor-pointer items-center gap-2 border-none bg-transparent text-left disabled:cursor-default',
+          className,
         )}
         ref={ref}
       >
@@ -55,8 +49,7 @@ const Option = React.forwardRef<HTMLButtonElement, OptionProps>(function Option(
   );
 });
 
-interface RadioGroupRootProps
-  extends React.ComponentProps<typeof SubframeCore.RadioGroup.Root> {
+interface RadioGroupRootProps extends React.ComponentProps<typeof SubframeCore.RadioGroup.Root> {
   label?: React.ReactNode;
   helpText?: React.ReactNode;
   error?: boolean;
@@ -78,28 +71,25 @@ const RadioGroupRoot = React.forwardRef<HTMLDivElement, RadioGroupRootProps>(
       className,
       ...otherProps
     }: RadioGroupRootProps,
-    ref
+    ref,
   ) {
     return (
       <SubframeCore.RadioGroup.Root asChild={true} {...otherProps}>
         <div
           className={SubframeUtils.twClassNames(
-            "group/c4b6300e flex flex-col items-start gap-2",
-            className
+            'group/c4b6300e flex flex-col items-start gap-2',
+            className,
           )}
           ref={ref}
         >
           {label ? (
-            <span className="text-body-bold font-body-bold text-default-font">
-              {label}
-            </span>
+            <span className="text-body-bold font-body-bold text-default-font">{label}</span>
           ) : null}
           {children ? (
             <div
-              className={SubframeUtils.twClassNames(
-                "flex flex-col items-start gap-2",
-                { "flex-row flex-nowrap gap-6": horizontal }
-              )}
+              className={SubframeUtils.twClassNames('flex flex-col items-start gap-2', {
+                'flex-row flex-nowrap gap-6': horizontal,
+              })}
             >
               {children}
             </div>
@@ -107,8 +97,8 @@ const RadioGroupRoot = React.forwardRef<HTMLDivElement, RadioGroupRootProps>(
           {helpText ? (
             <span
               className={SubframeUtils.twClassNames(
-                "text-caption font-caption text-subtext-color",
-                { "text-error-700": error }
+                'text-caption font-caption text-subtext-color',
+                { 'text-error-700': error },
               )}
             >
               {helpText}
@@ -117,7 +107,7 @@ const RadioGroupRoot = React.forwardRef<HTMLDivElement, RadioGroupRootProps>(
         </div>
       </SubframeCore.RadioGroup.Root>
     );
-  }
+  },
 );
 
 export const RadioGroup = Object.assign(RadioGroupRoot, {

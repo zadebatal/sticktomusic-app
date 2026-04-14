@@ -1,15 +1,15 @@
+import {
+  FeatherArrowLeft,
+  FeatherDownload,
+  FeatherHelpCircle,
+  FeatherRotateCcw,
+  FeatherRotateCw,
+  FeatherSave,
+} from '@subframe/core';
 import React, { useState } from 'react';
 import { Button } from '../../../ui/components/Button';
 import { IconButton } from '../../../ui/components/IconButton';
 import { TextField } from '../../../ui/components/TextField';
-import {
-  FeatherArrowLeft,
-  FeatherRotateCcw,
-  FeatherRotateCw,
-  FeatherSave,
-  FeatherDownload,
-  FeatherHelpCircle,
-} from '@subframe/core';
 import KeyboardShortcutsOverlay from './KeyboardShortcutsOverlay';
 
 /**

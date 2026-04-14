@@ -1,7 +1,7 @@
+import { FeatherArrowLeft } from '@subframe/core';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/components/Button';
-import { FeatherArrowLeft } from '@subframe/core';
 
 export default function TermsPage() {
   const navigate = useNavigate();

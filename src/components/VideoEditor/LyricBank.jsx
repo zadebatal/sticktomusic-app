@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { FeatherPlus } from '@subframe/core';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../ui/components/Button';
-import { FeatherPlus } from '@subframe/core';
 
 /**
  * LyricBank - Full song lyrics storage with paragraph/line selection

@@ -3,44 +3,45 @@
  * Shows project media grid (images + videos + audio) with search, scope toggle, upload/import.
  * Supports marquee (rubber-band) selection for batch delete.
  */
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { Button } from '../../ui/components/Button';
-import { Badge } from '../../ui/components/Badge';
-import { ToggleGroup } from '../../ui/components/ToggleGroup';
-import VideoPreviewLightbox from './shared/VideoPreviewLightbox';
-import QuickTrimPopover from './shared/QuickTrimPopover';
-import MediaStatusBadge from '../ui/MediaStatusBadge';
+
 import {
-  FeatherUpload,
+  FeatherCheck,
   FeatherDownloadCloud,
+  FeatherFilm,
+  FeatherFolder,
   FeatherImage,
   FeatherMusic,
   FeatherPlay,
-  FeatherX,
   FeatherSearch,
-  FeatherFilm,
   FeatherTrash2,
-  FeatherCheck,
-  FeatherFolder,
+  FeatherUpload,
+  FeatherX,
 } from '@subframe/core';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  removeFromLibraryAsync,
+  addToCollectionAsync,
+  assignToMediaBank,
   createCollection,
+  getBankColor,
   getCollections,
+  getUserCollections,
+  migrateToMediaBanks,
+  removeFromLibraryAsync,
   saveCollections,
   saveCollectionToFirestore,
-  addToCollectionAsync,
-  getUserCollections,
-  assignToMediaBank,
-  migrateToMediaBanks,
-  getBankColor,
 } from '../../services/libraryService';
 import { uploadLocalItemToCloud } from '../../services/localMediaService';
-import { useToast, ConfirmDialog } from '../ui';
-import { bucketByDuration } from './shared/editorConstants';
-import { isSearchAvailable, searchMedia } from '../../services/mediaSearchService';
 import { backfillMissingDurations } from '../../services/mediaProbeService';
+import { isSearchAvailable, searchMedia } from '../../services/mediaSearchService';
+import { Badge } from '../../ui/components/Badge';
+import { Button } from '../../ui/components/Button';
+import { ToggleGroup } from '../../ui/components/ToggleGroup';
 import log from '../../utils/logger';
+import { ConfirmDialog, useToast } from '../ui';
+import MediaStatusBadge from '../ui/MediaStatusBadge';
+import { bucketByDuration } from './shared/editorConstants';
+import QuickTrimPopover from './shared/QuickTrimPopover';
+import VideoPreviewLightbox from './shared/VideoPreviewLightbox';
 
 const AllMediaContent = ({
   db,
@@ -72,6 +73,10 @@ const AllMediaContent = ({
   const [showMoveToBankModal, setShowMoveToBankModal] = useState(false);
   const [isBulkUploading, setIsBulkUploading] = useState(false);
 
+  // ── Progressive rendering ──
+  const [renderLimit, setRenderLimit] = useState(100);
+  const sentinelRef = useRef(null);
+
   // ── Selection state ──
   const [selected, setSelected] = useState(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
@@ -99,10 +104,27 @@ const AllMediaContent = ({
     });
   }, []);
 
-  // Clear selection when scope/search/source changes
+  // Clear selection and reset progressive render when scope/search/source changes
   useEffect(() => {
     setSelected(new Set());
-  }, [mediaScope, mediaSearch, sourceFilter]);
+    setRenderLimit(100);
+  }, [mediaScope, mediaSearch, sourceFilter, sortBy, searchMode]);
+
+  // ── IntersectionObserver for progressive rendering ──
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setRenderLimit((prev) => prev + 100);
+        }
+      },
+      { root: gridRef.current, rootMargin: '200px' },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
 
   // ── Backfill missing durations ──
   // Items imported via the legacy paths (or earlier dev rebuilds) often
@@ -400,7 +422,7 @@ const AllMediaContent = ({
         setIsDeleting(false);
       },
     });
-  }, [selected, isDeleting, db, artistId, toastSuccess]);
+  }, [selected, isDeleting, db, artistId, toastSuccess, library, projectMedia]);
 
   const handleAddToFolder = useCallback(
     async (folderName, mediaIds) => {
@@ -545,6 +567,24 @@ const AllMediaContent = ({
     () => [...filteredImages, ...filteredVideos, ...filteredAudio],
     [filteredImages, filteredVideos, filteredAudio],
   );
+
+  // ── Progressive render slicing ──
+  // Distribute renderLimit across sections in display order: images, videos, audio.
+  const { renderImages, renderVideos, renderAudio, hasMore } = useMemo(() => {
+    let remaining = renderLimit;
+    const ri = filteredImages.slice(0, remaining);
+    remaining -= ri.length;
+    const rv = filteredVideos.slice(0, Math.max(0, remaining));
+    remaining -= rv.length;
+    const ra = filteredAudio.slice(0, Math.max(0, remaining));
+    const total = filteredImages.length + filteredVideos.length + filteredAudio.length;
+    return {
+      renderImages: ri,
+      renderVideos: rv,
+      renderAudio: ra,
+      hasMore: ri.length + rv.length + ra.length < total,
+    };
+  }, [filteredImages, filteredVideos, filteredAudio, renderLimit]);
 
   const durationBuckets = useMemo(() => bucketByDuration(filteredVideos), [filteredVideos]);
 
@@ -866,7 +906,7 @@ const AllMediaContent = ({
               <Badge variant="neutral">{filteredImages.length}</Badge>
             </div>
             <div className="grid w-full grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-1.5">
-              {filteredImages.map((item) => {
+              {renderImages.map((item) => {
                 const isSelected = selected.has(item.id);
                 return (
                   <div
@@ -959,7 +999,7 @@ const AllMediaContent = ({
               </>
             ) : (
               <div className="grid w-full grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-1.5">
-                {filteredVideos.map((item) => renderVideoCard(item))}
+                {renderVideos.map((item) => renderVideoCard(item))}
               </div>
             )}
           </div>
@@ -974,7 +1014,7 @@ const AllMediaContent = ({
               <Badge variant="neutral">{filteredAudio.length}</Badge>
             </div>
             <div className="flex flex-col gap-1 rounded-lg border border-solid border-neutral-200 bg-[#111118] overflow-hidden">
-              {filteredAudio.map((audio) => {
+              {renderAudio.map((audio) => {
                 const isSelected = selected.has(audio.id);
                 return (
                   <div
@@ -1020,6 +1060,16 @@ const AllMediaContent = ({
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {/* Sentinel for progressive rendering — IntersectionObserver triggers more items */}
+        <div ref={sentinelRef} style={{ height: 1 }} />
+        {hasMore && (
+          <div className="flex w-full items-center justify-center py-4">
+            <span className="text-caption font-caption text-neutral-500 animate-pulse">
+              Loading more...
+            </span>
           </div>
         )}
 

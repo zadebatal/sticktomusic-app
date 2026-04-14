@@ -1,73 +1,73 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import useIsMobile from '../../hooks/useIsMobile';
-import { exportSlideshowAsImages } from '../../services/slideshowExportService';
 import {
-  subscribeToLibrary,
-  subscribeToCollections,
+  FeatherAlignCenter,
+  FeatherAlignLeft,
+  FeatherAlignRight,
+  FeatherArrowLeft,
+  FeatherChevronDown,
+  FeatherChevronLeft,
+  FeatherChevronRight,
+  FeatherCloud,
+  FeatherCopy,
+  FeatherDatabase,
+  FeatherDownload,
+  FeatherEdit2,
+  FeatherImage,
+  FeatherLayout,
+  FeatherMic,
+  FeatherMusic,
+  FeatherPause,
+  FeatherPlay,
+  FeatherPlus,
+  FeatherRefreshCw,
+  FeatherSave,
+  FeatherScissors,
+  FeatherTrash2,
+  FeatherType,
+  FeatherUpload,
+  FeatherX,
+} from '@subframe/core';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import useIsMobile from '../../hooks/useIsMobile';
+import { uploadFile, uploadFileWithQuota } from '../../services/firebaseStorage';
+import {
+  addBankToCollection,
+  addToLibraryAsync,
+  addToTextBank,
+  assignToBank,
+  BANK_COLORS,
+  getBankColor,
+  getBankLabel,
   getCollections,
   getCollectionsAsync,
   getLibrary,
   getLyrics,
-  MEDIA_TYPES,
-  addToTextBank,
-  removeFromTextBank,
-  assignToBank,
-  saveCollectionToFirestore,
-  migrateCollectionBanks,
-  getBankColor,
-  getBankLabel,
   getPipelineBankLabel,
-  BANK_COLORS,
-  MAX_BANKS,
-  MIN_BANKS,
-  addBankToCollection,
-  removeBankFromCollection,
-  updateLibraryItem,
-  getTextBankText,
   getTextBankStyle,
-  addToLibraryAsync,
+  getTextBankText,
+  MAX_BANKS,
+  MEDIA_TYPES,
+  MIN_BANKS,
+  migrateCollectionBanks,
+  removeBankFromCollection,
+  removeFromTextBank,
+  saveCollectionToFirestore,
+  subscribeToCollections,
+  subscribeToLibrary,
+  updateLibraryItem,
   updateTextBankEntry,
 } from '../../services/libraryService';
-import { uploadFile, uploadFileWithQuota } from '../../services/firebaseStorage';
-import { useToast } from '../ui';
-import LyricBank from './LyricBank';
-import AudioClipSelector from './AudioClipSelector';
-import LyricAnalyzer from './LyricAnalyzer';
-import CloudImportButton from './CloudImportButton';
-import log from '../../utils/logger';
+import { exportSlideshowAsImages } from '../../services/slideshowExportService';
+import { Badge } from '../../ui/components/Badge';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
-import { ToggleGroup } from '../../ui/components/ToggleGroup';
 import { TextField } from '../../ui/components/TextField';
-import { Badge } from '../../ui/components/Badge';
-import {
-  FeatherArrowLeft,
-  FeatherX,
-  FeatherDownload,
-  FeatherChevronLeft,
-  FeatherChevronRight,
-  FeatherChevronDown,
-  FeatherPlus,
-  FeatherTrash2,
-  FeatherRefreshCw,
-  FeatherPlay,
-  FeatherPause,
-  FeatherScissors,
-  FeatherUpload,
-  FeatherCloud,
-  FeatherMusic,
-  FeatherMic,
-  FeatherDatabase,
-  FeatherAlignLeft,
-  FeatherAlignCenter,
-  FeatherAlignRight,
-  FeatherLayout,
-  FeatherCopy,
-  FeatherSave,
-  FeatherEdit2,
-  FeatherImage,
-  FeatherType,
-} from '@subframe/core';
+import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import log from '../../utils/logger';
+import { useToast } from '../ui';
+import AudioClipSelector from './AudioClipSelector';
+import CloudImportButton from './CloudImportButton';
+import LyricAnalyzer from './LyricAnalyzer';
+import LyricBank from './LyricBank';
 import useUnsavedChanges from './shared/useUnsavedChanges';
 
 /**
@@ -85,7 +85,7 @@ import useUnsavedChanges from './shared/useUnsavedChanges';
 // Stable empty array for fallbacks — prevents new [] reference on every render
 const EMPTY_SLIDES = [];
 
-import { parseStroke, buildStroke, AVAILABLE_FONTS } from './shared/editorConstants';
+import { AVAILABLE_FONTS, buildStroke, parseStroke } from './shared/editorConstants';
 import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
 
 const SlideshowEditor = ({
@@ -314,7 +314,7 @@ const SlideshowEditor = ({
         }),
       );
     },
-    [artistId, collections, category, activeCollectionId],
+    [artistId, collections, category, activeCollectionId, db],
   );
 
   // Text bank edit modal state
@@ -346,7 +346,7 @@ const SlideshowEditor = ({
         }),
       );
     },
-    [artistId, collections, category, activeCollectionId],
+    [artistId, collections, category, activeCollectionId, db],
   );
 
   // Save edited text bank entry
@@ -379,7 +379,7 @@ const SlideshowEditor = ({
     );
     setEditingBankEntry(null);
     toastSuccess('Text updated');
-  }, [editingBankEntry, artistId, collections, category, activeCollectionId, toastSuccess]);
+  }, [editingBankEntry, artistId, collections, category, activeCollectionId, toastSuccess, db]);
 
   // Filmstrip drag-and-drop state
   const [filmstripDropIndex, setFilmstripDropIndex] = useState(null);
@@ -471,14 +471,18 @@ const SlideshowEditor = ({
           const parsed = JSON.parse(jsonData);
           if (parsed?.id) mediaIds = [parsed.id];
         }
-      } catch (err) {}
+      } catch (err) {
+        console.warn('Silent catch:', err.message || err);
+      }
       if (mediaIds.length === 0) {
         try {
           const textData = e.dataTransfer.getData('text/plain');
           const parsed = JSON.parse(textData);
           if (Array.isArray(parsed)) mediaIds = parsed;
           else if (parsed?.id) mediaIds = [parsed.id];
-        } catch (err) {}
+        } catch (err) {
+          console.warn('Silent catch:', err.message || err);
+        }
       }
 
       if (mediaIds.length > 0 && artistId && collections.length > 0) {
@@ -502,7 +506,7 @@ const SlideshowEditor = ({
         onImportToBank(imageFiles, bank);
       }
     },
-    [artistId, collections, db, toastSuccess, onImportToBank],
+    [artistId, collections, db, toastSuccess, onImportToBank, bankLabel],
   );
 
   // Image drag/resize state (declared early — needed by history tracking)
@@ -621,7 +625,7 @@ const SlideshowEditor = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, handleCloseRequest]);
+  }, [handleUndo, handleRedo, handleCloseRequest, editingBankEntry]);
 
   // Image drag/resize continued state
   const [imgDragStart, setImgDragStart] = useState({ x: 0, y: 0 });
@@ -975,6 +979,7 @@ const SlideshowEditor = ({
     libraryImages,
     slides.length,
     selectedSource,
+    setSlides,
   ]);
 
   // Auto-start: check collection banks for random initial images
@@ -1003,6 +1008,7 @@ const SlideshowEditor = ({
   }, [collections, categoryBankImages, sourceAutoSwitched]);
 
   // Initialize with at least one slide, or generate batch, or use initialImages, or auto-start from banks
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Mount-time initialization — only runs when slides.length === 0. Adding all deps would cause unwanted re-initialization.
   useEffect(() => {
     if (slides.length === 0) {
       if (initialImages && initialImages.length > 0) {
@@ -1122,6 +1128,7 @@ const SlideshowEditor = ({
     batchMode,
     autoStartAttempted,
     initialSelectedBanks,
+    setSlides,
   ]);
 
   // Add a new slide
@@ -1137,7 +1144,7 @@ const SlideshowEditor = ({
     };
     setSlides((prev) => [...prev, newSlide]);
     setSelectedSlideIndex(slides.length);
-  }, [slides.length]);
+  }, [slides.length, setSlides]);
 
   // Remove a slide
   const removeSlide = useCallback(
@@ -1152,7 +1159,7 @@ const SlideshowEditor = ({
         return prev >= newLen ? Math.max(0, newLen - 1) : prev;
       });
     },
-    [slides],
+    [slides, setSlides],
   );
 
   // Keyboard Delete/Backspace to remove current slide
@@ -1171,16 +1178,19 @@ const SlideshowEditor = ({
   }, [selectedSlideIndex, slides, editingTextId, removeSlide]);
 
   // Reorder slides
-  const moveSlide = useCallback((fromIndex, toIndex) => {
-    setSlides((prev) => {
-      const newSlides = [...prev];
-      const [removed] = newSlides.splice(fromIndex, 1);
-      newSlides.splice(toIndex, 0, removed);
-      // Re-index
-      return newSlides.map((s, i) => ({ ...s, index: i }));
-    });
-    setSelectedSlideIndex(toIndex);
-  }, []);
+  const moveSlide = useCallback(
+    (fromIndex, toIndex) => {
+      setSlides((prev) => {
+        const newSlides = [...prev];
+        const [removed] = newSlides.splice(fromIndex, 1);
+        newSlides.splice(toIndex, 0, removed);
+        // Re-index
+        return newSlides.map((s, i) => ({ ...s, index: i }));
+      });
+      setSelectedSlideIndex(toIndex);
+    },
+    [setSlides],
+  );
 
   // Set background for current slide (tracks source bank for re-roll)
   const setSlideBackground = useCallback(
@@ -1200,7 +1210,7 @@ const SlideshowEditor = ({
         ),
       );
     },
-    [selectedSlideIndex],
+    [selectedSlideIndex, setSlides],
   );
 
   // Update image transform (scale + position) for current slide
@@ -1212,7 +1222,7 @@ const SlideshowEditor = ({
         ),
       );
     },
-    [selectedSlideIndex],
+    [selectedSlideIndex, setSlides],
   );
 
   // Gather all reroll-eligible images for the current slide's bank
@@ -1272,7 +1282,6 @@ const SlideshowEditor = ({
     collections,
     libraryImages,
     activeImages,
-    migrateCollectionBanks,
   ]);
 
   // Gather text bank items from the active collection only (not merged across all)
@@ -1309,14 +1318,7 @@ const SlideshowEditor = ({
     }
     while (result.length < Math.max(bankCount, nicheSlideCount || 2)) result.push([]);
     return result;
-  }, [
-    category,
-    activeCollectionId,
-    collections,
-    migrateCollectionBanks,
-    existingSlideshow,
-    nicheSlideCount,
-  ]);
+  }, [category, activeCollectionId, collections, existingSlideshow, nicheSlideCount]);
   const getTextBanks = useCallback(() => textBanksCache, [textBanksCache]);
 
   // Re-roll text: Replace text overlays with random text from banks
@@ -1379,7 +1381,7 @@ const SlideshowEditor = ({
         log.error('[SlideshowEditor] Text reroll error:', err);
       }
     },
-    [selectedSlideIndex, getTextBanks],
+    [selectedSlideIndex, getTextBanks, setSlides],
   );
 
   // Re-roll image only
@@ -1488,7 +1490,7 @@ const SlideshowEditor = ({
         setAudioToTrim(null);
       }
     },
-    [audioToTrim, db, artistId],
+    [audioToTrim, db, artistId, activeSlideshowIndex, user, setSelectedAudio],
   );
 
   // When audio with linkedLyricsId is selected, surface linked lyrics
@@ -1504,7 +1506,7 @@ const SlideshowEditor = ({
     } else {
       setLinkedLyricId(null);
     }
-  }, [selectedAudio?.id, selectedAudio?.linkedLyricsId, lyrics]);
+  }, [selectedAudio?.id, selectedAudio?.linkedLyricsId, lyrics, toastSuccess]);
 
   // Use a ref for slides to avoid stale closures in the animation loop
   const slidesRef = useRef(slides);
@@ -1601,7 +1603,7 @@ const SlideshowEditor = ({
           toastError('Audio playback failed — try a different file');
         });
     }
-  }, [isPlaying, audioReady]);
+  }, [isPlaying, audioReady, toastError]);
 
   const handleRemoveAudio = useCallback(() => {
     if (audioRef.current) {
@@ -1618,7 +1620,7 @@ const SlideshowEditor = ({
     setAudioReady(false);
     setAudioError(null);
     loadedAudioKeyRef.current = null;
-  }, []);
+  }, [setSelectedAudio]);
 
   const handleApplyAudioToAll = useCallback(() => {
     if (!isMultiDraftMode || allSlideshows.length <= 1) return;
@@ -1649,7 +1651,7 @@ const SlideshowEditor = ({
     setAudioError(null);
     loadedAudioKeyRef.current = null;
     setAllSlideshows((prev) => prev.map((ss) => ({ ...ss, audio: null })));
-  }, [isMultiDraftMode, allSlideshows.length]);
+  }, [isMultiDraftMode, allSlideshows.length, setSelectedAudio]);
 
   // Load audio when selected — use a stable key to avoid reloading on unrelated re-renders
   // selectedAudio is derived from allSlideshows and gets a new reference on every slide edit,
@@ -1687,6 +1689,7 @@ const SlideshowEditor = ({
   const selectedAudioStart = selectedAudio?.startTime || 0;
   const selectedAudioEnd = selectedAudio?.endTime || null;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: selectedAudio is intentionally excluded — the effect calls setSelectedAudio({...selectedAudio, ...}), so including it would cause an infinite loop. The individual fields we care about (id, url, name, start, end) are already in the dep array via the extracted variables.
   useEffect(() => {
     const el = audioRef.current;
     if (!selectedAudioUrl || !el) {
@@ -1863,7 +1866,15 @@ const SlideshowEditor = ({
       el.removeEventListener('error', onError);
       el.removeEventListener('ended', onEnded);
     };
-  }, [selectedAudioId, selectedAudioUrl, selectedAudioStart, selectedAudioEnd]);
+  }, [
+    selectedAudioId,
+    selectedAudioUrl,
+    selectedAudioStart,
+    selectedAudioEnd,
+    artistId,
+    libraryAudio,
+    setSelectedAudio,
+  ]);
 
   // Format time for display
   const formatTime = (seconds) => {
@@ -2029,7 +2040,7 @@ const SlideshowEditor = ({
       }
       setFilmstripDropIndex(null);
     },
-    [filmstripDropIndex, slides.length],
+    [filmstripDropIndex, slides.length, setSlides],
   );
 
   // Default text style (can be overridden by selected template)
@@ -2071,7 +2082,7 @@ const SlideshowEditor = ({
     );
 
     setEditingTextId(newOverlay.id);
-  }, [selectedSlideIndex, getDefaultTextStyle]);
+  }, [selectedSlideIndex, getDefaultTextStyle, setSlides]);
 
   // Update text overlay
   const updateTextOverlay = useCallback(
@@ -2089,7 +2100,7 @@ const SlideshowEditor = ({
         ),
       );
     },
-    [selectedSlideIndex],
+    [selectedSlideIndex, setSlides],
   );
 
   // Remove text overlay
@@ -2107,7 +2118,7 @@ const SlideshowEditor = ({
       );
       setEditingTextId(null);
     },
-    [selectedSlideIndex],
+    [selectedSlideIndex, setSlides],
   );
 
   // Handle click on text overlay to edit
@@ -2190,7 +2201,15 @@ const SlideshowEditor = ({
       }
       setShowLyricAnalyzer(false);
     },
-    [selectedSlideIndex],
+    [
+      selectedSlideIndex,
+      artistId,
+      onAddLyrics,
+      selectedAudio,
+      setSlides,
+      setSelectedAudio,
+      handleAddLyricsAndRefresh,
+    ],
   );
 
   // Handle audio file upload in slideshow editor - converts to MP3 if needed, then opens trimmer
@@ -2247,6 +2266,7 @@ const SlideshowEditor = ({
     onSave,
     activePipeline,
     nicheSlideCount,
+    toastSuccess,
   ]);
 
   // Save all slideshows and close
@@ -2276,7 +2296,15 @@ const SlideshowEditor = ({
       }
     }
     onClose?.();
-  }, [allSlideshows, aspectRatio, existingSlideshow, onSave, onClose, nicheSlideCount]);
+  }, [
+    allSlideshows,
+    aspectRatio,
+    existingSlideshow,
+    onSave,
+    onClose,
+    nicheSlideCount,
+    activePipeline,
+  ]);
 
   // Apply template text styles to ALL generated slideshows (retroactive)
   const handleApplyTemplateToAll = useCallback(() => {
@@ -2520,6 +2548,11 @@ const SlideshowEditor = ({
     libraryImages,
     getTextBanks,
     keepTemplateText,
+    activePipeline,
+    selectedSource,
+    toastSuccess,
+    toastError,
+    categoryBankImages,
   ]);
 
   // Public generate handler — checks for audio prompt on first generation
@@ -2535,7 +2568,7 @@ const SlideshowEditor = ({
       return;
     }
     executeGeneration();
-  }, [allSlideshows, executeGeneration]);
+  }, [allSlideshows, executeGeneration, toastError]);
 
   // Auto-generate on mount when coming from niche preview (Create N flow)
   // Stay on template tab so user sees their previewed content first
@@ -2618,6 +2651,8 @@ const SlideshowEditor = ({
     onSave,
     onSchedulePost,
     availableHandles.length,
+    toastError,
+    toastSuccess,
   ]);
 
   // Schedule the carousel post
@@ -2688,9 +2723,10 @@ const SlideshowEditor = ({
     scheduleTime,
     caption,
     hashtags,
-    platforms,
     onSchedulePost,
     onClose,
+    toastError,
+    toastSuccess,
   ]);
 
   // Mobile panel state

@@ -7,7 +7,7 @@
  *   storageUsedBytes   — running counter of bytes used
  */
 
-import { doc, getDoc, updateDoc, getDocs, collection, increment } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, increment, updateDoc } from 'firebase/firestore';
 import log from '../utils/logger';
 
 // 300 GB default quota for new users
@@ -90,7 +90,7 @@ export function formatStorageSize(bytes) {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const k = 1024;
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  const value = bytes / Math.pow(k, i);
+  const value = bytes / k ** i;
 
   // Show 1 decimal for GB+, 0 for smaller
   const decimals = i >= 3 ? 1 : i >= 2 ? 1 : 0;

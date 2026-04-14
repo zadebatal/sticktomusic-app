@@ -5,11 +5,12 @@
  * 4 states: scanning → ready → syncing → complete
  * Same scan/select/sync flow as DesktopOnboarding but in a modal (no welcome/folder-select state).
  */
-import React, { useState, useEffect, useCallback } from 'react';
+
+import { FeatherX } from '@subframe/core';
+import React, { useCallback, useEffect, useState } from 'react';
+import { formatBytes, scanForSync, syncArtistMedia } from '../services/syncService';
 import { Button } from '../ui/components/Button';
 import { IconButton } from '../ui/components/IconButton';
-import { FeatherX } from '@subframe/core';
-import { scanForSync, syncArtistMedia, formatBytes } from '../services/syncService';
 
 const STATES = {
   SCANNING: 'scanning',

@@ -4,49 +4,81 @@
  * Top: niche tabs + "+ New Niche"
  * Right: routes to SlideshowNicheContent or VideoNicheContent based on active niche
  */
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { motion } from 'framer-motion';
+
 import {
-  getLibrary,
-  getCollections,
-  getUserCollections,
-  getCreatedContent,
-  deleteCreatedSlideshowAsync,
-  softDeleteCreatedVideoAsync,
-  createNiche,
-  addToProjectPool,
+  FeatherArrowLeft,
+  FeatherCamera,
+  FeatherCheck,
+  FeatherFilm,
+  FeatherHash,
+  FeatherImage,
+  FeatherLayers,
+  FeatherMessageSquare,
+  FeatherMusic,
+  FeatherPlay,
+  FeatherPlus,
+  FeatherScissors,
+  FeatherSearch,
+  FeatherTrash2,
+  FeatherUploadCloud,
+  FeatherX,
+  FeatherZap,
+} from '@subframe/core';
+import { motion } from 'framer-motion';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { generateCaptions } from '../../services/captionGeneratorService';
+import { getMediaDuration, uploadFile, uploadFileWithQuota } from '../../services/firebaseStorage';
+import {
   addToCollection,
-  assignToBank,
-  migrateCollectionBanks,
   addToCollectionAsync,
   addToLibraryAsync,
-  saveCollections,
-  saveCollectionToFirestore,
+  addToProjectPool,
+  assignToBank,
+  assignToMediaBank,
+  createNiche,
   deleteCollectionAsync,
-  markCollectionPendingDeletion,
-  isCollectionPendingDeletion,
-  subscribeToCollections,
-  subscribeToLibrary,
-  subscribeToCreatedContent,
+  deleteCreatedSlideshowAsync,
   FORMAT_TEMPLATES,
-  MEDIA_TYPES,
-  updateProjectCaptionBank,
-  updateProjectHashtagBank,
-  updateNicheCaptionBank,
-  updateNicheHashtagBank,
-  updateCollectionPlatformHashtags,
-  updateCollectionPlatformExcludes,
   getCollectionCaptionBank,
   getCollectionHashtagBank,
-  getRecentCollectionSnapshots,
+  getCollections,
+  getCreatedContent,
+  getLibrary,
   getRecentCollectionRemovals,
-  trackCollectionWrite,
-  removeFromProjectPool,
-  removeFromLibraryAsync,
-  assignToMediaBank,
+  getRecentCollectionSnapshots,
+  getUserCollections,
+  isCollectionPendingDeletion,
+  MEDIA_TYPES,
+  markCollectionPendingDeletion,
+  migrateCollectionBanks,
   migrateToMediaBanks,
+  removeFromLibraryAsync,
+  removeFromProjectPool,
+  saveCollections,
+  saveCollectionToFirestore,
+  softDeleteCreatedVideoAsync,
+  subscribeToCollections,
+  subscribeToCreatedContent,
+  subscribeToLibrary,
+  trackCollectionWrite,
   updateCollectionAsync,
+  updateCollectionPlatformExcludes,
+  updateCollectionPlatformHashtags,
+  updateNicheCaptionBank,
+  updateNicheHashtagBank,
+  updateProjectCaptionBank,
+  updateProjectHashtagBank,
 } from '../../services/libraryService';
+import {
+  getLocalMediaUrl,
+  isElectronApp,
+  saveMediaLocally,
+} from '../../services/localMediaService';
+import {
+  createNicheFolder,
+  createProjectFolder,
+  getMediaPath,
+} from '../../services/localProjectService';
 import { indexMedia } from '../../services/mediaSearchService';
 import {
   migrateThumbnails,
@@ -54,52 +86,21 @@ import {
   THUMB_QUALITY,
   THUMB_VERSION,
 } from '../../services/thumbnailService';
-import { uploadFile, uploadFileWithQuota, getMediaDuration } from '../../services/firebaseStorage';
-import { convertImageIfNeeded } from '../../utils/imageConverter';
-import { convertAudioIfNeeded } from '../../utils/audioConverter';
-import { runPool } from '../../utils/uploadPool';
+import { Badge } from '../../ui/components/Badge';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
-import { Badge } from '../../ui/components/Badge';
-import {
-  FeatherPlus,
-  FeatherX,
-  FeatherUploadCloud,
-  FeatherSearch,
-  FeatherArrowLeft,
-  FeatherImage,
-  FeatherMusic,
-  FeatherPlay,
-  FeatherCheck,
-  FeatherFilm,
-  FeatherLayers,
-  FeatherCamera,
-  FeatherHash,
-  FeatherMessageSquare,
-  FeatherTrash2,
-  FeatherScissors,
-  FeatherZap,
-} from '@subframe/core';
+import { convertAudioIfNeeded } from '../../utils/audioConverter';
+import { convertImageIfNeeded } from '../../utils/imageConverter';
+import log from '../../utils/logger';
+import { runPool } from '../../utils/uploadPool';
 import { useToast } from '../ui';
+import AllMediaContent from './AllMediaContent';
+import ClipperNicheContent from './ClipperNicheContent';
+import DumpAndGenerateModal from './DumpAndGenerateModal';
+import FinishedMediaNicheContent from './FinishedMediaNicheContent';
 import SlideshowNicheContent from './SlideshowNicheContent';
 import VideoNicheContent from './VideoNicheContent';
-import FinishedMediaNicheContent from './FinishedMediaNicheContent';
-import ClipperNicheContent from './ClipperNicheContent';
-import AllMediaContent from './AllMediaContent';
 import WebImportModal from './WebImportModal';
-import { generateCaptions } from '../../services/captionGeneratorService';
-import DumpAndGenerateModal from './DumpAndGenerateModal';
-import {
-  createProjectFolder,
-  createNicheFolder,
-  getMediaPath,
-} from '../../services/localProjectService';
-import {
-  isElectronApp,
-  saveMediaLocally,
-  getLocalMediaUrl,
-} from '../../services/localMediaService';
-import log from '../../utils/logger';
 
 const FORMAT_TO_EDITOR = {
   montage: 'montage',
@@ -1334,7 +1335,7 @@ const ProjectWorkspace = ({
         toastError('Failed to create niche');
       }
     },
-    [artistId, projectId, db, toastSuccess, toastError],
+    [artistId, projectId, db, toastSuccess, toastError, navigateTo],
   );
 
   // Delete niche with confirmation
@@ -1374,7 +1375,7 @@ const ProjectWorkspace = ({
         toastError('Failed to delete niche');
       }
     },
-    [collections, db, artistId, activeNicheId, niches, toastSuccess, toastError],
+    [collections, db, artistId, activeNicheId, niches, toastSuccess, toastError, setActiveNicheId],
   );
 
   // Import from library
@@ -2427,9 +2428,10 @@ const ImportFromLibraryModal = ({
 }) => {
   const [activeSourceIdx, setActiveSourceIdx] = useState(0);
   const [nicheFilter, setNicheFilter] = useState(null);
-  const resolvedSources = sources || [
-    { label: 'Library', items: defaultItems, onImport: defaultOnImport },
-  ];
+  const resolvedSources = useMemo(
+    () => sources || [{ label: 'Library', items: defaultItems, onImport: defaultOnImport }],
+    [sources, defaultItems, defaultOnImport],
+  );
   const activeSource = resolvedSources[activeSourceIdx] || resolvedSources[0];
 
   // All niches except the active one — always show all so user can filter across tabs
@@ -2890,8 +2892,8 @@ const ImportFromLibraryModal = ({
 
 import {
   ALL_PLATFORMS,
-  PLATFORM_LABELS as PLATFORM_NAMES,
   PLATFORM_COLORS as PLATFORM_COLORS_MAP,
+  PLATFORM_LABELS as PLATFORM_NAMES,
 } from '../../config/platforms';
 
 // Helper: extract text from caption (supports string | { text, generatedBy, generatedAt })
@@ -2991,8 +2993,14 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
   const target = isProjectScope ? project : activeNiche;
 
   // Read banks from target
-  const rawCB = target ? getCollectionCaptionBank(target) : { always: [], pool: [] };
-  const rawHB = target ? getCollectionHashtagBank(target) : { always: [], pool: [] };
+  const rawCB = useMemo(
+    () => (target ? getCollectionCaptionBank(target) : { always: [], pool: [] }),
+    [target],
+  );
+  const rawHB = useMemo(
+    () => (target ? getCollectionHashtagBank(target) : { always: [], pool: [] }),
+    [target],
+  );
 
   const captions = useMemo(() => {
     if (Array.isArray(rawCB)) return { always: rawCB, pool: [] };
@@ -3017,9 +3025,9 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
     return target.hashtagBank.platformExclude || {};
   }, [target]);
 
-  const allCaptionEntries = [...captions.always, ...captions.pool];
-  const allCaptions = allCaptionEntries.map(getCaptionText);
-  const allHashtags = [...hashtags.always, ...hashtags.pool];
+  const allCaptionEntries = useMemo(() => [...captions.always, ...captions.pool], [captions]);
+  const allCaptions = useMemo(() => allCaptionEntries.map(getCaptionText), [allCaptionEntries]);
+  const allHashtags = useMemo(() => [...hashtags.always, ...hashtags.pool], [hashtags]);
 
   // Connected platforms from Late.co accounts
   const connectedPlatforms = useMemo(() => {
@@ -3070,12 +3078,12 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
       .map((l) => l.trim())
       .filter(Boolean);
     const isNumberedList =
-      lines.length > 1 && lines.every((l) => /^\d+[\.\)]\s/.test(l) || /^[-•]\s/.test(l));
+      lines.length > 1 && lines.every((l) => /^\d+[.)]\s/.test(l) || /^[-•]\s/.test(l));
     const newItems = isNumberedList
       ? lines
           .map((l) =>
             l
-              .replace(/^\d+[\.\)]\s*/, '')
+              .replace(/^\d+[.)]\s*/, '')
               .replace(/^[-•]\s*/, '')
               .trim(),
           )

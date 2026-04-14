@@ -1,19 +1,19 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import log from '../../utils/logger';
-import useIsMobile from '../../hooks/useIsMobile';
+import {
+  FeatherMusic,
+  FeatherPlay,
+  FeatherPlus,
+  FeatherSave,
+  FeatherScissors,
+  FeatherTrash2,
+  FeatherX,
+} from '@subframe/core';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import useIsMobile from '../../hooks/useIsMobile';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
-import {
-  FeatherX,
-  FeatherPlus,
-  FeatherTrash2,
-  FeatherScissors,
-  FeatherSave,
-  FeatherPlay,
-  FeatherMusic,
-} from '@subframe/core';
+import log from '../../utils/logger';
 
 /**
  * WordTimeline - Flowstage-inspired word timing editor
@@ -128,18 +128,20 @@ const WordTimeline = ({
 
     initScrubAudio();
 
+    const scrubInterval = scrubIntervalRef.current;
+    const scrubSource = scrubSourceRef.current;
     return () => {
       // Cleanup on unmount
-      if (scrubSourceRef.current) {
+      if (scrubSource) {
         try {
-          scrubSourceRef.current.stop();
+          scrubSource.stop();
         } catch {}
       }
-      if (scrubIntervalRef.current) {
-        clearInterval(scrubIntervalRef.current);
+      if (scrubInterval) {
+        clearInterval(scrubInterval);
       }
     };
-  }, [audioRef?.current?.src]);
+  }, [audioRef?.current?.src]); // audioRef.current intentional — triggers on audio source change
 
   // Play a short audio snippet at the given time (for scrubbing)
   const playScrubSnippet = useCallback(
@@ -247,7 +249,7 @@ const WordTimeline = ({
     gradient.addColorStop(1, 'rgba(139, 92, 246, 0.1)');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
-  }, [waveformData, zoom, duration]);
+  }, [waveformData, zoom, duration, getTimelineWidth]);
 
   // Save current state to undo history
   const saveToHistory = useCallback(() => {
@@ -374,7 +376,7 @@ const WordTimeline = ({
     [zoom],
   );
 
-  const getTimelineWidth = () => timeToPixels(duration);
+  const getTimelineWidth = useCallback(() => timeToPixels(duration), [timeToPixels, duration]);
 
   // Auto-scroll timeline to follow playhead during playback
   useEffect(() => {

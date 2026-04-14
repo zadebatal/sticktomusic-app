@@ -1,27 +1,26 @@
+import * as SubframeCore from '@subframe/core';
+import {
+  FeatherBarChart,
+  FeatherCalendar,
+  FeatherChevronDown,
+  FeatherHome,
+  FeatherLayout,
+  FeatherLogOut,
+  FeatherMoreVertical,
+  FeatherPlus,
+  FeatherSettings,
+  FeatherUser,
+  FeatherUsers,
+  FeatherVideo,
+} from '@subframe/core';
+import { AnimatePresence, motion } from 'framer-motion';
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../contexts/ThemeContext';
-import UpdateBanner from './UpdateBanner';
-
 import useIsMobile from '../hooks/useIsMobile';
 import { Avatar } from '../ui/components/Avatar';
 import { Badge } from '../ui/components/Badge';
 import { DropdownMenu } from '../ui/components/DropdownMenu';
-import {
-  FeatherLayout,
-  FeatherVideo,
-  FeatherCalendar,
-  FeatherBarChart,
-  FeatherUsers,
-  FeatherSettings,
-  FeatherHome,
-  FeatherChevronDown,
-  FeatherMoreVertical,
-  FeatherUser,
-  FeatherLogOut,
-  FeatherPlus,
-} from '@subframe/core';
-import * as SubframeCore from '@subframe/core';
+import UpdateBanner from './UpdateBanner';
 
 /**
  * AppShell — Post-login wrapper with left sidebar (desktop)

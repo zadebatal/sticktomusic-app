@@ -1,24 +1,24 @@
-import React, { useState, useMemo } from 'react';
-import { Button } from '../../ui/components/Button';
-import { IconButton } from '../../ui/components/IconButton';
-import { Badge } from '../../ui/components/Badge';
-import { TextField } from '../../ui/components/TextField';
-import { DropdownMenu } from '../../ui/components/DropdownMenu';
-import {
-  FeatherPlus,
-  FeatherEdit,
-  FeatherMoreVertical,
-  FeatherTrash,
-  FeatherSettings,
-  FeatherSearch,
-  FeatherFilter,
-  FeatherCheck,
-  FeatherX,
-  FeatherUsers,
-  FeatherLoader,
-} from '@subframe/core';
-import { Avatar } from '../../ui/components/Avatar';
 import * as SubframeCore from '@subframe/core';
+import {
+  FeatherCheck,
+  FeatherEdit,
+  FeatherFilter,
+  FeatherLoader,
+  FeatherMoreVertical,
+  FeatherPlus,
+  FeatherSearch,
+  FeatherSettings,
+  FeatherTrash,
+  FeatherUsers,
+  FeatherX,
+} from '@subframe/core';
+import React, { useMemo, useState } from 'react';
+import { Avatar } from '../../ui/components/Avatar';
+import { Badge } from '../../ui/components/Badge';
+import { Button } from '../../ui/components/Button';
+import { DropdownMenu } from '../../ui/components/DropdownMenu';
+import { IconButton } from '../../ui/components/IconButton';
+import { TextField } from '../../ui/components/TextField';
 
 /**
  * ArtistsManagement — Dedicated artists grid view for conductor/operator roles.

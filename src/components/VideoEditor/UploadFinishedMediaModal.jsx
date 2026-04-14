@@ -1,11 +1,12 @@
 /**
  * UploadFinishedMediaModal — Upload finished videos/images directly to the scheduling queue
  */
-import React, { useState, useRef } from 'react';
+
+import { FeatherFilm, FeatherTrash2, FeatherUploadCloud, FeatherX } from '@subframe/core';
+import React, { useRef, useState } from 'react';
+import { Badge } from '../../ui/components/Badge';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
-import { Badge } from '../../ui/components/Badge';
-import { FeatherX, FeatherUploadCloud, FeatherTrash2, FeatherFilm } from '@subframe/core';
 import useFileUploader from './shared/useFileUploader';
 
 const UploadFinishedMediaModal = ({ db, artistId, onClose, onComplete }) => {

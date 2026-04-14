@@ -23,9 +23,28 @@ if (!getApps().length) {
 
 const CONDUCTOR_EMAILS = (process.env.REACT_APP_CONDUCTOR_EMAILS || '').split(',').map(e => e.trim().toLowerCase());
 
+const ALLOWED_ORIGINS = [
+  'https://sticktomusic.com',
+  'https://www.sticktomusic.com',
+  'https://sticktomusic-app.vercel.app'
+];
+
+const isVercelPreview = (origin) => {
+  if (!origin) return false;
+  return /^https:\/\/sticktomusic-app(-[a-z0-9]+)*\.vercel\.app$/i.test(origin);
+};
+
+const isLocalhostOrigin = (origin) => {
+  if (!origin) return false;
+  return origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
+};
+
 export default async function handler(req, res) {
   // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  if (ALLOWED_ORIGINS.includes(origin) || isLocalhostOrigin(origin) || isVercelPreview(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();

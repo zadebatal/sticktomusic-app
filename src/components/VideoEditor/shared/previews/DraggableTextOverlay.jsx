@@ -3,7 +3,7 @@
  * Position and width are expressed as percentages of the preview container.
  * Used across all editors (Slideshow, MultiClip, Solo, PhotoMontage, VideoEditorModal).
  */
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 const DraggableTextOverlay = ({
   text = '',

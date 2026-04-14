@@ -1,66 +1,67 @@
 /**
  * ProjectLanding — Grid of project cards with stats, "Continue" recent drafts, "+ New Project"
  */
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { motion } from 'framer-motion';
+
+import * as SubframeCore from '@subframe/core';
 import {
-  getCollections,
-  getLibrary,
-  getCreatedContent,
-  deleteCreatedSlideshowAsync,
-  softDeleteCreatedVideoAsync,
-  getProjects,
-  getProjectStats,
-  getProjectNiches,
-  createProject,
-  getUserCollections,
-  saveCollections,
-  saveCollectionToFirestore,
-  deleteCollectionAsync,
-  deleteCollectionFromFirestore,
-  markCollectionPendingDeletion,
-  clearPendingDeletion,
-  getPendingDeletionIds,
-  subscribeToCollections,
-  subscribeToLibrary,
-  subscribeToCreatedContent,
-  PIPELINE_COLORS,
-} from '../../services/libraryService';
-import {
-  subscribeToScheduledPosts,
-  createScheduledPost,
-  PLATFORM_LABELS,
-  PLATFORM_COLORS,
-} from '../../services/scheduledPostsService';
-import { pollOverduePosts } from '../../services/postStatusPolling';
-import { Button } from '../../ui/components/Button';
-import { IconButton } from '../../ui/components/IconButton';
-import { Badge } from '../../ui/components/Badge';
-import { TextField } from '../../ui/components/TextField';
-import {
-  FeatherPlus,
   FeatherArrowRight,
+  FeatherCheck,
+  FeatherChevronDown,
+  FeatherClock,
+  FeatherEdit2,
   FeatherImage,
   FeatherLayers,
-  FeatherX,
-  FeatherChevronDown,
-  FeatherZap,
   FeatherMoreVertical,
-  FeatherEdit2,
-  FeatherTrash2,
-  FeatherSend,
-  FeatherClock,
   FeatherMusic,
+  FeatherPlus,
+  FeatherSend,
+  FeatherTrash2,
   FeatherUploadCloud,
-  FeatherCheck,
+  FeatherX,
+  FeatherZap,
 } from '@subframe/core';
-import UploadFinishedMediaModal from './UploadFinishedMediaModal';
-import * as SubframeCore from '@subframe/core';
-import { DropdownMenu } from '../../ui/components/DropdownMenu';
-import { useToast, ConfirmDialog } from '../ui';
+import { deleteDoc, doc } from 'firebase/firestore';
+import { motion } from 'framer-motion';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useIsMobile from '../../hooks/useIsMobile';
+import {
+  clearPendingDeletion,
+  createProject,
+  deleteCollectionAsync,
+  deleteCollectionFromFirestore,
+  deleteCreatedSlideshowAsync,
+  getCollections,
+  getCreatedContent,
+  getLibrary,
+  getPendingDeletionIds,
+  getProjectNiches,
+  getProjectStats,
+  getProjects,
+  getUserCollections,
+  markCollectionPendingDeletion,
+  PIPELINE_COLORS,
+  saveCollections,
+  saveCollectionToFirestore,
+  softDeleteCreatedVideoAsync,
+  subscribeToCollections,
+  subscribeToCreatedContent,
+  subscribeToLibrary,
+} from '../../services/libraryService';
+import { pollOverduePosts } from '../../services/postStatusPolling';
+import {
+  createScheduledPost,
+  PLATFORM_COLORS,
+  PLATFORM_LABELS,
+  subscribeToScheduledPosts,
+} from '../../services/scheduledPostsService';
+import { Badge } from '../../ui/components/Badge';
+import { Button } from '../../ui/components/Button';
+import { DropdownMenu } from '../../ui/components/DropdownMenu';
+import { IconButton } from '../../ui/components/IconButton';
+import { TextField } from '../../ui/components/TextField';
 import log from '../../utils/logger';
-import { doc, deleteDoc } from 'firebase/firestore';
+import { ConfirmDialog, useToast } from '../ui';
+import UploadFinishedMediaModal from './UploadFinishedMediaModal';
 
 /** Format a scheduledTime ISO string as relative/short time */
 function formatRelativeTime(isoString) {
@@ -320,7 +321,7 @@ const ProjectLanding = ({
       };
     });
     return stats;
-  }, [projects, collections, createdContent]);
+  }, [projects, collections, createdContent, libraryIds]);
 
   // Total drafts
   const totalDrafts = useMemo(() => {
@@ -355,7 +356,7 @@ const ProjectLanding = ({
       sessionStorage.setItem(skipKey, '1');
       onOpenProject(projects[0].id);
     }
-  }, [projects.length, artistId, onOpenProject]);
+  }, [projects, artistId, onOpenProject]);
 
   // Create project
   const handleCreateProject = useCallback(async () => {

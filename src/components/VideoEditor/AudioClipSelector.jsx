@@ -1,13 +1,13 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { trimAudioToFile } from '../../utils/audioTrimmer';
-import log from '../../utils/logger';
+import { FeatherCheck, FeatherSave, FeatherX } from '@subframe/core';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 import useIsMobile from '../../hooks/useIsMobile';
 import usePointerDrag from '../../hooks/usePointerDrag';
-import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { Loader } from '../../ui/components/Loader';
-import { FeatherX, FeatherCheck, FeatherSave } from '@subframe/core';
+import { trimAudioToFile } from '../../utils/audioTrimmer';
+import log from '../../utils/logger';
 
 /**
  * AudioClipSelector - Professional dual-playhead audio region selector
@@ -208,7 +208,7 @@ const AudioClipSelector = ({
     const rawInterval = visibleDuration / 10;
     // Snap to nice intervals: 1, 2, 5, 10, 15, 30, 60, 120...
     const niceIntervals = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
-    let interval = niceIntervals.find((n) => n >= rawInterval) || rawInterval;
+    const interval = niceIntervals.find((n) => n >= rawInterval) || rawInterval;
     const markerStart = Math.ceil(visibleStart / interval) * interval;
     for (let t = markerStart; t <= visibleEnd; t += interval) {
       const x = timeToX(t);
@@ -436,20 +436,22 @@ const AudioClipSelector = ({
           e.stopImmediatePropagation();
           togglePlayback();
           break;
-        case 'arrowleft':
+        case 'arrowleft': {
           e.preventDefault();
           e.stopImmediatePropagation();
           const newTimeL = Math.max(0, playheadTime - (e.shiftKey ? 1 : 0.1));
           setPlayheadTime(newTimeL);
           if (audioRef.current) audioRef.current.currentTime = newTimeL;
           break;
-        case 'arrowright':
+        }
+        case 'arrowright': {
           e.preventDefault();
           e.stopImmediatePropagation();
           const newTimeR = Math.min(duration, playheadTime + (e.shiftKey ? 1 : 0.1));
           setPlayheadTime(newTimeR);
           if (audioRef.current) audioRef.current.currentTime = newTimeR;
           break;
+        }
         case '+':
         case '=':
           e.preventDefault();
@@ -466,7 +468,7 @@ const AudioClipSelector = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [playheadTime, inPoint, outPoint, duration, editingTime]);
+  }, [playheadTime, inPoint, outPoint, duration, editingTime, togglePlayback]);
 
   // Auto-scroll during playback when zoomed in
   useEffect(() => {

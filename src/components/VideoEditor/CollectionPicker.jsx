@@ -3,14 +3,14 @@
  * Allows selecting which collection to pull media from
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 import {
-  getCollectionsAsync,
-  getCollectionMedia,
   COLLECTION_TYPES,
+  getCollectionMedia,
+  getCollectionsAsync,
   MEDIA_TYPES,
 } from '../../services/libraryService';
-import { useTheme } from '../../contexts/ThemeContext';
 import log from '../../utils/logger';
 
 const CollectionPicker = ({

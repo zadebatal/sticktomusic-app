@@ -1,17 +1,17 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { renderPreview } from '../../services/videoExportService';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 import { useBeatDetection } from '../../hooks/useBeatDetection';
+import useIsMobile from '../../hooks/useIsMobile';
+import { renderPreview } from '../../services/videoExportService';
+import { Button } from '../../ui/components/Button';
 import {
-  isValidBankName,
   generateBatchPostContent,
   getBankNames,
+  isValidBankName,
 } from '../../utils/captionGenerator';
+import log from '../../utils/logger';
 import { VIDEO_STATUS } from '../../utils/status';
 import PreviewPlayer from './PreviewPlayer';
-import useIsMobile from '../../hooks/useIsMobile';
-import { useTheme } from '../../contexts/ThemeContext';
-import { Button } from '../../ui/components/Button';
-import log from '../../utils/logger';
 
 /**
  * BatchPipeline - Streamlined workflow for batch video creation and scheduling
@@ -221,8 +221,8 @@ const BatchPipeline = ({
   const accountMapping = accountHandle ? lateAccountIds[accountHandle] : null;
 
   // Available clips and audio
-  const availableClips = category?.videos || [];
-  const availableAudio = category?.audio || [];
+  const availableClips = useMemo(() => category?.videos || [], [category?.videos]);
+  const availableAudio = useMemo(() => category?.audio || [], [category?.audio]);
 
   // M-16: Debug render logging removed (was firing every render, polluting console)
 
@@ -298,7 +298,7 @@ const BatchPipeline = ({
   const generateClipSequence = useCallback(
     (audioDuration, clipPool, strategy) => {
       const clips = [];
-      let currentTime = 0;
+      const currentTime = 0;
 
       if (strategy === 'beat' && beats.length > 0) {
         const audioStart = selectedAudio?.startTime || 0;

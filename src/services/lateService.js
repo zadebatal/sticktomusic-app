@@ -11,9 +11,9 @@
  * @see docs/DOMAIN_INVARIANTS.md Section C
  */
 
-import { isUserOperator } from '../utils/roles';
 import { getAuth } from 'firebase/auth';
 import log from '../utils/logger';
+import { isUserOperator } from '../utils/roles';
 
 // Use our authenticated proxy instead of direct Late API
 const LATE_PROXY = '/api/late';

@@ -5,11 +5,12 @@
  * Clicking any lyric triggers onApplyLyric to load it into WordTimeline.
  * "+ Add Lyrics" triggers the transcription flow.
  */
+
+import { FeatherMusic, FeatherPlus, FeatherTrash2 } from '@subframe/core';
 import React, { useState } from 'react';
-import { IconButton } from '../../../ui/components/IconButton';
 import { Badge } from '../../../ui/components/Badge';
 import { Button } from '../../../ui/components/Button';
-import { FeatherPlus, FeatherTrash2, FeatherMusic } from '@subframe/core';
+import { IconButton } from '../../../ui/components/IconButton';
 
 const LyricBankSection = ({
   lyrics = [],

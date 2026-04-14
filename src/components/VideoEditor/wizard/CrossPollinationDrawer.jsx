@@ -3,31 +3,32 @@
  * Tree: Project → Niche → Bank (images + text).
  * User selects items and imports them to a target bank in the current wizard project.
  */
-import React, { useState, useMemo, useCallback } from 'react';
+
 import {
-  getProjectBankTree,
-  assignToBank,
-  addToTextBank,
-  addToProjectPool,
+  FeatherCheck,
+  FeatherChevronDown,
+  FeatherChevronRight,
+  FeatherDownloadCloud,
+  FeatherHash,
+  FeatherImage,
+  FeatherMessageSquare,
+  FeatherType,
+  FeatherX,
+} from '@subframe/core';
+import React, { useCallback, useMemo, useState } from 'react';
+import {
   addToCollectionAsync,
+  addToProjectPool,
+  addToTextBank,
+  assignToBank,
   getCollections,
+  getProjectBankTree,
   updateNicheCaptionBank,
   updateNicheHashtagBank,
 } from '../../../services/libraryService';
+import { Badge } from '../../../ui/components/Badge';
 import { Button } from '../../../ui/components/Button';
 import { IconButton } from '../../../ui/components/IconButton';
-import { Badge } from '../../../ui/components/Badge';
-import {
-  FeatherX,
-  FeatherChevronDown,
-  FeatherChevronRight,
-  FeatherCheck,
-  FeatherImage,
-  FeatherType,
-  FeatherHash,
-  FeatherMessageSquare,
-  FeatherDownloadCloud,
-} from '@subframe/core';
 import { useToast } from '../../ui';
 
 const CrossPollinationDrawer = ({

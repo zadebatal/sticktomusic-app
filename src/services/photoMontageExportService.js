@@ -4,8 +4,8 @@
  * Uses Canvas + MediaRecorder for capture, FFmpeg.wasm for MP4 conversion.
  */
 
-import log from '../utils/logger';
 import { KB_EFFECTS } from '../components/VideoEditor/shared/kenBurnsPresets';
+import log from '../utils/logger';
 
 let ffmpegInstance = null;
 let ffmpegLoadPromise = null;
@@ -379,7 +379,7 @@ export const renderPhotoMontage = async (
     const inputExt = isNativeMP4 ? 'mp4' : 'webm';
     await ffmpeg.writeFile(`input.${inputExt}`, await fetchFile(rawBlob));
 
-    let ffmpegArgs = ['-i', `input.${inputExt}`];
+    const ffmpegArgs = ['-i', `input.${inputExt}`];
 
     // Add audio if present
     const hasAudio = !!audio?.url;

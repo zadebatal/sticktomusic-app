@@ -10,9 +10,9 @@
  * - Checks posts that are SCHEDULED but past their scheduledTime
  */
 
-import { updateScheduledPost } from './scheduledPostsService';
 import { getAuth } from 'firebase/auth';
 import log from '../utils/logger';
+import { updateScheduledPost } from './scheduledPostsService';
 
 /**
  * Check a single post's status with Late.co API

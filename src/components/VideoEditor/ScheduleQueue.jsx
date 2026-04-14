@@ -1,17 +1,17 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { FeatherDatabase, FeatherShuffle, FeatherX } from '@subframe/core';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
+import { getCollectionsAsync } from '../../services/libraryService';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
 import {
   generateFromCollectionBanks,
   generatePostContent,
   getBankNames,
 } from '../../utils/captionGenerator';
-import { getCollectionsAsync } from '../../services/libraryService';
-import CollectionBankEditor from './CollectionBankEditor';
-import { useToast, useFocusTrap } from '../ui';
-import { useTheme } from '../../contexts/ThemeContext';
 import log from '../../utils/logger';
-import { Button } from '../../ui/components/Button';
-import { IconButton } from '../../ui/components/IconButton';
-import { FeatherX, FeatherShuffle, FeatherDatabase } from '@subframe/core';
+import { useFocusTrap, useToast } from '../ui';
+import CollectionBankEditor from './CollectionBankEditor';
 
 /**
  * ScheduleQueue - Unified scheduling module for videos and slideshows
@@ -475,6 +475,7 @@ const ScheduleQueue = ({
     onSchedulePost,
     onClose,
     onRenderVideo,
+    toastSuccess,
   ]);
 
   return (

@@ -1,19 +1,19 @@
-import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useToast } from '../ui';
-import * as pageLinkUtils from '../../utils/pageLinkGroups';
-import { getLateProfiles, createLateProfile, getConnectUrl } from '../../services/lateService';
 import useIsMobile from '../../hooks/useIsMobile';
-import { Button } from '../../ui/components/Button';
+import { createLateProfile, getConnectUrl, getLateProfiles } from '../../services/lateService';
 import { Badge } from '../../ui/components/Badge';
+import { Button } from '../../ui/components/Button';
+import log from '../../utils/logger';
+import * as pageLinkUtils from '../../utils/pageLinkGroups';
 
 import {
-  PLATFORM_META,
   ALL_PLATFORMS,
-  getProfileUrl,
   formatFollowers,
+  getProfileUrl,
+  PLATFORM_META,
 } from '../../utils/platformUtils';
-import log from '../../utils/logger';
+import { useToast } from '../ui';
 
 /**
  * PagesTab — Artist-centric social media account management.
@@ -427,12 +427,15 @@ const PagesTab = ({
 
   // Link groups from shared utility
   const [linkGroups, setLinkGroups] = useState(() => pageLinkUtils.getLinkGroups());
-  const getLinkGroupId = (artistId, normHandle) => {
-    for (const [groupId, members] of Object.entries(linkGroups)) {
-      if (members.some((m) => m.artistId === artistId && m.handle === normHandle)) return groupId;
-    }
-    return null;
-  };
+  const getLinkGroupId = useCallback(
+    (artistId, normHandle) => {
+      for (const [groupId, members] of Object.entries(linkGroups)) {
+        if (members.some((m) => m.artistId === artistId && m.handle === normHandle)) return groupId;
+      }
+      return null;
+    },
+    [linkGroups],
+  );
   const handleLinkHandles = (artistId, handle1, handle2) => {
     const gid1 = getLinkGroupId(artistId, handle1);
     const gid2 = getLinkGroupId(artistId, handle2);
@@ -555,7 +558,7 @@ const PagesTab = ({
       });
     });
     return count;
-  }, [mergedPagesByArtist, linkGroups]);
+  }, [mergedPagesByArtist, getLinkGroupId]);
 
   const toggleArtist = (artistId) => {
     setExpandedArtists((prev) => ({ ...prev, [artistId]: !prev[artistId] }));
@@ -566,49 +569,52 @@ const PagesTab = ({
   };
 
   // Late OAuth connect flow: get or create profile, then redirect to Late OAuth
-  const handleConnectPlatform = useCallback(async (artistId, platform) => {
-    setConnectingPlatform({ artistId, platform });
-    try {
-      // Get existing profiles for this artist
-      let profiles = [];
+  const handleConnectPlatform = useCallback(
+    async (artistId, platform) => {
+      setConnectingPlatform({ artistId, platform });
       try {
-        const result = await getLateProfiles(artistId);
-        profiles = result.profiles || [];
-      } catch {
-        // No profiles yet
-      }
+        // Get existing profiles for this artist
+        let profiles = [];
+        try {
+          const result = await getLateProfiles(artistId);
+          profiles = result.profiles || [];
+        } catch {
+          // No profiles yet
+        }
 
-      // Use first profile or create one
-      let profileId;
-      if (profiles.length > 0) {
-        profileId = profiles[0]._id;
-      } else {
-        const created = await createLateProfile(artistId, 'Default');
-        profileId = created.profile?._id;
-      }
+        // Use first profile or create one
+        let profileId;
+        if (profiles.length > 0) {
+          profileId = profiles[0]._id;
+        } else {
+          const created = await createLateProfile(artistId, 'Default');
+          profileId = created.profile?._id;
+        }
 
-      if (!profileId) {
-        throw new Error('Could not create or find a Late profile');
-      }
+        if (!profileId) {
+          throw new Error('Could not create or find a Late profile');
+        }
 
-      // Get the OAuth connect URL
-      const redirectUrl = window.location.origin + '/operator/pages';
-      const { authUrl } = await getConnectUrl(artistId, platform, profileId, redirectUrl);
+        // Get the OAuth connect URL
+        const redirectUrl = window.location.origin + '/operator/pages';
+        const { authUrl } = await getConnectUrl(artistId, platform, profileId, redirectUrl);
 
-      if (authUrl) {
-        // Open Late OAuth in new tab — set pending flag for auto-refresh on return
-        oauthPendingRef.current = true;
-        window.open(authUrl, '_blank', 'noopener,noreferrer');
-      } else {
-        throw new Error('No auth URL returned from Late');
+        if (authUrl) {
+          // Open Late OAuth in new tab — set pending flag for auto-refresh on return
+          oauthPendingRef.current = true;
+          window.open(authUrl, '_blank', 'noopener,noreferrer');
+        } else {
+          throw new Error('No auth URL returned from Late');
+        }
+      } catch (error) {
+        log.error('Failed to start connect flow:', error);
+        toastError(`Failed to connect ${platform}: ${error.message}`);
+      } finally {
+        setConnectingPlatform(null);
       }
-    } catch (error) {
-      log.error('Failed to start connect flow:', error);
-      toastError(`Failed to connect ${platform}: ${error.message}`);
-    } finally {
-      setConnectingPlatform(null);
-    }
-  }, []);
+    },
+    [toastError],
+  );
 
   // Auto-refresh Late accounts when returning from OAuth tab
   useEffect(() => {

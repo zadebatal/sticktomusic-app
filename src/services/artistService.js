@@ -9,17 +9,17 @@
  */
 
 import {
-  collection,
-  doc,
-  getDocs,
-  getDoc,
   addDoc,
-  updateDoc,
+  collection,
   deleteDoc,
-  query,
-  where,
-  orderBy,
+  doc,
+  getDoc,
+  getDocs,
   onSnapshot,
+  orderBy,
+  query,
+  updateDoc,
+  where,
 } from 'firebase/firestore';
 import log from '../utils/logger';
 

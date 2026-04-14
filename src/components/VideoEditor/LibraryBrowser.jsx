@@ -3,70 +3,70 @@
  * Replaces the old bank system with unified media management
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { convertImageIfNeeded, isHeicFile, isTiffFile } from '../../utils/imageConverter';
-import { convertAudioIfNeeded, isAudioFile } from '../../utils/audioConverter';
-import { runPool } from '../../utils/uploadPool';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
+import useIsMobile from '../../hooks/useIsMobile';
 import {
-  getLibrary,
-  saveLibrary,
-  getCollections,
-  getUserCollections,
-  getCollectionMedia,
-  toggleFavorite,
-  createNewCollection,
-  removeFromBank,
-  addToTextBank,
-  removeFromTextBank,
-  updateTextBank,
-  addToVideoTextBank,
-  removeFromVideoTextBank,
-  updateVideoTextBank,
-  saveTextTemplates,
-  MEDIA_TYPES,
-  COLLECTION_TYPES,
-  addBankToCollection,
-  removeBankFromCollection,
-  getBankColor,
-  getBankLabel,
-  migrateCollectionBanks,
-  MAX_BANKS,
-  // Firestore async functions
-  subscribeToLibrary,
-  subscribeToCollections,
-  saveCollectionToFirestore,
-  addToLibraryAsync,
-  removeFromLibraryAsync,
-  addToCollectionAsync,
-  removeFromCollectionAsync,
-  assignToBankAsync,
-  updateCollectionAsync,
-  deleteCollectionAsync,
-} from '../../services/libraryService';
-import { migrateThumbnails } from '../../services/thumbnailService';
+  detectMediaType,
+  authenticate as dropboxAuth,
+  downloadFile as dropboxDownloadFile,
+  listFiles as dropboxListFiles,
+  isAuthenticated as isDropboxAuth,
+} from '../../services/dropboxService';
 import { uploadFile } from '../../services/firebaseStorage';
 import {
-  initGoogleDrive,
-  authenticate as driveAuth,
-  isAuthenticated as isDriveAuth,
-  listFiles as driveListFiles,
-  downloadFile as driveDownloadFile,
-  uploadFile as driveUploadFile,
   DRIVE_MIME_TYPES,
+  authenticate as driveAuth,
+  downloadFile as driveDownloadFile,
+  listFiles as driveListFiles,
+  uploadFile as driveUploadFile,
+  initGoogleDrive,
+  isAuthenticated as isDriveAuth,
 } from '../../services/googleDriveService';
 import {
-  authenticate as dropboxAuth,
-  isAuthenticated as isDropboxAuth,
-  listFiles as dropboxListFiles,
-  downloadFile as dropboxDownloadFile,
-  detectMediaType,
-} from '../../services/dropboxService';
-import { useToast } from '../ui';
-import useIsMobile from '../../hooks/useIsMobile';
-import { useTheme } from '../../contexts/ThemeContext';
-import log from '../../utils/logger';
-import TextBankPanel from './TextBankPanel';
+  addBankToCollection,
+  addToCollectionAsync,
+  addToLibraryAsync,
+  addToTextBank,
+  addToVideoTextBank,
+  assignToBankAsync,
+  COLLECTION_TYPES,
+  createNewCollection,
+  deleteCollectionAsync,
+  getBankColor,
+  getBankLabel,
+  getCollectionMedia,
+  getCollections,
+  getLibrary,
+  getUserCollections,
+  MAX_BANKS,
+  MEDIA_TYPES,
+  migrateCollectionBanks,
+  removeBankFromCollection,
+  removeFromBank,
+  removeFromCollectionAsync,
+  removeFromLibraryAsync,
+  removeFromTextBank,
+  removeFromVideoTextBank,
+  saveCollectionToFirestore,
+  saveLibrary,
+  saveTextTemplates,
+  subscribeToCollections,
+  // Firestore async functions
+  subscribeToLibrary,
+  toggleFavorite,
+  updateCollectionAsync,
+  updateTextBank,
+  updateVideoTextBank,
+} from '../../services/libraryService';
+import { migrateThumbnails } from '../../services/thumbnailService';
 import { Button } from '../../ui/components/Button';
+import { convertAudioIfNeeded, isAudioFile } from '../../utils/audioConverter';
+import { convertImageIfNeeded, isHeicFile, isTiffFile } from '../../utils/imageConverter';
+import log from '../../utils/logger';
+import { runPool } from '../../utils/uploadPool';
+import { useToast } from '../ui';
+import TextBankPanel from './TextBankPanel';
 
 const LibraryBrowser = ({
   db = null, // Firestore instance for cross-device sync
@@ -222,7 +222,9 @@ const LibraryBrowser = ({
           setLibrary(merged);
           try {
             saveLibrary(artistId, merged);
-          } catch (e) {}
+          } catch (e) {
+            console.warn('Silent catch:', e.message || e);
+          }
         }),
       );
 
@@ -420,7 +422,9 @@ const LibraryBrowser = ({
     try {
       const data = e.dataTransfer.getData('text/plain');
       dragIds = JSON.parse(data);
-    } catch (err) {}
+    } catch (err) {
+      console.warn('Silent catch:', err.message || err);
+    }
     if (dragIds.length === 0 && draggedItem) {
       dragIds = [draggedItem.id];
     }

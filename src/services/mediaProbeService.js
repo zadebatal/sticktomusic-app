@@ -12,8 +12,8 @@
  * resolves null and the item stays in the unknown bucket.
  */
 
-import { updateLibraryItemAsync } from './libraryService';
 import log from '../utils/logger';
+import { updateLibraryItemAsync } from './libraryService';
 
 const VIDEO_EXT = /\.(mp4|mov|webm|mkv|avi|m4v|ogv)(\?|$)/i;
 const AUDIO_EXT = /\.(mp3|m4a|wav|aac|ogg|opus|flac)(\?|$)/i;

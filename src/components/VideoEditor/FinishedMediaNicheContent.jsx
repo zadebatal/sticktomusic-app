@@ -1,24 +1,25 @@
 /**
  * FinishedMediaNicheContent — Upload finished videos/images, view uploads, caption/hashtag banks
  */
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { subscribeToScheduledPosts } from '../../services/scheduledPostsService';
-import { updateNicheAudioId } from '../../services/libraryService';
-import { Button } from '../../ui/components/Button';
-import { IconButton } from '../../ui/components/IconButton';
-import { Badge } from '../../ui/components/Badge';
+
 import {
-  FeatherUploadCloud,
-  FeatherTrash2,
-  FeatherImage,
+  FeatherCheck,
+  FeatherChevronDown,
   FeatherFilm,
-  FeatherPlus,
-  FeatherX,
+  FeatherImage,
   FeatherMusic,
   FeatherPlay,
-  FeatherChevronDown,
-  FeatherCheck,
+  FeatherPlus,
+  FeatherTrash2,
+  FeatherUploadCloud,
+  FeatherX,
 } from '@subframe/core';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { updateNicheAudioId } from '../../services/libraryService';
+import { subscribeToScheduledPosts } from '../../services/scheduledPostsService';
+import { Badge } from '../../ui/components/Badge';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
 import { useToast } from '../ui';
 import useFileUploader from './shared/useFileUploader';
 

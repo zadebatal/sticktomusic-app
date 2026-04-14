@@ -10,15 +10,15 @@
  * All results should be presented as "Likely contributed to growth"
  */
 
-import {
-  getStoredSnapshots,
-  getStoredAttribution,
-  saveAttribution,
-  detectGrowthEvents,
-  PLATFORM_WEIGHTS,
-  ATTRIBUTION_CONFIG,
-} from './spotifyService';
 import { getStoredAnalytics } from './analyticsService';
+import {
+  ATTRIBUTION_CONFIG,
+  detectGrowthEvents,
+  getStoredAttribution,
+  getStoredSnapshots,
+  PLATFORM_WEIGHTS,
+  saveAttribution,
+} from './spotifyService';
 
 // ============================================
 // NORMALIZATION HELPERS

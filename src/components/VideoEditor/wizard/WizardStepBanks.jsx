@@ -3,58 +3,59 @@
  * Each slideshow niche shows slide bank columns (images + text) plus caption & hashtag banks.
  * Video niches show media upload grid + text banks.
  */
-import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+
 import {
-  getLibrary,
-  getCollections,
-  assignToBank,
-  addToTextBank,
-  removeFromTextBank,
-  updateTextBankEntry,
-  addToProjectPool,
-  addToCollectionAsync,
-  addToLibraryAsync,
-  getPipelineBankLabel,
-  getTextBankText,
-  getTextBankStyle,
-  getBankColor,
-  MEDIA_TYPES,
-  subscribeToCollections,
-  subscribeToLibrary,
-} from '../../../services/libraryService';
-import { THUMB_MAX_SIZE, THUMB_QUALITY, THUMB_VERSION } from '../../../services/thumbnailService';
-import { uploadFile } from '../../../services/firebaseStorage';
-import { convertImageIfNeeded } from '../../../utils/imageConverter';
-import { convertAudioIfNeeded } from '../../../utils/audioConverter';
-import { runPool } from '../../../utils/uploadPool';
-import { Button } from '../../../ui/components/Button';
-import { IconButton } from '../../../ui/components/IconButton';
-import { Badge } from '../../../ui/components/Badge';
-import {
-  FeatherPlus,
-  FeatherX,
-  FeatherType,
-  FeatherImage,
-  FeatherMusic,
-  FeatherZap,
-  FeatherUpload,
-  FeatherFilm,
-  FeatherPlay,
-  FeatherLayers,
   FeatherCamera,
-  FeatherUploadCloud,
-  FeatherScissors,
+  FeatherCheck,
   FeatherChevronDown,
   FeatherChevronUp,
   FeatherDownloadCloud,
   FeatherEdit2,
-  FeatherCheck,
+  FeatherFilm,
+  FeatherImage,
+  FeatherLayers,
+  FeatherMusic,
+  FeatherPlay,
+  FeatherPlus,
+  FeatherScissors,
+  FeatherType,
+  FeatherUpload,
+  FeatherUploadCloud,
+  FeatherX,
+  FeatherZap,
 } from '@subframe/core';
-import { useToast } from '../../ui';
-import CrossPollinationDrawer from './CrossPollinationDrawer';
-import WebImportModal from '../WebImportModal';
-import CloudImportButton from '../CloudImportButton';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { uploadFile } from '../../../services/firebaseStorage';
+import {
+  addToCollectionAsync,
+  addToLibraryAsync,
+  addToProjectPool,
+  addToTextBank,
+  assignToBank,
+  getBankColor,
+  getCollections,
+  getLibrary,
+  getPipelineBankLabel,
+  getTextBankStyle,
+  getTextBankText,
+  MEDIA_TYPES,
+  removeFromTextBank,
+  subscribeToCollections,
+  subscribeToLibrary,
+  updateTextBankEntry,
+} from '../../../services/libraryService';
+import { THUMB_MAX_SIZE, THUMB_QUALITY, THUMB_VERSION } from '../../../services/thumbnailService';
+import { Badge } from '../../../ui/components/Badge';
+import { Button } from '../../../ui/components/Button';
+import { IconButton } from '../../../ui/components/IconButton';
+import { convertAudioIfNeeded } from '../../../utils/audioConverter';
+import { convertImageIfNeeded } from '../../../utils/imageConverter';
 import log from '../../../utils/logger';
+import { runPool } from '../../../utils/uploadPool';
+import { useToast } from '../../ui';
+import CloudImportButton from '../CloudImportButton';
+import WebImportModal from '../WebImportModal';
+import CrossPollinationDrawer from './CrossPollinationDrawer';
 
 // Bank header colors keyed by label
 const BANK_HEADER_COLORS = {

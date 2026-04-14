@@ -348,7 +348,7 @@ function getSegmentInterval(time, segments) {
 
 /** Deduplicate, enforce minimum interval, clamp to [0, duration], sort */
 function dedupeAndSort(pointsSet, minInterval, duration) {
-  let arr = [...pointsSet].filter((t) => t >= 0 && t <= duration).sort((a, b) => a - b);
+  const arr = [...pointsSet].filter((t) => t >= 0 && t <= duration).sort((a, b) => a - b);
 
   // Enforce minimum interval
   const filtered = [];

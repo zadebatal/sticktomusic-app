@@ -13,65 +13,65 @@
 
 import {
   collection,
+  deleteDoc,
   doc,
-  getDocs,
   getDoc,
+  getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  runTransaction,
+  serverTimestamp,
   setDoc,
   updateDoc,
-  deleteDoc,
   writeBatch,
-  query,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
-  runTransaction,
 } from 'firebase/firestore';
 import log from '../utils/logger';
 
+export {
+  addCreatedSlideshow,
+  addCreatedSlideshowAsync,
+  addCreatedSlideshowsBatch,
+  addCreatedSlideshowsBatchAsync,
+  addCreatedVideo,
+  createCreatedSlideshow,
+  createCreatedVideo,
+  deleteCreatedSlideshow,
+  deleteCreatedSlideshowAsync,
+  deleteCreatedVideo,
+  getAndClearLocallyDeletedContent,
+  getCreatedContent,
+  getDeletedContentAsync,
+  loadCreatedContentAsync,
+  markContentScheduled,
+  markContentScheduledAsync,
+  permanentlyDeleteContentAsync,
+  restoreCreatedContentAsync,
+  saveCreatedContent,
+  saveCreatedContentAsync,
+  softDeleteCreatedVideoAsync,
+  subscribeToCreatedContent,
+  unmarkContentScheduled,
+  unmarkContentScheduledAsync,
+  updateCreatedSlideshow,
+  updateCreatedSlideshowAsync,
+  updateCreatedVideo,
+} from './createdContentService';
 // ── Re-exports from extracted services ──
 // Consumers continue to import from libraryService; these delegate to domain modules.
 export {
+  addLyrics,
+  addLyricsAsync,
   createLyricsEntry,
+  deleteLyrics,
+  deleteLyricsAsync,
   getLyrics,
   saveLyrics,
-  addLyrics,
-  updateLyrics,
-  deleteLyrics,
   subscribeToLyrics,
-  addLyricsAsync,
+  updateLyrics,
   updateLyricsAsync,
-  deleteLyricsAsync,
 } from './lyricsService';
-
-export {
-  createCreatedVideo,
-  createCreatedSlideshow,
-  getAndClearLocallyDeletedContent,
-  getCreatedContent,
-  saveCreatedContent,
-  addCreatedVideo,
-  updateCreatedVideo,
-  deleteCreatedVideo,
-  addCreatedSlideshow,
-  addCreatedSlideshowsBatch,
-  updateCreatedSlideshow,
-  deleteCreatedSlideshow,
-  saveCreatedContentAsync,
-  loadCreatedContentAsync,
-  subscribeToCreatedContent,
-  addCreatedSlideshowAsync,
-  updateCreatedSlideshowAsync,
-  deleteCreatedSlideshowAsync,
-  softDeleteCreatedVideoAsync,
-  restoreCreatedContentAsync,
-  getDeletedContentAsync,
-  permanentlyDeleteContentAsync,
-  addCreatedSlideshowsBatchAsync,
-  markContentScheduled,
-  markContentScheduledAsync,
-  unmarkContentScheduled,
-  unmarkContentScheduledAsync,
-} from './createdContentService';
 
 // Internal imports needed by project/niche functions
 import {
@@ -703,7 +703,7 @@ export const getUnusedMedia = (artistId, nicheId) => {
   if (!niche) return [];
 
   // Gather all media IDs in this niche (from banks or mediaBanks)
-  let nicheMediaIds = new Set();
+  const nicheMediaIds = new Set();
   if (niche.mediaBanks) {
     niche.mediaBanks.forEach((bank) =>
       (bank.mediaIds || []).forEach((id) => nicheMediaIds.add(id)),
@@ -732,7 +732,7 @@ export const getFreshestMedia = (artistId, nicheId) => {
   if (!niche) return [];
 
   // Gather all media IDs in this niche
-  let nicheMediaIds = new Set();
+  const nicheMediaIds = new Set();
   if (niche.mediaBanks) {
     niche.mediaBanks.forEach((bank) =>
       (bank.mediaIds || []).forEach((id) => nicheMediaIds.add(id)),
@@ -1356,7 +1356,7 @@ export const removeFromMediaBank = (
 export const addToTextBank = (artistId, collectionId, bankNum, text, db = null) => {
   const collections = getUserCollections(artistId);
   let collection = collections.find((c) => c.id === collectionId);
-  let foundInLocal = !!collection;
+  const foundInLocal = !!collection;
   if (!collection) {
     // localStorage may be stale/full — build a minimal collection object for Firestore write
     log.warn(
@@ -2070,6 +2070,13 @@ export const createNiche = (artistId, { projectId, format, name = null }, db = n
   pipeline.projectId = projectId;
   const collections = getUserCollections(artistId);
   collections.push(pipeline);
+  // Auto-create first bank so the niche is immediately usable
+  const firstBank = {
+    id: Date.now().toString(36),
+    name: 'Bank 1',
+    mediaIds: [],
+  };
+  pipeline.mediaBanks = [firstBank];
   saveCollections(artistId, collections);
   if (db) saveCollectionToFirestore(db, artistId, pipeline).catch(log.error);
   return pipeline;
@@ -2962,7 +2969,7 @@ export const getLibraryAsync = async (db, artistId) => {
   if (db && artistId) {
     try {
       const mediaRef = collection(db, 'artists', artistId, 'library', 'data', 'mediaItems');
-      const snapshot = await getDocs(mediaRef);
+      const snapshot = await getDocs(query(mediaRef, orderBy('createdAt', 'desc'), limit(500)));
       if (!snapshot.empty) {
         const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
         log('[Library] Loaded from Firestore:', items.length, 'items');
@@ -3049,7 +3056,9 @@ export const subscribeToLibrary = (db, artistId, callback) => {
         // Tear down the dead listener and schedule a backoff retry
         try {
           currentUnsub();
-        } catch (_) {}
+        } catch (e) {
+          console.warn('Silent catch:', e.message || e);
+        }
         if (cancelled || retryCount >= MAX_RETRIES) {
           if (!cancelled) {
             log.error(
@@ -3058,7 +3067,7 @@ export const subscribeToLibrary = (db, artistId, callback) => {
           }
           return;
         }
-        const delay = Math.min(30000, 2000 * Math.pow(2, retryCount));
+        const delay = Math.min(30000, 2000 * 2 ** retryCount);
         retryCount += 1;
         log.warn(
           `[Library] Retrying subscription in ${delay}ms (attempt ${retryCount}/${MAX_RETRIES})`,
@@ -3074,7 +3083,9 @@ export const subscribeToLibrary = (db, artistId, callback) => {
     if (retryTimer) clearTimeout(retryTimer);
     try {
       currentUnsub();
-    } catch (_) {}
+    } catch (e) {
+      console.warn('Silent catch:', e.message || e);
+    }
   };
 };
 
@@ -3259,7 +3270,9 @@ export const sweepOrphanLocalItems = async (db, artistId, options = {}) => {
     if (onProgress) {
       try {
         onProgress({ scanned: stats.scanned, total: items.length, name: item.name });
-      } catch (_) {}
+      } catch (e) {
+        console.warn('Silent catch:', e.message || e);
+      }
     }
 
     // Already marked offline — skip
@@ -3347,7 +3360,9 @@ export const getCollectionsAsync = async (db, artistId) => {
   if (db && artistId) {
     try {
       const collectionsRef = collection(db, 'artists', artistId, 'library', 'data', 'collections');
-      const snapshot = await getDocs(collectionsRef);
+      const snapshot = await getDocs(
+        query(collectionsRef, orderBy('createdAt', 'desc'), limit(500)),
+      );
       if (!snapshot.empty) {
         const collections = snapshot.docs
           .map((doc) => ({ id: doc.id, ...doc.data() }))
@@ -3499,7 +3514,9 @@ export const subscribeToCollections = (db, artistId, callback) => {
           // Cache to localStorage for offline/instant loads (AFTER callback)
           try {
             localStorage.setItem(getCollectionsKey(artistId), JSON.stringify(collections));
-          } catch (e) {}
+          } catch (e) {
+            console.warn('Silent catch:', e.message || e);
+          }
         } else {
           // Firestore empty — check localStorage and upload if data exists
           const localCollections = getCollections(artistId);
@@ -3523,7 +3540,9 @@ export const subscribeToCollections = (db, artistId, callback) => {
         callback(getCollections(artistId));
         try {
           currentUnsub();
-        } catch (_) {}
+        } catch (e) {
+          console.warn('Silent catch:', e.message || e);
+        }
         if (cancelled || retryCount >= MAX_RETRIES) {
           if (!cancelled) {
             log.error(
@@ -3532,7 +3551,7 @@ export const subscribeToCollections = (db, artistId, callback) => {
           }
           return;
         }
-        const delay = Math.min(30000, 2000 * Math.pow(2, retryCount));
+        const delay = Math.min(30000, 2000 * 2 ** retryCount);
         retryCount += 1;
         log.warn(
           `[Collections] Retrying subscription in ${delay}ms (attempt ${retryCount}/${MAX_RETRIES})`,
@@ -3548,7 +3567,9 @@ export const subscribeToCollections = (db, artistId, callback) => {
     if (retryTimer) clearTimeout(retryTimer);
     try {
       currentUnsub();
-    } catch (_) {}
+    } catch (e) {
+      console.warn('Silent catch:', e.message || e);
+    }
   };
 };
 

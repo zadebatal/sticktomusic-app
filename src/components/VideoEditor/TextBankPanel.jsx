@@ -2,11 +2,12 @@
  * TextBankPanel - Shared editable text bank component
  * Used in LibraryBrowser and StudioHome for managing text banks
  */
+
+import { FeatherPlus, FeatherX } from '@subframe/core';
 import React, { useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { getTextBankText, getTextBankStyle } from '../../services/libraryService';
+import { getTextBankStyle, getTextBankText } from '../../services/libraryService';
 import { IconButton } from '../../ui/components/IconButton';
-import { FeatherX, FeatherPlus } from '@subframe/core';
 
 const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate, onDelete }) => {
   const { theme } = useTheme();

@@ -11,16 +11,17 @@
  * @param {Function} [onPrev] - Go to previous item (shows left arrow when provided)
  * @param {Function} [onNext] - Go to next item (shows right arrow when provided)
  */
-import React, { useEffect } from 'react';
+
 import {
-  FeatherX,
-  FeatherScissors,
+  FeatherAlertTriangle,
   FeatherChevronLeft,
   FeatherChevronRight,
   FeatherFilm,
+  FeatherScissors,
   FeatherTrash2,
-  FeatherAlertTriangle,
+  FeatherX,
 } from '@subframe/core';
+import React, { useEffect } from 'react';
 
 const formatBytes = (bytes) => {
   if (!bytes || !isFinite(bytes)) return null;

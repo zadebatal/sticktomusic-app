@@ -7,15 +7,15 @@
 
 import {
   collection,
+  deleteDoc,
   doc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
   setDoc,
   updateDoc,
-  deleteDoc,
   writeBatch,
-  query,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
 } from 'firebase/firestore';
 import log from '../utils/logger';
 

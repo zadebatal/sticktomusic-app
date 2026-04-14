@@ -1,6 +1,6 @@
+import { FeatherX } from '@subframe/core';
 import React, { useEffect, useRef } from 'react';
 import { IconButton } from '../../../ui/components/IconButton';
-import { FeatherX } from '@subframe/core';
 
 const SHORTCUT_CATEGORIES = [
   {

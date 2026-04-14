@@ -1,23 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
-import { useTheme } from '../contexts/ThemeContext';
-import { Button } from '../ui/components/Button';
-import { TextField } from '../ui/components/TextField';
-import { IconWithBackground } from '../ui/components/IconWithBackground';
-import { Accordion } from '../ui/components/Accordion';
 import {
   FeatherArrowRight,
-  FeatherPlay,
-  FeatherVideo,
-  FeatherCalendar,
   FeatherBarChart,
+  FeatherCalendar,
   FeatherCheck,
-  FeatherX,
-  FeatherLoader,
   FeatherChevronDown,
   FeatherHelpCircle,
+  FeatherLoader,
+  FeatherPlay,
+  FeatherVideo,
+  FeatherX,
 } from '@subframe/core';
+import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../contexts/ThemeContext';
+import { Accordion } from '../ui/components/Accordion';
+import { Button } from '../ui/components/Button';
+import { IconWithBackground } from '../ui/components/IconWithBackground';
+import { TextField } from '../ui/components/TextField';
 
 /**
  * LandingPage — Marketing page shown when user is NOT logged in.

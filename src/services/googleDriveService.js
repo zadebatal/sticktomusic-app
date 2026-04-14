@@ -14,8 +14,8 @@
  * @see docs/DOMAIN_INVARIANTS.md — no sensitive tokens in localStorage
  */
 
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import log from '../utils/logger';
 
 // ── Constants ──

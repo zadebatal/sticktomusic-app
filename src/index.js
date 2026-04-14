@@ -5,9 +5,18 @@ import './index.css';
 import App from './App.jsx';
 import ErrorBoundary from './components/ErrorBoundary';
 
-// React Grab — hover + Cmd+C to copy element context for Claude Code (dev only)
-if (process.env.NODE_ENV === 'development') {
-  import('react-grab');
+// React Grab — use via `npx react-grab@latest` (not bundled)
+
+// Initialize Microsoft Clarity analytics (heatmaps, session replay, rage clicks)
+if (process.env.REACT_APP_CLARITY_PROJECT_ID) {
+  import('clarity-js').then(({ clarity }) => {
+    clarity.start({
+      projectId: process.env.REACT_APP_CLARITY_PROJECT_ID,
+      upload: 'https://www.clarity.ms/collect',
+      track: true,
+      content: true,
+    });
+  });
 }
 
 // Initialize Sentry error monitoring lazily (only if DSN is configured)

@@ -1,11 +1,11 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 import {
   getCollectionCaptionBank,
   getCollectionHashtagBank,
   updateCollectionCaptionBank,
   updateCollectionHashtagBank,
 } from '../../services/libraryService';
-import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * CollectionBankEditor - Edit caption and hashtag banks for a collection
@@ -28,7 +28,7 @@ const CollectionBankEditor = ({
   useEffect(() => {
     setCaptionBank(getCollectionCaptionBank(collection));
     setHashtagBank(getCollectionHashtagBank(collection));
-  }, [collection?.id, collection?.captionBank, collection?.hashtagBank]);
+  }, [collection]); // re-sync when collection changes
 
   // Save and notify parent
   const saveCaptionBank = useCallback(

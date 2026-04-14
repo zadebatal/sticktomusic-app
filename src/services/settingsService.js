@@ -15,8 +15,8 @@
  *   lastSession: { updatedAt }
  */
 
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import log from '../utils/logger';
 
 // In-memory cache to avoid redundant reads

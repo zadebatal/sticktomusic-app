@@ -3,12 +3,13 @@
  * Left column: editable textarea + parsed lines (click to select, shift-click for range).
  * Right column: slide slots (color-coded), click header to assign selected lines.
  */
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+
+import { FeatherCheck, FeatherX, FeatherZap } from '@subframe/core';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { getBankColor } from '../../../services/libraryService';
+import { Badge } from '../../../ui/components/Badge';
 import { Button } from '../../../ui/components/Button';
 import { IconButton } from '../../../ui/components/IconButton';
-import { Badge } from '../../../ui/components/Badge';
-import { FeatherX, FeatherCheck, FeatherZap } from '@subframe/core';
 
 const LyricDistributor = ({ text, slideLabels, slideCount, onConfirm, onClose }) => {
   const [editedText, setEditedText] = useState(text || '');

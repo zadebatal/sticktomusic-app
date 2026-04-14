@@ -1,7 +1,7 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { setArtistLateKey, removeArtistLateKey } from '../services/lateService';
 import lateApi from '../services/lateApiService';
+import { removeArtistLateKey, setArtistLateKey } from '../services/lateService';
 import log from '../utils/logger';
 
 export default function LateConnectModal({
@@ -35,7 +35,9 @@ export default function LateConnectModal({
         // Key rejected by Late.co — remove it so status reverts to unconfigured
         try {
           await removeArtistLateKey(currentArtistId);
-        } catch (_) {}
+        } catch (e) {
+          console.warn('Silent catch:', e.message || e);
+        }
         showToast(
           'Invalid API key — Late.co rejected it. Please check the key and try again.',
           'error',

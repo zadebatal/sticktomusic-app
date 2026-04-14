@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import log from '../../utils/logger';
 
@@ -190,12 +190,13 @@ const PreviewPlayer = ({
 
   // Cleanup on unmount
   useEffect(() => {
+    const refs = videoRefs.current;
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
       // Pause all videos
-      videoRefs.current.forEach((videoEl) => {
+      refs.forEach((videoEl) => {
         if (videoEl && !videoEl.paused) videoEl.pause();
       });
     };

@@ -1,19 +1,19 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { FeatherX } from '@subframe/core';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Loader } from '../../ui/components/Loader';
+import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
+import {
+  fetchSyncedLyrics,
+  lrcToWordTimeline,
+  parseLRC,
+  recognizeSong,
+} from '../../services/lyricsLookupService';
+import { loadLyricTemplate, saveLyricTemplate } from '../../services/storageService';
+import { getStoredApiKey } from '../../services/whisperService';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
-import { FeatherX } from '@subframe/core';
-import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
-import { getStoredApiKey } from '../../services/whisperService';
-import {
-  recognizeSong,
-  fetchSyncedLyrics,
-  parseLRC,
-  lrcToWordTimeline,
-} from '../../services/lyricsLookupService';
+import { Loader } from '../../ui/components/Loader';
 import { trimAudio } from '../../utils/audioSnippet';
-import { loadLyricTemplate, saveLyricTemplate } from '../../services/storageService';
 import log from '../../utils/logger';
 
 /**

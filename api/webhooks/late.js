@@ -106,14 +106,14 @@ export default async function handler(req, res) {
 
   // Verify webhook secret (shared secret passed as query param or header)
   const webhookSecret = process.env.LATE_WEBHOOK_SECRET;
-  if (webhookSecret) {
-    const providedSecret = req.query.secret || req.headers['x-webhook-secret'];
-    if (providedSecret !== webhookSecret) {
-      console.warn('[Late Webhook] Invalid or missing webhook secret');
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-  } else {
-    console.warn('[Late Webhook] LATE_WEBHOOK_SECRET not configured — webhook is unprotected');
+  if (!webhookSecret) {
+    console.error('[Late Webhook] LATE_WEBHOOK_SECRET not configured — rejecting all requests');
+    return res.status(500).json({ error: 'Webhook not configured' });
+  }
+  const providedSecret = req.query.secret || req.headers['x-webhook-secret'];
+  if (providedSecret !== webhookSecret) {
+    console.warn('[Late Webhook] Invalid or missing webhook secret');
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
   try {

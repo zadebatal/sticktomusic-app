@@ -10,8 +10,8 @@
  * Pass trimStart/trimEnd options to get words in LOCAL time (normalized to trim range).
  */
 
-import { normalizeWordsToTrimRange } from '../utils/timelineNormalization';
 import { getAuth } from 'firebase/auth';
+import { normalizeWordsToTrimRange } from '../utils/timelineNormalization';
 
 // Server-side proxy (keeps API key secure)
 const PROXY_URL = '/api/transcribe';

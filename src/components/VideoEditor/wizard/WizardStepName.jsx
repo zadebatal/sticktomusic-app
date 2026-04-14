@@ -2,8 +2,8 @@
  * WizardStepName — Step 1: Project name
  */
 import React from 'react';
-import { TextField } from '../../../ui/components/TextField';
 import { Button } from '../../../ui/components/Button';
+import { TextField } from '../../../ui/components/TextField';
 
 const WizardStepName = ({ projectName, setProjectName, onNext, isMobile }) => {
   return (

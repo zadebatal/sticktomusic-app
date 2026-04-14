@@ -9,11 +9,12 @@
  * - Photos → slideshow niches (7 Slide, etc.) + photo_montage niches
  * - Video clips → montage, multi_clip, solo_clip, clipper niches
  */
-import React, { useState, useMemo } from 'react';
-import { Button } from '../../ui/components/Button';
+
+import { FeatherFilm, FeatherImage, FeatherX } from '@subframe/core';
+import React, { useMemo, useState } from 'react';
 import { Badge } from '../../ui/components/Badge';
+import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
-import { FeatherX, FeatherFilm, FeatherImage } from '@subframe/core';
 
 // Formats that accept video clips
 const VIDEO_FORMATS = new Set(['montage', 'multi_clip', 'solo_clip', 'clipper']);

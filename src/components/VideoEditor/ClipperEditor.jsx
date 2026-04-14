@@ -10,52 +10,54 @@
  * - Session persistence (markers saved to niche, not as drafts)
  * - Export to niche banks (assignToBank)
  */
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import log from '../../utils/logger';
-import { useToast } from '../ui';
-import { Button } from '../../ui/components/Button';
-import { IconButton } from '../../ui/components/IconButton';
-import { Badge } from '../../ui/components/Badge';
+
 import {
-  FeatherPlay,
-  FeatherPause,
-  FeatherScissors,
-  FeatherTrash2,
-  FeatherPlus,
-  FeatherDownload,
-  FeatherUpload,
-  FeatherX,
-  FeatherSkipBack,
-  FeatherSkipForward,
-  FeatherVolume2,
-  FeatherVolumeX,
+  FeatherCheck,
   FeatherChevronDown,
   FeatherChevronRight,
-  FeatherCheck,
-  FeatherZap,
+  FeatherDownload,
   FeatherLoader,
+  FeatherPause,
+  FeatherPlay,
+  FeatherPlus,
+  FeatherScissors,
+  FeatherSkipBack,
+  FeatherSkipForward,
+  FeatherTrash2,
+  FeatherUpload,
+  FeatherVolume2,
+  FeatherVolumeX,
+  FeatherX,
+  FeatherZap,
   FeatherZoomIn,
   FeatherZoomOut,
 } from '@subframe/core';
-import EditorShell from './shared/EditorShell';
-import EditorTopBar from './shared/EditorTopBar';
-import EditorFooter from './shared/EditorFooter';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useIsMobile from '../../hooks/useIsMobile';
-import useUnsavedChanges from './shared/useUnsavedChanges';
-import usePixelTimeline from './shared/usePixelTimeline';
 import useTimelineZoom from '../../hooks/useTimelineZoom';
 import useWaveform from '../../hooks/useWaveform';
 import { uploadFile } from '../../services/firebaseStorage';
 import {
-  addToLibraryAsync,
   addToCollection,
+  addToLibraryAsync,
   addToProjectPool,
   getBankColor,
 } from '../../services/libraryService';
-import { transcribeAudio } from '../../services/whisperService';
+import { fetchSyncedLyrics, recognizeSong } from '../../services/lyricsLookupService';
 import { analyzeSongStructure } from '../../services/structureAnalysisService';
+import { transcribeAudio } from '../../services/whisperService';
+import { Badge } from '../../ui/components/Badge';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
 import { extractAudioSnippet } from '../../utils/audioSnippet';
-import { recognizeSong, fetchSyncedLyrics } from '../../services/lyricsLookupService';
+import log from '../../utils/logger';
+import { useToast } from '../ui';
+import EditorFooter from './shared/EditorFooter';
+import EditorShell from './shared/EditorShell';
+import EditorTopBar from './shared/EditorTopBar';
+import usePixelTimeline from './shared/usePixelTimeline';
+import useUnsavedChanges from './shared/useUnsavedChanges';
+
 // ── FFmpeg singleton (lazy-loaded) ──
 let ffmpegInstance = null;
 let ffmpegLoadPromise = null;
@@ -607,7 +609,7 @@ const ClipperEditor = ({
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
     };
-  }, [playheadDragging, seekTo]);
+  }, [playheadDragging, seekTo, safePlay]);
 
   // ── Source file selection ──
   const handleFileSelect = useCallback(
@@ -1127,8 +1129,6 @@ const ClipperEditor = ({
     sourceFile,
     sourceUrl,
     sourceName,
-    videoName,
-    bankLabels,
     buildSessionData,
     onSaveSession,
     toastSuccess,

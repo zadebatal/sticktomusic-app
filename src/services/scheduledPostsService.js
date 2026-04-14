@@ -12,23 +12,24 @@
  * - Full editor state for re-editing drafts
  */
 
+import { getAuth } from 'firebase/auth';
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
   setDoc,
   updateDoc,
-  deleteDoc,
-  query,
-  orderBy,
-  serverTimestamp,
   writeBatch,
-  onSnapshot,
 } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { PLATFORM_COLORS, PLATFORM_KEYS, PLATFORM_LABELS } from '../config/platforms';
 import log from '../utils/logger';
-import { PLATFORM_KEYS, PLATFORM_LABELS, PLATFORM_COLORS } from '../config/platforms';
 
 // ── Constants ──
 
@@ -42,7 +43,7 @@ export const POST_STATUS = Object.freeze({
 
 // Re-export platform constants for backward compat
 export const PLATFORMS = PLATFORM_KEYS;
-export { PLATFORM_LABELS, PLATFORM_COLORS };
+export { PLATFORM_COLORS, PLATFORM_LABELS };
 
 // ── Helpers ──
 
@@ -281,7 +282,7 @@ export async function deletePostsByCollectionId(db, artistId, collectionId) {
  */
 export async function getScheduledPosts(db, artistId) {
   try {
-    const q = query(getCollectionRef(db, artistId), orderBy('queuePosition', 'asc'));
+    const q = query(getCollectionRef(db, artistId), orderBy('queuePosition', 'asc'), limit(500));
     const snapshot = await getDocs(q);
     const posts = snapshot.docs.map((d) => d.data());
     log('[ScheduledPosts] Loaded', posts.length, 'posts');

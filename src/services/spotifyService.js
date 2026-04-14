@@ -387,8 +387,7 @@ export const calculateBaselineDelta = (snapshots, metric) => {
 
   // Calculate mean and std dev
   const mean = dailyDeltas.reduce((a, b) => a + b, 0) / dailyDeltas.length;
-  const variance =
-    dailyDeltas.reduce((sum, d) => sum + Math.pow(d - mean, 2), 0) / dailyDeltas.length;
+  const variance = dailyDeltas.reduce((sum, d) => sum + (d - mean) ** 2, 0) / dailyDeltas.length;
   const stdDev = Math.sqrt(variance);
 
   // Remove outliers (z > 2.5)
@@ -404,8 +403,7 @@ export const calculateBaselineDelta = (snapshots, metric) => {
       : mean;
   const filteredVariance =
     filteredDeltas.length > 1
-      ? filteredDeltas.reduce((sum, d) => sum + Math.pow(d - filteredMean, 2), 0) /
-        filteredDeltas.length
+      ? filteredDeltas.reduce((sum, d) => sum + (d - filteredMean) ** 2, 0) / filteredDeltas.length
       : variance;
   const filteredStdDev = Math.sqrt(filteredVariance);
 

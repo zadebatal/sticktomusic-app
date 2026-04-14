@@ -9,17 +9,17 @@
  */
 
 import {
-  calculateEngagementQuality,
-  calculateTimeDecay,
-  calculateSongMatch,
-  getPlatformWeight,
-  calculateRawRelevance,
   calculateConfidenceScore,
-  getConfidenceLabel,
-  getCandidatePosts,
+  calculateEngagementQuality,
   calculatePostAttribution,
+  calculateRawRelevance,
+  calculateSongMatch,
+  calculateTimeDecay,
+  getCandidatePosts,
+  getConfidenceLabel,
+  getPlatformWeight,
 } from '../spotifyAttributionService';
-import { PLATFORM_WEIGHTS, ATTRIBUTION_CONFIG } from '../spotifyService';
+import { ATTRIBUTION_CONFIG, PLATFORM_WEIGHTS } from '../spotifyService';
 
 // Mock posts for testing
 const createMockPost = (overrides = {}) => ({

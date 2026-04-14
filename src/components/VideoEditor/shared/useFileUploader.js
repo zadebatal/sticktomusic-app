@@ -2,8 +2,8 @@
  * useFileUploader — Shared hook for uploading finished media files
  * Used by UploadFinishedMediaModal and FinishedMediaNicheContent
  */
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { uploadFileWithQuota, generateThumbnail } from '../../../services/firebaseStorage';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { generateThumbnail, uploadFileWithQuota } from '../../../services/firebaseStorage';
 import { createScheduledPost } from '../../../services/scheduledPostsService';
 import log from '../../../utils/logger';
 

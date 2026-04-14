@@ -4,10 +4,10 @@
  * 5 states: welcome → scanning → ready → syncing → complete
  * Walks the user through selecting a media folder and syncing cloud media to local drive.
  */
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
+import { ensureArtistMediaFolder, setOnboardingComplete } from '../services/localMediaService';
+import { formatBytes, scanForSync, syncArtistMedia } from '../services/syncService';
 import { Button } from '../ui/components/Button';
-import { scanForSync, syncArtistMedia, formatBytes } from '../services/syncService';
-import { setOnboardingComplete, ensureArtistMediaFolder } from '../services/localMediaService';
 
 const STATES = {
   WELCOME: 'welcome',

@@ -7,19 +7,19 @@
  * - Skip → moves to next without changing status
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import {
+  FeatherArrowLeft,
+  FeatherCheck,
+  FeatherPlay,
+  FeatherSkipForward,
+  FeatherX,
+} from '@subframe/core';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Badge } from '../../ui/components/Badge';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
-import { Badge } from '../../ui/components/Badge';
-import {
-  FeatherCheck,
-  FeatherX,
-  FeatherSkipForward,
-  FeatherArrowLeft,
-  FeatherPlay,
-} from '@subframe/core';
-import { useToast } from '../ui';
 import log from '../../utils/logger';
+import { useToast } from '../ui';
 
 const REJECTION_REASONS = [
   { id: 'bad_clips', label: 'Bad clips' },

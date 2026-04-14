@@ -1,68 +1,68 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import {
+  FeatherArrowLeft,
+  FeatherCalendar,
+  FeatherCheck,
+  FeatherDownload,
+  FeatherEdit2,
+  FeatherFilm,
+  FeatherMusic,
+  FeatherPlus,
+  FeatherRotateCcw,
+  FeatherSend,
+  FeatherTrash2,
+  FeatherUploadCloud,
+  FeatherX,
+} from '@subframe/core';
 import { motion } from 'framer-motion';
-import ExportAndPostModal from './ExportAndPostModal';
-import ScheduleQueue from './ScheduleQueue';
-import { StatusPill, ConfirmDialog, useToast } from '../ui';
-import { VIDEO_STATUS } from '../../utils/status';
-import { renderVideo } from '../../services/videoExportService';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
+import useIsMobile from '../../hooks/useIsMobile';
+import {
+  authenticate as dbxAuth,
+  ensureAppFolder as dbxEnsureAppFolder,
+  uploadFile as dbxUploadFile,
+  initDropbox,
+  isAuthenticated as isDbxAuth,
+} from '../../services/dropboxService';
 import { uploadFile } from '../../services/firebaseStorage';
-import { exportSlideshowAsImages } from '../../services/slideshowExportService';
+import {
+  authenticate as driveAuth,
+  uploadFile as driveUploadFile,
+  ensureAppFolder,
+  initGoogleDrive,
+  isAuthenticated as isDriveAuth,
+} from '../../services/googleDriveService';
+import {
+  getCollections,
+  getCreatedContent,
+  getLibrary,
+  getLibraryAsync,
+  markContentScheduledAsync,
+  resolveCollectionBanks,
+  saveCreatedContentAsync,
+  subscribeToCollections,
+  unmarkContentScheduledAsync,
+} from '../../services/libraryService';
 import {
   createScheduledPost,
   deleteScheduledPost,
   getScheduledPosts,
   POST_STATUS,
 } from '../../services/scheduledPostsService';
-import {
-  getLibrary,
-  getLibraryAsync,
-  getCollections,
-  subscribeToCollections,
-  getCreatedContent,
-  saveCreatedContentAsync,
-  markContentScheduledAsync,
-  unmarkContentScheduledAsync,
-  resolveCollectionBanks,
-} from '../../services/libraryService';
-import log from '../../utils/logger';
-import {
-  initGoogleDrive,
-  authenticate as driveAuth,
-  isAuthenticated as isDriveAuth,
-  uploadFile as driveUploadFile,
-  ensureAppFolder,
-} from '../../services/googleDriveService';
-import {
-  initDropbox,
-  authenticate as dbxAuth,
-  isAuthenticated as isDbxAuth,
-  uploadFile as dbxUploadFile,
-  ensureAppFolder as dbxEnsureAppFolder,
-} from '../../services/dropboxService';
-import useIsMobile from '../../hooks/useIsMobile';
-import useMediaMultiSelect from './shared/useMediaMultiSelect';
-import { useTheme } from '../../contexts/ThemeContext';
-import CloudImportButton from './CloudImportButton';
+import { exportSlideshowAsImages } from '../../services/slideshowExportService';
+import { renderVideo } from '../../services/videoExportService';
+import { Badge } from '../../ui/components/Badge';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
-import { Badge } from '../../ui/components/Badge';
-import {
-  FeatherArrowLeft,
-  FeatherPlus,
-  FeatherTrash2,
-  FeatherDownload,
-  FeatherEdit2,
-  FeatherMusic,
-  FeatherCalendar,
-  FeatherX,
-  FeatherSend,
-  FeatherUploadCloud,
-  FeatherCheck,
-  FeatherRotateCcw,
-  FeatherFilm,
-} from '@subframe/core';
+import log from '../../utils/logger';
+import { VIDEO_STATUS } from '../../utils/status';
+import { ConfirmDialog, StatusPill, useToast } from '../ui';
 import ApprovalQueue from './ApprovalQueue';
+import CloudImportButton from './CloudImportButton';
+import ExportAndPostModal from './ExportAndPostModal';
+import ScheduleQueue from './ScheduleQueue';
+import useMediaMultiSelect from './shared/useMediaMultiSelect';
 
 /**
  * ContentLibrary - Shows all videos or slideshows created within a category
@@ -471,7 +471,7 @@ const ContentLibrary = ({
         setRenderProgress(0);
       }
     },
-    [renderingVideoId, onUpdateVideo],
+    [renderingVideoId, onUpdateVideo, toastError],
   );
 
   // UI-30: Confirm dialog for delete (supports single and bulk delete)

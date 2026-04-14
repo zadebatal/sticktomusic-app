@@ -1,10 +1,10 @@
-import React, { useState, forwardRef, useImperativeHandle } from 'react';
-import { doc, updateDoc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc } from 'firebase/firestore';
+import React, { forwardRef, useImperativeHandle, useState } from 'react';
 import {
   createArtist,
-  updateArtist,
   deleteArtist,
   setLastArtistId,
+  updateArtist,
 } from '../services/artistService';
 import log from '../utils/logger';
 

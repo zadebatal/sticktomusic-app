@@ -115,7 +115,7 @@ const processVideo = async (
     await ffmpeg.writeFile(inputName, await fetchFile(videoBlob));
 
     // Build FFmpeg command
-    let ffmpegArgs = ['-i', inputName];
+    const ffmpegArgs = ['-i', inputName];
 
     // Add audio input if available
     if (hasAudio) {
@@ -349,7 +349,7 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
     'video/webm',
   ];
 
-  let mimeType = mimeTypes.find((type) => MediaRecorder.isTypeSupported(type)) || 'video/webm';
+  const mimeType = mimeTypes.find((type) => MediaRecorder.isTypeSupported(type)) || 'video/webm';
   const isMP4Native = mimeType.includes('mp4');
   log(
     '[VideoExport] Using codec:',

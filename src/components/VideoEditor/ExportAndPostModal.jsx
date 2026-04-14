@@ -1,22 +1,22 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import { renderVideo, exportAsPreview } from '../../services/videoExportService';
-import { uploadVideo } from '../../services/firebaseStorage';
-import { EXPORT_STAGE } from '../../utils/status';
-import { useFocusTrap, useToast } from '../ui';
-import { openInFinder } from '../../services/localMediaService';
+import {
+  FeatherArrowLeft,
+  FeatherCopy,
+  FeatherDownload,
+  FeatherRefreshCw,
+  FeatherSend,
+  FeatherUploadCloud,
+  FeatherX,
+} from '@subframe/core';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { uploadVideo } from '../../services/firebaseStorage';
+import { openInFinder } from '../../services/localMediaService';
+import { exportAsPreview, renderVideo } from '../../services/videoExportService';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
-import {
-  FeatherX,
-  FeatherUploadCloud,
-  FeatherDownload,
-  FeatherCopy,
-  FeatherSend,
-  FeatherArrowLeft,
-  FeatherRefreshCw,
-} from '@subframe/core';
 import log from '../../utils/logger';
+import { EXPORT_STAGE } from '../../utils/status';
+import { useFocusTrap, useToast } from '../ui';
 
 /**
  * ExportAndPostModal - Modal for exporting and posting videos
@@ -45,14 +45,14 @@ const ExportAndPostModal = ({
   const alreadyExported = video?.postedUrl || video?.cloudUrl;
 
   // Check if video has valid clip URLs (not null/stripped by storage)
-  const hasValidClips = () => {
+  const hasValidClips = useCallback(() => {
     const clips = video?.clips || [];
     const selectedClips = video?.selectedClips || [];
     const allClips = [...clips, ...selectedClips];
     return allClips.some(
       (clip) => clip?.url && typeof clip.url === 'string' && clip.url.length > 0,
     );
-  };
+  }, [video]);
 
   // Export only (download locally)
   const handleExportOnly = useCallback(async () => {
@@ -108,7 +108,7 @@ const ExportAndPostModal = ({
       setError(err.message || 'Failed to export video');
       setStage(EXPORT_STAGE.OPTIONS);
     }
-  }, [video, category, toastSuccess]);
+  }, [video, category, toastSuccess, hasValidClips]);
 
   // Export and upload to Firebase
   const handleExportAndUpload = useCallback(async () => {
@@ -149,7 +149,7 @@ const ExportAndPostModal = ({
       setError(err.message || 'Failed to export or upload video');
       setStage(EXPORT_STAGE.OPTIONS);
     }
-  }, [video, onSchedulePost, category, onClose]);
+  }, [video, onSchedulePost, category, onClose, hasValidClips]);
 
   // Schedule post via Late API
   const handleSchedulePost = useCallback(async () => {

@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react';
 import { Command } from 'cmdk';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
+import React, { useEffect } from 'react';
 
 /**
  * CommandPalette — Cmd+K quick navigation using cmdk library.

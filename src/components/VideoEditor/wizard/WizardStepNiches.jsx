@@ -1,20 +1,21 @@
 /**
  * WizardStepNiches — Step 2: Multi-select niche formats
  */
-import React, { useMemo } from 'react';
-import { Button } from '../../../ui/components/Button';
-import { Badge } from '../../../ui/components/Badge';
+
 import {
-  FeatherCheck,
-  FeatherImage,
-  FeatherFilm,
-  FeatherPlay,
-  FeatherLayers,
   FeatherCamera,
-  FeatherUploadCloud,
+  FeatherCheck,
+  FeatherFilm,
+  FeatherImage,
+  FeatherLayers,
+  FeatherPlay,
   FeatherScissors,
+  FeatherUploadCloud,
 } from '@subframe/core';
+import React, { useMemo } from 'react';
 import { FORMAT_TEMPLATES } from '../../../services/libraryService';
+import { Badge } from '../../../ui/components/Badge';
+import { Button } from '../../../ui/components/Button';
 
 const FORMAT_ICONS = {
   montage: FeatherFilm,

@@ -1,5 +1,5 @@
-import { getFirebaseToken } from '../config/firebase';
 import { getFirestore } from 'firebase/firestore';
+import { getFirebaseToken } from '../config/firebase';
 import ensurePublicUrl from '../utils/ensurePublicUrl';
 import log from '../utils/logger';
 

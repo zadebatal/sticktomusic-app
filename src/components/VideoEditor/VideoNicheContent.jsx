@@ -1,70 +1,71 @@
 /**
  * VideoNicheContent — "Create [Format]" button + draft grid for video niches
  */
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import VideoPreviewLightbox from './shared/VideoPreviewLightbox';
-import MediaStatusBadge from '../ui/MediaStatusBadge';
-import ImportFromLibraryModal from './shared/ImportFromLibraryModal';
-import { Button } from '../../ui/components/Button';
-import { IconButton } from '../../ui/components/IconButton';
-import { Badge } from '../../ui/components/Badge';
+
 import {
-  FeatherPlay,
-  FeatherSquare,
-  FeatherImage,
-  FeatherFilm,
-  FeatherLayers,
   FeatherCamera,
-  FeatherPlus,
-  FeatherX,
-  FeatherEdit2,
   FeatherCheck,
-  FeatherType,
-  FeatherUpload,
-  FeatherDownloadCloud,
-  FeatherScissors,
-  FeatherLink,
-  FeatherMusic,
   FeatherChevronDown,
   FeatherChevronRight,
+  FeatherDownloadCloud,
+  FeatherEdit2,
+  FeatherFilm,
+  FeatherImage,
+  FeatherLayers,
+  FeatherLink,
   FeatherMic,
+  FeatherMusic,
+  FeatherPlay,
+  FeatherPlus,
+  FeatherScissors,
+  FeatherSquare,
   FeatherTrash2,
+  FeatherType,
+  FeatherUpload,
+  FeatherX,
 } from '@subframe/core';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
 import {
-  updateNicheAudioId,
-  updateNicheMediaOrder,
-  updateMediaTrimPoints,
-  addToVideoTextBank,
-  removeFromVideoTextBank,
-  addToLibraryAsync,
-  addToCollectionAsync,
-  getUserCollections,
-  addToProjectPool,
-  migrateToMediaBanks,
   addMediaBank,
-  removeMediaBank,
-  renameMediaBank,
-  removeFromMediaBank,
-  moveMediaBetweenBanks,
+  addToCollectionAsync,
+  addToLibraryAsync,
+  addToProjectPool,
+  addToVideoTextBank,
   assignToMediaBank,
   getBankColor,
+  getLyrics,
+  getUserCollections,
   MAX_MEDIA_BANKS,
+  migrateToMediaBanks,
+  moveMediaBetweenBanks,
+  removeFromMediaBank,
+  removeFromVideoTextBank,
+  removeMediaBank,
+  renameMediaBank,
   updateLibraryItemAsync,
+  updateMediaTrimPoints,
+  updateNicheAudioId,
+  updateNicheMediaOrder,
 } from '../../services/libraryService';
-import { getLyrics } from '../../services/libraryService';
-import useMediaMultiSelect from './shared/useMediaMultiSelect';
-import useDragReorder from './shared/useDragReorder';
-import QuickTrimPopover from './shared/QuickTrimPopover';
-import LyricBankSection from './shared/LyricBankSection';
-import AudioClipSelector from './AudioClipSelector';
-import WordTimeline from './WordTimeline';
-import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
-import { useToast, ConfirmDialog } from '../ui';
-import { isSearchAvailable, searchMedia } from '../../services/mediaSearchService';
 import { uploadLocalItemToCloud } from '../../services/localMediaService';
 import { backfillMissingDurations } from '../../services/mediaProbeService';
+import { isSearchAvailable, searchMedia } from '../../services/mediaSearchService';
+import { Badge } from '../../ui/components/Badge';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import { ConfirmDialog, useToast } from '../ui';
+import MediaStatusBadge from '../ui/MediaStatusBadge';
+import AudioClipSelector from './AudioClipSelector';
 import { bucketByDuration } from './shared/editorConstants';
+import ImportFromLibraryModal from './shared/ImportFromLibraryModal';
+import LyricBankSection from './shared/LyricBankSection';
+import QuickTrimPopover from './shared/QuickTrimPopover';
+import useDragReorder from './shared/useDragReorder';
+import useMediaMultiSelect from './shared/useMediaMultiSelect';
+import VideoPreviewLightbox from './shared/VideoPreviewLightbox';
+import WordTimeline from './WordTimeline';
 
 const FORMAT_ICONS = {
   montage: FeatherFilm,
@@ -118,7 +119,10 @@ const VideoNicheContent = ({
   const [renameValue, setRenameValue] = useState('');
   // Use external state if provided (lifted to parent), otherwise internal
   const selectedBankIds = externalSelectedBankIds !== undefined ? externalSelectedBankIds : null;
-  const setSelectedBankIds = onSelectedMediaBankIdsChange || (() => {});
+  const setSelectedBankIds = useMemo(
+    () => onSelectedMediaBankIdsChange || (() => {}),
+    [onSelectedMediaBankIdsChange],
+  );
 
   // Multi-select state for bank media (selection scoped to one bank at a time)
   const [bankSelectedIds, setBankSelectedIds] = useState(new Set());
@@ -510,7 +514,14 @@ const VideoNicheContent = ({
         toastError(`Transcription failed: ${err.message}`);
       }
     }
-  }, [selectedAudio, analyzeAudio, toastSuccess, toastError]);
+  }, [
+    selectedAudio,
+    analyzeAudio,
+    toastSuccess,
+    toastError,
+    postProcessWords,
+    refineWordsWithEnergy,
+  ]);
 
   // Per-track transcribe — select audio then transcribe via WordTimeline
   const handleTranscribeTrack = useCallback(
@@ -707,7 +718,7 @@ const VideoNicheContent = ({
 
   // Migrate niche to mediaBanks format
   const migratedNiche = useMemo(() => (niche ? migrateToMediaBanks(niche) : niche), [niche]);
-  const mediaBanks = migratedNiche?.mediaBanks || [];
+  const mediaBanks = useMemo(() => migratedNiche?.mediaBanks || [], [migratedNiche?.mediaBanks]);
 
   // All niche media (images + videos) for the grid
   const nicheMedia = useMemo(() => {
@@ -722,7 +733,7 @@ const VideoNicheContent = ({
     if (mediaBanks.length > 0 && selectedBankIds === null) {
       setSelectedBankIds(new Set(mediaBanks.map((b) => b.id)));
     }
-  }, [mediaBanks, selectedBankIds]);
+  }, [mediaBanks, selectedBankIds, setSelectedBankIds]);
 
   // Notify parent whenever clip selection changes (so the parent's Create button can use it)
   useEffect(() => {
@@ -988,7 +999,7 @@ const VideoNicheContent = ({
         return next;
       });
     },
-    [mediaBanks],
+    [mediaBanks, setSelectedBankIds],
   );
 
   // Add new media bank handler
@@ -1037,7 +1048,7 @@ const VideoNicheContent = ({
         },
       });
     },
-    [artistId, niche, db, onRefreshCollections],
+    [artistId, niche, db, onRefreshCollections, setSelectedBankIds],
   );
 
   // Remove item from bank + niche entirely in one atomic write
@@ -1172,7 +1183,7 @@ const VideoNicheContent = ({
         toastError(`Failed to use trimmed audio: ${err.message}`);
       }
     },
-    [niche, artistId, db, selectedAudio, toastSuccess, toastError],
+    [niche, artistId, db, selectedAudio, toastSuccess, toastError, trimAudioTarget?.name],
   );
 
   // Single tile renderer — used by both flat grid and duration-bucketed grid
@@ -1423,9 +1434,7 @@ const VideoNicheContent = ({
                 // only bank.
                 const legacyDefaultBankId = `mb_${(niche?.id || 'default').slice(0, 12)}`;
                 const isLegacyDefaultBank = (bank) =>
-                  bank?.name === 'All Media' &&
-                  bank?.id === legacyDefaultBankId &&
-                  mediaBanks.length === 1;
+                  bank?.name === 'All Media' && bank?.id === legacyDefaultBankId;
                 const visibleMediaBanks = mediaBanks.filter((b) => !isLegacyDefaultBank(b));
 
                 // Canonical count: library-resolved, audio-excluded. Same denominator
@@ -1641,8 +1650,8 @@ const VideoNicheContent = ({
                               : canonicalAllMediaCount}
                           </Badge>
                           <span className="text-caption font-caption text-neutral-500">
-                            {visibleMediaBanks.length === 0
-                              ? 'No banks yet · use + Add Bank to organize · double-click to preview'
+                            {canonicalAllMediaCount === 0
+                              ? 'Upload or import media to get started'
                               : 'Union of all banks · double-click to preview · click to select'}
                           </span>
                         </>
@@ -1843,16 +1852,50 @@ const VideoNicheContent = ({
                         </span>
                       </div>
                     ) : (
-                      <div
-                        className="flex items-center justify-center rounded-lg border-2 border-dashed py-6 cursor-pointer transition-colors"
-                        style={{ borderColor: activeColor.border }}
-                        onClick={() => activeBank && onUploadToMediaBank?.(activeBank.id)}
-                      >
-                        <span className="text-caption font-caption text-neutral-500">
-                          {activeBank
-                            ? 'Drop media here or click to upload'
-                            : 'No media yet — switch to a bank to add some'}
-                        </span>
+                      <div className="flex flex-col items-center justify-center gap-4 py-14">
+                        <div className="w-14 h-14 rounded-2xl bg-zinc-800/60 flex items-center justify-center">
+                          <svg
+                            className="w-7 h-7 text-zinc-500"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={1.5}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z"
+                            />
+                          </svg>
+                        </div>
+                        <div className="text-center">
+                          <h3 className="text-base font-semibold text-white mb-1">
+                            Add media to get started
+                          </h3>
+                          <p className="text-sm text-zinc-400 max-w-xs">
+                            Upload clips, photos, or audio — or import from your library
+                          </p>
+                        </div>
+                        <div className="flex gap-3">
+                          <button
+                            type="button"
+                            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium cursor-pointer transition-colors"
+                            onClick={() =>
+                              activeBank
+                                ? onUploadToMediaBank?.(activeBank.id)
+                                : onUploadToMediaBank?.(mediaBanks[0]?.id)
+                            }
+                          >
+                            Upload Media
+                          </button>
+                          <button
+                            type="button"
+                            className="px-4 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium cursor-pointer transition-colors"
+                            onClick={() => setShowImportModal(true)}
+                          >
+                            Import from Library
+                          </button>
+                        </div>
                       </div>
                     )}
                   </>

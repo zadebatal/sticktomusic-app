@@ -14,7 +14,7 @@
  *
  * Only renders when running in Electron (window.electronAPI?.isElectron).
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
 
 const UpdateBanner = () => {

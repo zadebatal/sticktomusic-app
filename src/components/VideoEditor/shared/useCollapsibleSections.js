@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
 import { FeatherChevronDown } from '@subframe/core';
+import React, { useCallback, useState } from 'react';
 
 /**
  * useCollapsibleSections — shared hook for collapsible sidebar sections.

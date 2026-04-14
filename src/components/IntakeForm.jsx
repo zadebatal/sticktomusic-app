@@ -1,5 +1,5 @@
+import { addDoc, collection } from 'firebase/firestore';
 import React, { useState } from 'react';
-import { collection, addDoc } from 'firebase/firestore';
 import { toast as sonnerToast } from 'sonner';
 import log from '../utils/logger';
 

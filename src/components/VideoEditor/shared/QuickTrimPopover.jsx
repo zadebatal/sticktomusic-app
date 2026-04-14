@@ -2,10 +2,11 @@
  * QuickTrimPopover — Small popover for per-clip in/out trim points.
  * Shows mini video thumbnail, draggable in/out handles, and preview button.
  */
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { FeatherPlay, FeatherCheck, FeatherX } from '@subframe/core';
-import { IconButton } from '../../../ui/components/IconButton';
+
+import { FeatherCheck, FeatherPlay, FeatherX } from '@subframe/core';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '../../../ui/components/Button';
+import { IconButton } from '../../../ui/components/IconButton';
 
 const POPOVER_WIDTH = 280;
 

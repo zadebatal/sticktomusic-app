@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
-import { Button } from '../ui/components/Button';
 import { getTierForSets } from '../services/subscriptionService';
+import { Button } from '../ui/components/Button';
 
 /**
  * OnboardingWizard — First-run modal wizard, role-specific.
