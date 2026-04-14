@@ -134,6 +134,48 @@ export const isCollectionPendingDeletion = (id) => pendingDeletionMap.has(id);
 export const getPendingDeletionIds = () => [...pendingDeletionMap.keys()];
 
 // ============================================================================
+// DELETION TOMBSTONES — persistent markers that survive pending-deletion cleanup
+// When a collection is deleted, a tombstone is written to localStorage so the
+// resurrection path (subscribeToCollections empty-Firestore branch) never
+// re-uploads it. Tombstones auto-expire after 30 days.
+// ============================================================================
+const TOMBSTONE_PREFIX = 'stm_deleted_collections_';
+const TOMBSTONE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+export const markCollectionDeleted = (artistId, collectionId) => {
+  if (!artistId || !collectionId) return;
+  const key = TOMBSTONE_PREFIX + artistId;
+  try {
+    const raw = localStorage.getItem(key);
+    const tombstones = raw ? JSON.parse(raw) : {};
+    tombstones[collectionId] = Date.now();
+    localStorage.setItem(key, JSON.stringify(tombstones));
+  } catch {}
+};
+
+export const getDeletedCollectionIds = (artistId) => {
+  if (!artistId) return new Set();
+  const key = TOMBSTONE_PREFIX + artistId;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return new Set();
+    const tombstones = JSON.parse(raw);
+    const now = Date.now();
+    const live = {};
+    for (const [id, ts] of Object.entries(tombstones)) {
+      if (now - ts < TOMBSTONE_TTL_MS) live[id] = ts;
+    }
+    // Prune expired tombstones on read
+    if (Object.keys(live).length !== Object.keys(tombstones).length) {
+      localStorage.setItem(key, JSON.stringify(live));
+    }
+    return new Set(Object.keys(live));
+  } catch {
+    return new Set();
+  }
+};
+
+// ============================================================================
 // RECENT COLLECTION WRITES (protects against subscription overwriting fresh data)
 // The subscription handler reads Firestore + localStorage, but the Firestore data
 // may be stale. If addToCollection/assignToBank wrote to localStorage between
@@ -888,6 +930,7 @@ export const deleteCollection = (artistId, collectionId, db = null) => {
   saveLibrary(artistId, library);
 
   saveCollections(artistId, filtered);
+  markCollectionDeleted(artistId, collectionId);
   if (db) {
     deleteCollectionFromFirestore(db, artistId, collectionId).catch(log.error);
     // Cascade-delete any scheduled posts that referenced this collection/niche.
@@ -3519,14 +3562,23 @@ export const subscribeToCollections = (db, artistId, callback) => {
           }
         } else {
           // Firestore empty — check localStorage and upload if data exists
+          // Filter out tombstoned (previously deleted) collections to prevent resurrection
+          const tombstones = getDeletedCollectionIds(artistId);
           const localCollections = getCollections(artistId);
           const userCollections = localCollections.filter(
-            (c) => c.type !== 'smart' && !c.id?.startsWith('smart_'),
+            (c) => c.type !== 'smart' && !c.id?.startsWith('smart_') && !tombstones.has(c.id),
           );
 
           if (userCollections.length > 0) {
             // Upload local collections to Firestore (including banks)
             // Must use saveCollectionToFirestore to serialize nested arrays as JSON strings
+            log(
+              '[Collections] Uploading',
+              userCollections.length,
+              'local collections to Firestore (skipped',
+              tombstones.size,
+              'tombstoned)',
+            );
             userCollections.forEach((col) => {
               saveCollectionToFirestore(db, artistId, col).catch(log.error);
             });
@@ -3709,6 +3761,9 @@ export const updateCollectionAsync = async (db, artistId, collectionId, updates)
  * @returns {Promise<boolean>} Success
  */
 export const deleteCollectionAsync = async (db, artistId, collectionId) => {
+  // Write tombstone FIRST so the resurrection path can never re-upload this
+  markCollectionDeleted(artistId, collectionId);
+
   // Delete from localStorage (may be a no-op if collection isn't cached locally —
   // e.g. when the project was loaded purely via Firestore subscription)
   const localResult = deleteCollection(artistId, collectionId);
