@@ -972,7 +972,7 @@ const VideoEditorModal = ({
         }, 100);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line
   }, [selectedAudio, analyzeAudio, setDuration]);
 
   // Waveform data via shared hook
