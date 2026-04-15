@@ -88,6 +88,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isOnboardingComplete: () => ipcRenderer.invoke('is-onboarding-complete'),
   setOnboardingComplete: (value) => ipcRenderer.invoke('set-onboarding-complete', value),
 
+  // ── Madmom Beat Detection (Python RNN) ──
+  madmomAvailable: () => ipcRenderer.invoke('madmom-available'),
+  madmomBeats: (audioPath, startTime, endTime) => ipcRenderer.invoke('madmom-beats', audioPath, startTime, endTime),
+
   // ── Local yt-dlp Download ──
   ytdlpAvailable: () => ipcRenderer.invoke('ytdlp-available'),
   ytdlpDownload: (url, outputDir, options) => ipcRenderer.invoke('ytdlp-download', url, outputDir, options),

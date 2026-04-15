@@ -63,3 +63,4 @@ dogfood-output/
 # Dev tool artifacts
 .playwright-mcp/
 viz-links.png
+electron/python-env/

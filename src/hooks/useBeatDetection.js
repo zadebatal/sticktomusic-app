@@ -51,8 +51,8 @@ export const useBeatDetection = () => {
   const [error, setError] = useState(null);
 
   /**
-   * Analyze audio file or URL for beats using Essentia.js BeatTrackerMultiFeature.
-   * Returns actual beat positions from the audio — not generated from BPM.
+   * Analyze audio for beats. Tries madmom (Python RNN, best accuracy) first
+   * via Electron IPC, then falls back to Essentia.js WASM in the browser.
    * @param {File|Blob|string} audioSource - File object, Blob, or URL string
    */
   const analyzeAudio = useCallback(async (audioSource) => {
@@ -60,6 +60,48 @@ export const useBeatDetection = () => {
     setError(null);
 
     try {
+      // ── Primary: madmom via Electron IPC (RNN + DBN, best accuracy) ──
+      if (
+        typeof audioSource === 'string' &&
+        !audioSource.startsWith('blob:') &&
+        !audioSource.startsWith('http') &&
+        window.electronAPI?.madmomAvailable
+      ) {
+        try {
+          const madmomOk = await window.electronAPI.madmomAvailable();
+          if (madmomOk) {
+            // Convert localhost URL to file path for madmom
+            let filePath = audioSource;
+            if (audioSource.startsWith('http://localhost')) {
+              filePath = decodeURIComponent(
+                audioSource.replace(/^http:\/\/localhost:\d+\/local-media\//, '/Users/'),
+              );
+            }
+            log('[BeatDetection] Using madmom (Python RNN)...');
+            const result = await window.electronAPI.madmomBeats(filePath);
+            const beatTimestamps = result.beats || [];
+
+            // Ensure beats start at 0
+            if (beatTimestamps.length > 0 && beatTimestamps[0] > 0.05) {
+              beatTimestamps.unshift(0);
+            }
+
+            setBpm(result.bpm || 120);
+            setBeats(beatTimestamps);
+            setIsAnalyzing(false);
+
+            log(
+              `[BeatDetection] madmom complete: ${result.bpm} BPM, ${beatTimestamps.length} beats`,
+            );
+            return { bpm: result.bpm, beats: beatTimestamps };
+          }
+        } catch (madmomErr) {
+          log.warn('[BeatDetection] madmom failed, falling back to Essentia:', madmomErr.message);
+          // Fall through to Essentia
+        }
+      }
+
+      // ── Fallback: Essentia.js WASM (browser-side) ──
       // Create audio context and decode
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
       let arrayBuffer;

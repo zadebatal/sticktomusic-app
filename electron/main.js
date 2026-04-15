@@ -833,6 +833,59 @@ ipcMain.handle('ytdlp-available', () => {
   return getYtdlpPath() !== null;
 });
 
+// ── IPC: Beat detection via madmom (Python RNN + DBN) ──
+function getMadmomPythonPath() {
+  // Bundled venv in electron/python-env
+  const venvPython = path.join(__dirname, 'python-env', 'bin', 'python3');
+  if (fs.existsSync(venvPython)) return venvPython;
+  // Fallback: system python with madmom installed
+  try {
+    const systemPython = require('child_process').execSync('which python3').toString().trim();
+    if (systemPython) return systemPython;
+  } catch {}
+  return null;
+}
+
+ipcMain.handle('madmom-available', () => {
+  return getMadmomPythonPath() !== null;
+});
+
+ipcMain.handle('madmom-beats', async (_event, audioPath, startTime, endTime) => {
+  const pythonPath = getMadmomPythonPath();
+  if (!pythonPath) throw new Error('Python not found for madmom beat detection');
+
+  const scriptPath = path.join(__dirname, 'beat-detect.py');
+  if (!fs.existsSync(scriptPath)) throw new Error('beat-detect.py not found');
+
+  const args = [scriptPath, audioPath];
+  if (startTime !== undefined && startTime !== null) args.push('--start', String(startTime));
+  if (endTime !== undefined && endTime !== null) args.push('--end', String(endTime));
+
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process');
+    const proc = spawn(pythonPath, args, { timeout: 120000 });
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (d) => { stdout += d.toString(); });
+    proc.stderr.on('data', (d) => { stderr += d.toString(); });
+
+    proc.on('close', (code) => {
+      if (code !== 0) return reject(new Error(stderr.slice(-500) || 'madmom process failed'));
+      try {
+        const result = JSON.parse(stdout.trim());
+        if (result.error) return reject(new Error(result.error));
+        console.log(`[madmom] ${result.beats.length} beats, ${result.bpm} BPM`);
+        resolve(result);
+      } catch {
+        reject(new Error('Failed to parse madmom output'));
+      }
+    });
+
+    proc.on('error', (err) => reject(err));
+  });
+});
+
 // Self-update the userData copy via `yt-dlp -U`. Safe because the userData
 // copy isn't part of the code-signed bundle. Returns the new version string
 // or throws on failure.
