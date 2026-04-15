@@ -114,9 +114,29 @@ export async function isLocalDownloadAvailable() {
 export async function getLocalVideoInfo(url) {
   if (!isElectron()) throw new Error('Local download not available');
   const info = await window.electronAPI.ytdlpInfo(url);
+  const platform = detectPlatform(url)?.name || 'Unknown';
+
+  // Profile/playlist — IPC returns { _type: 'playlist', entries: [...] }
+  if (info._type === 'playlist' && info.entries?.length > 0) {
+    return {
+      type: 'playlist',
+      platform,
+      title: info.title || 'Profile',
+      itemCount: info.entries.length,
+      items: info.entries.map((entry) => ({
+        id: entry.id || entry.display_id,
+        title: entry.title || 'Untitled',
+        thumbnail: entry.thumbnail,
+        duration: entry.duration,
+        url: entry.webpage_url || entry.original_url,
+      })),
+    };
+  }
+
+  // Single video
   return {
     type: 'video',
-    platform: detectPlatform(url)?.name || 'Unknown',
+    platform,
     title: info.title || 'Untitled',
     thumbnail: info.thumbnail,
     duration: info.duration,

@@ -982,9 +982,20 @@ ipcMain.handle('ytdlp-info', async (_event, url) => {
   const ytdlp = getYtdlpPath();
   if (!ytdlp) throw new Error('yt-dlp not found');
 
+  // Detect profile/channel URLs — limit to first 30 items to avoid timeout
+  const isProfile = /tiktok\.com\/@[\w.]+\/?$/i.test(url)
+    || /youtube\.com\/(c\/|channel\/|@|playlist\?)/i.test(url)
+    || /instagram\.com\/[\w.]+\/?$/i.test(url);
+
+  const args = ['--dump-json', '--no-download', '--no-warnings'];
+  if (isProfile) args.push('--playlist-items', '1:30');
+  args.push(url);
+
+  const timeout = isProfile ? 90000 : 30000;
+
   return new Promise((resolve, reject) => {
     const { spawn } = require('child_process');
-    const proc = spawn(ytdlp, ['--dump-json', '--no-download', '--no-warnings', url]);
+    const proc = spawn(ytdlp, args);
     let stdout = '';
     let stderr = '';
 
@@ -994,13 +1005,29 @@ ipcMain.handle('ytdlp-info', async (_event, url) => {
     proc.on('close', (code) => {
       if (code !== 0) return reject(new Error(stderr.slice(-200)));
       try {
-        resolve(JSON.parse(stdout));
+        // Profile pages output one JSON object per line (one per video)
+        const lines = stdout.trim().split('\n').filter(Boolean);
+        if (lines.length === 1) {
+          resolve(JSON.parse(lines[0]));
+        } else {
+          // Multiple items — wrap as a playlist-style response
+          const items = lines.map(line => {
+            try { return JSON.parse(line); } catch { return null; }
+          }).filter(Boolean);
+          resolve({
+            _type: 'playlist',
+            type: 'playlist',
+            title: items[0]?.playlist_title || items[0]?.channel || 'Profile',
+            entries: items,
+            itemCount: items.length,
+          });
+        }
       } catch {
         reject(new Error('Failed to parse video info'));
       }
     });
 
-    setTimeout(() => { proc.kill(); reject(new Error('Info fetch timed out')); }, 30000);
+    setTimeout(() => { proc.kill(); reject(new Error('Info fetch timed out')); }, timeout);
   });
 });
 
