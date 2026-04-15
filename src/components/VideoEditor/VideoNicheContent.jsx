@@ -110,6 +110,7 @@ const VideoNicheContent = ({
   const [textBankInput1, setTextBankInput1] = useState('');
   const [textBankInput2, setTextBankInput2] = useState('');
   const [lightboxItem, setLightboxItem] = useState(null);
+  const displayedMediaRef = useRef([]);
   const [trimItemId, setTrimItemId] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
 
@@ -1434,6 +1435,7 @@ const VideoNicheContent = ({
                   (item) => scopedMediaIds.has(item.id) && item.type !== 'audio',
                 );
                 const activeBankMedia = filterBankMedia(activeBankMediaAll);
+                displayedMediaRef.current = activeBankMedia;
                 const activeBankIsRenaming = activeBank && renamingBankId === activeBank.id;
                 // Pseudo-bank object for renderBankTile when in 'all' mode
                 const tileBank = activeBank || { id: '__all__' };
@@ -2629,14 +2631,16 @@ const VideoNicheContent = ({
         }}
         onPrev={(() => {
           if (!lightboxItem) return undefined;
-          const idx = nicheMedia.findIndex((m) => m.id === lightboxItem.id);
-          return idx > 0 ? () => setLightboxItem(nicheMedia[idx - 1]) : undefined;
+          const list = displayedMediaRef.current;
+          const idx = list.findIndex((m) => m.id === lightboxItem.id);
+          return idx > 0 ? () => setLightboxItem(list[idx - 1]) : undefined;
         })()}
         onNext={(() => {
           if (!lightboxItem) return undefined;
-          const idx = nicheMedia.findIndex((m) => m.id === lightboxItem.id);
-          return idx >= 0 && idx < nicheMedia.length - 1
-            ? () => setLightboxItem(nicheMedia[idx + 1])
+          const list = displayedMediaRef.current;
+          const idx = list.findIndex((m) => m.id === lightboxItem.id);
+          return idx >= 0 && idx < list.length - 1
+            ? () => setLightboxItem(list[idx + 1])
             : undefined;
         })()}
       />
