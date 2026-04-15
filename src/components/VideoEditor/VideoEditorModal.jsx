@@ -893,6 +893,9 @@ const VideoEditorModal = ({
     return normalizeBeatsToTrimRange(beats, audioStartTime, audioEndTime);
   }, [beats, audioStartTime, audioEndTime]);
 
+  // Track which audio has already been analyzed to prevent re-analysis on undo
+  const lastAnalyzedAudioRef = useRef(null);
+
   // Load audio and analyze beats (skip beat analysis for source video audio)
   useEffect(() => {
     if (selectedAudio?.url || selectedAudio?.localUrl) {
@@ -914,7 +917,10 @@ const VideoEditorModal = ({
           log('[VideoEditorModal] Using cloud URL for beat detection');
         }
 
-        if (audioSource) {
+        // Only analyze if this is a different audio source (skip on undo/redo)
+        const audioKey = typeof audioSource === 'string' ? audioSource : audioSource?.name || '';
+        if (audioSource && audioKey !== lastAnalyzedAudioRef.current) {
+          lastAnalyzedAudioRef.current = audioKey;
           analyzeAudio(audioSource).catch((err) => {
             log.error('Beat analysis failed:', err);
           });
@@ -2254,6 +2260,24 @@ const VideoEditorModal = ({
       }
 
       const newClips = [];
+
+      // Fill gap from 0 to first selected beat (prevents dead space)
+      if (selectedBeatTimes[0] > 0.05) {
+        const gapDuration = selectedBeatTimes[0];
+        const randomClip = availableClips[Math.floor(Math.random() * availableClips.length)];
+        newClips.push({
+          id: `clip_${Date.now()}_prefill`,
+          sourceId: randomClip.id,
+          url: randomClip.url,
+          localUrl: randomClip.localUrl,
+          thumbnail: randomClip.thumbnail,
+          startTime: 0,
+          duration: gapDuration,
+          locked: false,
+          sourceOffset: 0,
+          beatSpaced: true,
+        });
+      }
 
       // Create clips for each selected beat — only pick clips long enough for the gap
       for (let i = 0; i < selectedBeatTimes.length; i++) {
