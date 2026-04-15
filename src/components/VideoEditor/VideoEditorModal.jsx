@@ -1,91 +1,89 @@
-import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo, Suspense } from 'react';
 import { useBeatDetection } from '../../hooks/useBeatDetection';
+import WordTimeline from './WordTimeline';
 import BeatSelector from './BeatSelector';
-import LyricBank from './LyricBank';
 import MomentumSelector from './MomentumSelector';
+import LyricBank from './LyricBank';
 import LyricBankSection from './shared/LyricBankSection';
 import TemplatePicker from './TemplatePicker';
-import WordTimeline from './WordTimeline';
-
 const SoloClipEditor = React.lazy(() => import('./SoloClipEditor'));
 const MultiClipEditor = React.lazy(() => import('./MultiClipEditor'));
 const PhotoMontageEditor = React.lazy(() => import('./PhotoMontageEditor'));
 const ClipperEditor = React.lazy(() => import('./ClipperEditor'));
-
-import {
-  FeatherAlignCenter,
-  FeatherAlignLeft,
-  FeatherAlignRight,
-  FeatherChevronUp,
-  FeatherDatabase,
-  FeatherMaximize2,
-  FeatherMic,
-  FeatherMusic,
-  FeatherPause,
-  FeatherPlay,
-  FeatherPlus,
-  FeatherRefreshCw,
-  FeatherScissors,
-  FeatherStar,
-  FeatherTrash2,
-  FeatherUpload,
-  FeatherVolume2,
-  FeatherVolumeX,
-  FeatherX,
-  FeatherZoomIn,
-  FeatherZoomOut,
-} from '@subframe/core';
-import { useTheme } from '../../contexts/ThemeContext';
+import AudioClipSelector from './AudioClipSelector';
+import CloudImportButton from './CloudImportButton';
+import WordPreview from './shared/WordPreview';
+import InlineWordsRow from './shared/InlineWordsRow';
+import WordBoundaryLines from './shared/WordBoundaryLines';
+import useWordBoundaryDrag from './shared/useWordBoundaryDrag';
 import useEditorHistory from '../../hooks/useEditorHistory';
-import useIsMobile from '../../hooks/useIsMobile';
 import useWaveform from '../../hooks/useWaveform';
+import { saveApiKey, loadApiKey } from '../../services/storageService';
+import { EmptyState as SharedEmptyState, useToast } from '../ui';
 import {
-  addToTextBank,
-  getCollections,
-  getLibrary,
-  getLyrics,
-  getTextBankStyle,
-  getTextBankText,
   incrementUseCount,
-  MEDIA_TYPES,
-  subscribeToCollections,
-  subscribeToLibrary,
+  getLibrary,
+  getCollections,
+  getLyrics,
   subscribeToLyrics,
+  subscribeToLibrary,
+  subscribeToCollections,
+  addToTextBank,
   updateTextBankEntry,
+  MEDIA_TYPES,
+  getTextBankText,
+  getTextBankStyle,
 } from '../../services/libraryService';
-import { loadApiKey, saveApiKey } from '../../services/storageService';
-import { Badge } from '../../ui/components/Badge';
+import {
+  getTrimHash,
+  getTrimBoundaries,
+  validateLocalTimeData,
+  normalizeWordsToTrimRange,
+  normalizeBeatsToTrimRange,
+} from '../../utils/timelineNormalization';
+import log from '../../utils/logger';
+import useIsMobile from '../../hooks/useIsMobile';
+import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
-import log from '../../utils/logger';
+import { Badge } from '../../ui/components/Badge';
 import {
-  getTrimBoundaries,
-  getTrimHash,
-  normalizeBeatsToTrimRange,
-  normalizeWordsToTrimRange,
-  validateLocalTimeData,
-} from '../../utils/timelineNormalization';
-import { EmptyState as SharedEmptyState, useToast } from '../ui';
-import AudioClipSelector from './AudioClipSelector';
-import CloudImportButton from './CloudImportButton';
-import EditorFooter from './shared/EditorFooter';
+  FeatherX,
+  FeatherPlay,
+  FeatherPause,
+  FeatherVolume2,
+  FeatherVolumeX,
+  FeatherMaximize2,
+  FeatherPlus,
+  FeatherTrash2,
+  FeatherScissors,
+  FeatherRefreshCw,
+  FeatherChevronUp,
+  FeatherZoomIn,
+  FeatherZoomOut,
+  FeatherStar,
+  FeatherMusic,
+  FeatherUpload,
+  FeatherDatabase,
+  FeatherMic,
+  FeatherAlignLeft,
+  FeatherAlignCenter,
+  FeatherAlignRight,
+} from '@subframe/core';
+import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
 import EditorShell from './shared/EditorShell';
 import EditorTopBar from './shared/EditorTopBar';
-import {
-  buildStroke,
-  getAvailableFonts,
-  initCustomFonts,
-  parseStroke,
-  saveCustomFont,
-} from './shared/editorConstants';
-import InlineWordsRow from './shared/InlineWordsRow';
-import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
+import EditorFooter from './shared/EditorFooter';
 import useCollapsibleSections from './shared/useCollapsibleSections';
 import useUnsavedChanges from './shared/useUnsavedChanges';
-import useWordBoundaryDrag from './shared/useWordBoundaryDrag';
-import WordBoundaryLines from './shared/WordBoundaryLines';
-import WordPreview from './shared/WordPreview';
+import {
+  parseStroke,
+  buildStroke,
+  getAvailableFonts,
+  saveCustomFont,
+  initCustomFonts,
+} from './shared/editorConstants';
 
 // Default text style used for template initialization and recovery fallback
 const DEFAULT_TEXT_STYLE = {
@@ -367,7 +365,6 @@ const VideoEditorModal = ({
   });
 
   // Reset history when switching video variations
-  // biome-ignore lint/correctness/useExhaustiveDependencies: activeVideoIndex is intentionally in deps to trigger reset on variation switch
   useEffect(() => {
     resetHistory();
   }, [activeVideoIndex, resetHistory]);
@@ -391,7 +388,6 @@ const VideoEditorModal = ({
   );
 
   // Auto-select source video audio when clips exist — skip the audio picker screen
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally mount-only — reads initial props once
   useEffect(() => {
     if (!selectedAudio && category?.videos?.length > 0) {
       const firstVideo = category.videos[0];
@@ -406,10 +402,9 @@ const VideoEditorModal = ({
         });
       }
     }
-  }, []); // Run once on mount
+  }, []); // Run once on mount — intentionally empty deps
 
   // Auto-populate timeline with collection/library videos on first open
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally mount-only — reads initial props once
   useEffect(() => {
     if (
       (!existingVideo || existingVideo._nicheGenerateCount) &&
@@ -590,7 +585,7 @@ const VideoEditorModal = ({
       });
       return true;
     },
-    [artistId, sidebarCollections, category?.id, db],
+    [artistId, sidebarCollections, category?.id],
   );
 
   // Text state (lyrics/words derived from allVideos above)
@@ -791,7 +786,7 @@ const VideoEditorModal = ({
 
       previousTrimHashRef.current = currentHash;
     }
-  }, [selectedAudio, duration, words.length, clips.length, setLyrics, setWords]);
+  }, [selectedAudio, duration, words.length, clips.length]);
 
   // Auto-probe clip durations via ffprobe (Electron) or video element (web)
   const probedClipsRef = useRef(new Set());
@@ -972,7 +967,7 @@ const VideoEditorModal = ({
         }, 100);
       }
     }
-  }, [selectedAudio, analyzeAudio, setDuration, totalClipDuration]);
+  }, [selectedAudio, analyzeAudio]);
 
   // Waveform data via shared hook
   const { waveformData, clipWaveforms, waveformSource } = useWaveform({
@@ -1025,7 +1020,7 @@ const VideoEditorModal = ({
       const barCount = Math.max(4, Math.round(clipWidthPx / 3));
       return downsample(data, barCount);
     });
-  }, [clips, clipWaveforms, downsample, pxPerSec]);
+  }, [clips, clipWaveforms, downsample, pxPerSec, timelineScale]);
 
   // Total clip duration — use the furthest clip end position (supports gaps from free-move)
   const totalClipDuration = useMemo(() => {
@@ -1108,7 +1103,6 @@ const VideoEditorModal = ({
   const playStartRef = useRef(null); // wall-clock start time for fallback
   const playOffsetRef = useRef(0); // currentTime when play was pressed
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: currentTime is read once at play start (playOffsetRef) and updated via rAF — adding it would restart the animation loop every frame
   useEffect(() => {
     const startBoundary = selectedAudio?.startTime || 0;
     const endBoundary =
@@ -1191,6 +1185,7 @@ const VideoEditorModal = ({
         cancelAnimationFrame(animationRef.current);
       }
     };
+    // eslint-disable-next-line
   }, [isPlaying, selectedAudio, duration, totalClipDuration]);
 
   // Sync hidden video elements — seeking + play/pause (canvas handles display)
@@ -1225,7 +1220,7 @@ const VideoEditorModal = ({
         }
       }
     }
-  }, [currentClip, currentTime, isPlaying, slipEdit?.active]);
+  }, [currentClip, currentTime, isPlaying, clips, slipEdit?.active]);
 
   // Canvas rendering loop — draw active video frame to canvas every animation frame
   useEffect(() => {
@@ -1305,7 +1300,7 @@ const VideoEditorModal = ({
     };
     rafId = requestAnimationFrame(drawFrame);
     return () => cancelAnimationFrame(rafId);
-  }, [currentClip, currentTime]);
+  }, [currentClip, currentTime, clips]);
 
   // Handlers - MUST be defined before useEffect that references them (TDZ fix)
   const handleSeek = useCallback(
@@ -1452,7 +1447,15 @@ const VideoEditorModal = ({
         newInactive.load();
       }
     }
-  }, [currentClip, getClipUrl, isPlaying, clips]);
+  }, [
+    currentClip?.url,
+    currentClip?.id,
+    currentClip?.sourceId,
+    currentClip?.localUrl,
+    getClipUrl,
+    isPlaying,
+    clips,
+  ]);
 
   // Preload clip videos as blob URLs — current clip first, then rest sequentially
   // Prioritizes current clip so it loads fastest, avoids bandwidth contention
@@ -1656,7 +1659,6 @@ const VideoEditorModal = ({
     [
       existingVideo,
       selectedAudio,
-      setSelectedAudio,
       clips,
       words,
       textOverlays,
@@ -1664,8 +1666,6 @@ const VideoEditorModal = ({
       textStyle,
       cropMode,
       duration,
-      timelineDuration,
-      totalClipDuration,
       bpm,
       userMaxDuration,
       sourceVideoMuted,
@@ -1767,8 +1767,6 @@ const VideoEditorModal = ({
     editingTextId,
     removeTextOverlay,
     selectedClips,
-    setClips,
-    showAudioTrimmer,
   ]);
 
   // Prevent background scroll when modal is open (P0-UI-04)
@@ -1981,7 +1979,7 @@ const VideoEditorModal = ({
       // Shuffle the source pool, then slot into the fixed timing skeleton
       const shuffledSources = shuffle(allSourcePool);
 
-      const genClips = timingSkeleton.map((slot, idx) => {
+      let genClips = timingSkeleton.map((slot, idx) => {
         const source = shuffledSources[idx % shuffledSources.length];
         return {
           id: `clip_${Date.now()}_${g}_${Math.random().toString(36).slice(2)}`,
@@ -2296,7 +2294,7 @@ const VideoEditorModal = ({
       setSelectedClips([]);
       setShowBeatSelector(false);
     },
-    [category?.videos, clips, duration, selectedAudio, setClips],
+    [category?.videos, clips, duration, selectedAudio],
   );
 
   const handleCutByWord = useCallback(() => {
@@ -2327,7 +2325,7 @@ const VideoEditorModal = ({
 
     setClips(newClips);
     toast.success(`Created ${newClips.length} clips from words`);
-  }, [words, category?.videos, toast, setClips]);
+  }, [words, category?.videos, toast]);
 
   const handleReroll = useCallback(() => {
     // Context-aware: text selected → reroll text, else reroll clips
@@ -2427,7 +2425,6 @@ const VideoEditorModal = ({
     category?.videos,
     currentTime,
     toast,
-    setClips,
   ]);
 
   const handleRearrange = useCallback(() => {
@@ -2452,7 +2449,7 @@ const VideoEditorModal = ({
       });
     });
     toast.success(`Shuffled ${unlockedCount} clips`);
-  }, [clips, toast, setClips]);
+  }, [clips, toast]);
 
   // Get the clip at the current playhead position
   const getClipAtPlayhead = useCallback(() => {
@@ -2527,7 +2524,7 @@ const VideoEditorModal = ({
     } else {
       toast.info('Select consecutive clips to combine');
     }
-  }, [clips, getEffectiveClipIndices, toast, setClips]);
+  }, [clips, getEffectiveClipIndices, toast]);
 
   // Break/split a clip at the playhead position
   const handleBreak = useCallback(() => {
@@ -2571,7 +2568,7 @@ const VideoEditorModal = ({
     });
     setSelectedClips([]);
     toast.success('Split clip at playhead');
-  }, [clips, currentTime, getClipAtPlayhead, toast, setClips]);
+  }, [clips, currentTime, getClipAtPlayhead, toast]);
 
   // Remove/delete clips
   const handleRemoveClips = useCallback(() => {
@@ -2594,7 +2591,7 @@ const VideoEditorModal = ({
 
     setSelectedClips([]);
     toast.success(`Removed ${indices.length} clip${indices.length !== 1 ? 's' : ''}`);
-  }, [clips, getEffectiveClipIndices, toast, setClips]);
+  }, [clips, getEffectiveClipIndices, toast]);
 
   // Update clip duration
   const handleUpdateClipDuration = useCallback(
@@ -2616,7 +2613,7 @@ const VideoEditorModal = ({
         return newClips;
       });
     },
-    [clips, setClips],
+    [clips],
   );
 
   // Free-move drag start handler (replaces HTML5 DnD)
@@ -2755,7 +2752,16 @@ const VideoEditorModal = ({
       document.removeEventListener('pointercancel', handleUp);
       document.body.style.cursor = '';
     };
-  }, [freeMoveDrag, timelineScale, filteredBeats, clips, setClips]);
+  }, [
+    freeMoveDrag?.active,
+    freeMoveDrag?.clipIndex,
+    freeMoveDrag?.startMouseX,
+    freeMoveDrag?.originalStartTime,
+    timelineScale,
+    filteredBeats,
+    clips,
+    setClips,
+  ]);
 
   // Clip resize handlers (drag edges to change duration)
   const handleResizeStart = useCallback(
@@ -2835,15 +2841,7 @@ const VideoEditorModal = ({
       document.removeEventListener('pointerup', handleResizeEnd);
       document.removeEventListener('pointercancel', handleResizeEnd);
     };
-  }, [
-    clipResize,
-    handleUpdateClipDuration,
-    timelineScale,
-    clips,
-    handleSeek,
-    getMaxClipDuration,
-    setClips,
-  ]);
+  }, [clipResize, handleUpdateClipDuration, timelineScale]);
 
   // Cut line drag handler — dragging boundary lines between clips on waveform tracks
   // Stores both originalPrevDuration and originalCurrDuration at drag start so the handler
@@ -2898,7 +2896,7 @@ const VideoEditorModal = ({
       document.removeEventListener('pointercancel', handleCutLineUp);
       document.body.style.cursor = '';
     };
-  }, [cutLineDrag, timelineScale, setClips, clips, getMaxClipDuration]);
+  }, [cutLineDrag, timelineScale, setClips]);
 
   // Word cut line drag — adjust word boundary (handles gaps between words)
   const pxPerSecForWordDrag = 40 * timelineScale;
@@ -3011,21 +3009,18 @@ const VideoEditorModal = ({
     document.body.style.cursor = '';
   }, []);
 
-  const handleApplyPreset = useCallback(
-    (preset) => {
-      setSelectedPreset(preset);
-      if (preset.settings) {
-        // Apply text style settings
-        setTextStyle((prev) => ({ ...prev, ...preset.settings }));
+  const handleApplyPreset = useCallback((preset) => {
+    setSelectedPreset(preset);
+    if (preset.settings) {
+      // Apply text style settings
+      setTextStyle((prev) => ({ ...prev, ...preset.settings }));
 
-        // Apply crop mode if specified in preset
-        if (preset.settings.cropMode) {
-          setCropMode(preset.settings.cropMode);
-        }
+      // Apply crop mode if specified in preset
+      if (preset.settings.cropMode) {
+        setCropMode(preset.settings.cropMode);
       }
-    },
-    [setCropMode, setTextStyle],
-  );
+    }
+  }, []);
 
   const handleSyncLyrics = useCallback(
     (mode) => {
@@ -3060,7 +3055,7 @@ const VideoEditorModal = ({
 
       setShowLyricsEditor(false);
     },
-    [lyrics, filteredBeats, duration, selectedAudio, setWords],
+    [lyrics, filteredBeats, duration, selectedAudio],
   );
 
   // Check if server-side OpenAI key is configured
@@ -3287,7 +3282,7 @@ const VideoEditorModal = ({
       setIsTranscribing(false);
       setTranscriptionStep('');
     }
-  }, [selectedAudio, duration, toast, checkWhisperAvailable, setLyrics, setWords]);
+  }, [selectedAudio, duration, toast]);
 
   const handleSaveApiKey = useCallback(() => {
     if (apiKeyInput.trim()) {
