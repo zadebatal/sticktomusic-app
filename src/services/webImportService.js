@@ -57,8 +57,8 @@ export function isUrlSupported(url) {
 export function isProfileUrl(url) {
   if (!url) return false;
   const lower = url.toLowerCase();
-  // TikTok profile: tiktok.com/@username (no /video/ in path)
-  if (/tiktok\.com\/@[\w.]+\/?$/i.test(lower)) return true;
+  // TikTok profile: tiktok.com/@username (no /video/ in path, may have query params)
+  if (/tiktok\.com\/@[\w.]+/i.test(lower) && !/\/video\//i.test(lower)) return true;
   // YouTube channel/playlist
   if (/youtube\.com\/(c\/|channel\/|@|playlist\?)/i.test(lower)) return true;
   return false;

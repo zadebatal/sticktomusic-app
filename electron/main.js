@@ -983,9 +983,9 @@ ipcMain.handle('ytdlp-info', async (_event, url) => {
   if (!ytdlp) throw new Error('yt-dlp not found');
 
   // Detect profile/channel URLs — limit to first 30 items to avoid timeout
-  const isProfile = /tiktok\.com\/@[\w.]+\/?$/i.test(url)
+  const isProfile = /tiktok\.com\/@[\w.]+/i.test(url) && !/\/video\//i.test(url)
     || /youtube\.com\/(c\/|channel\/|@|playlist\?)/i.test(url)
-    || /instagram\.com\/[\w.]+\/?$/i.test(url);
+    || /instagram\.com\/[\w.]+/i.test(url) && !/\/(p|reel)\//i.test(url);
 
   const args = ['--dump-json', '--no-download', '--no-warnings'];
   if (isProfile) args.push('--playlist-items', '1:30');
