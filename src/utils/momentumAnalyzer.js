@@ -133,8 +133,10 @@ export function detectSegments(energyCurve) {
  */
 export async function detectOnsetsEssentia(channelData, sampleRate, duration) {
   try {
-    const { Essentia, EssentiaWASM } = await import('essentia.js');
-    // Reuse singleton if already loaded by useBeatDetection
+    const [{ default: Essentia }, { default: EssentiaWASM }] = await Promise.all([
+      import('essentia.js/dist/essentia.js-core.es.js'),
+      import('essentia.js/dist/essentia-wasm.web.js'),
+    ]);
     const wasm = await EssentiaWASM();
     const essentia = new Essentia(wasm);
 

@@ -25,7 +25,10 @@ async function getEssentia() {
   if (essentiaLoadPromise) return essentiaLoadPromise;
 
   essentiaLoadPromise = (async () => {
-    const { Essentia, EssentiaWASM } = await import('essentia.js');
+    const [{ default: Essentia }, { default: EssentiaWASM }] = await Promise.all([
+      import('essentia.js/dist/essentia.js-core.es.js'),
+      import('essentia.js/dist/essentia-wasm.web.js'),
+    ]);
     const wasm = await EssentiaWASM();
     essentiaInstance = new Essentia(wasm);
     log(`[BeatDetection] Essentia.js loaded (v${essentiaInstance.version})`);
