@@ -1,88 +1,86 @@
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
-  FeatherAlignCenter,
-  FeatherAlignLeft,
-  FeatherAlignRight,
-  FeatherCheck,
+  subscribeToLibrary,
+  subscribeToCollections,
+  getCollections,
+  getLibrary,
+  getLyrics,
+  addToVideoTextBank,
+  removeFromVideoTextBank,
+  updateVideoTextBank,
+  updateTextBankEntry,
+  addToLibraryAsync,
+  incrementUseCount,
+  MEDIA_TYPES,
+  getTextBankText,
+  getTextBankStyle,
+  getBankColor,
+  getBankLabel,
+} from '../../services/libraryService';
+import { useToast } from '../ui';
+import { useTheme } from '../../contexts/ThemeContext';
+import log from '../../utils/logger';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import {
+  FeatherX,
+  FeatherPlay,
+  FeatherPause,
+  FeatherVolume2,
+  FeatherVolumeX,
+  FeatherPlus,
+  FeatherTrash2,
+  FeatherRefreshCw,
+  FeatherMusic,
+  FeatherUpload,
   FeatherDatabase,
   FeatherMic,
-  FeatherMusic,
-  FeatherPause,
-  FeatherPlay,
-  FeatherPlus,
-  FeatherRefreshCw,
   FeatherScissors,
   FeatherSkipBack,
   FeatherSkipForward,
   FeatherStar,
-  FeatherTrash2,
-  FeatherUpload,
-  FeatherVolume2,
-  FeatherVolumeX,
-  FeatherX,
+  FeatherCheck,
   FeatherZoomIn,
   FeatherZoomOut,
 } from '@subframe/core';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTheme } from '../../contexts/ThemeContext';
-import { useBeatDetection } from '../../hooks/useBeatDetection';
-import useEditorHistory from '../../hooks/useEditorHistory';
-import useIsMobile from '../../hooks/useIsMobile';
-import useTimelineZoom from '../../hooks/useTimelineZoom';
-import useWaveform from '../../hooks/useWaveform';
-import {
-  addToLibraryAsync,
-  addToVideoTextBank,
-  getBankColor,
-  getBankLabel,
-  getCollections,
-  getLibrary,
-  getLyrics,
-  getTextBankStyle,
-  getTextBankText,
-  incrementUseCount,
-  MEDIA_TYPES,
-  removeFromVideoTextBank,
-  subscribeToCollections,
-  subscribeToLibrary,
-  updateTextBankEntry,
-  updateVideoTextBank,
-} from '../../services/libraryService';
 import { Badge } from '../../ui/components/Badge';
-import { Button } from '../../ui/components/Button';
-import { IconButton } from '../../ui/components/IconButton';
-import { ToggleGroup } from '../../ui/components/ToggleGroup';
-import log from '../../utils/logger';
+import { useBeatDetection } from '../../hooks/useBeatDetection';
 import { normalizeBeatsToTrimRange } from '../../utils/timelineNormalization';
-import { useToast } from '../ui';
-import AudioClipSelector from './AudioClipSelector';
-import BeatSelector from './BeatSelector';
-import CloudImportButton from './CloudImportButton';
-import LyricAnalyzer from './LyricAnalyzer';
-import LyricBank from './LyricBank';
-import MomentumSelector from './MomentumSelector';
-import CloseConfirmOverlay from './shared/CloseConfirmOverlay';
-import EditorFooter from './shared/EditorFooter';
 import EditorShell from './shared/EditorShell';
 import EditorTopBar from './shared/EditorTopBar';
+import EditorFooter from './shared/EditorFooter';
+import useCollapsibleSections from './shared/useCollapsibleSections';
+import useIsMobile from '../../hooks/useIsMobile';
+import AudioClipSelector from './AudioClipSelector';
+import BeatSelector from './BeatSelector';
+import MomentumSelector from './MomentumSelector';
+import CloudImportButton from './CloudImportButton';
+import LyricBank from './LyricBank';
+import LyricAnalyzer from './LyricAnalyzer';
+import WordTimeline from './WordTimeline';
+import useEditorHistory from '../../hooks/useEditorHistory';
+import useWaveform from '../../hooks/useWaveform';
+import useMediaMultiSelect from './shared/useMediaMultiSelect';
+import useEditorSessionState from './shared/useEditorSessionState';
+import useUnsavedChanges from './shared/useUnsavedChanges';
+import usePixelTimeline from './shared/usePixelTimeline';
+import useTimelineZoom from '../../hooks/useTimelineZoom';
+import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
+import LyricBankSection from './shared/LyricBankSection';
+import { FeatherAlignLeft, FeatherAlignCenter, FeatherAlignRight } from '@subframe/core';
 import {
+  parseStroke,
   buildStroke,
   getAvailableFonts,
-  makeFieldSetter,
-  parseStroke,
   saveCustomFont,
+  makeFieldSetter,
 } from './shared/editorConstants';
-import InlineWordsRow from './shared/InlineWordsRow';
-import LyricBankSection from './shared/LyricBankSection';
-import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
-import useCollapsibleSections from './shared/useCollapsibleSections';
-import useEditorSessionState from './shared/useEditorSessionState';
-import useMediaMultiSelect from './shared/useMediaMultiSelect';
-import usePixelTimeline from './shared/usePixelTimeline';
-import useUnsavedChanges from './shared/useUnsavedChanges';
-import useWordBoundaryDrag from './shared/useWordBoundaryDrag';
-import WordBoundaryLines from './shared/WordBoundaryLines';
+import CloseConfirmOverlay from './shared/CloseConfirmOverlay';
 import WordPreview from './shared/WordPreview';
-import WordTimeline from './WordTimeline';
+import InlineWordsRow from './shared/InlineWordsRow';
+import WordBoundaryLines from './shared/WordBoundaryLines';
+import useWordBoundaryDrag from './shared/useWordBoundaryDrag';
 
 /**
  * SoloClipEditor v2 — "Solo Clip" video editor mode
@@ -117,14 +115,8 @@ const SoloClipEditor = ({
 
   // ── Multi-video state (mirrors SlideshowEditor allSlideshows) ──
   // _nicheVideos passed directly from VideoNicheContent bypasses pipelineCategory localStorage lookup
-  const nicheVideos = useMemo(
-    () => existingVideo?._nicheVideos || [],
-    [existingVideo?._nicheVideos],
-  );
-  const availableVideos = useMemo(
-    () => (nicheVideos.length > 0 ? nicheVideos : category?.videos || []),
-    [nicheVideos, category?.videos],
-  );
+  const nicheVideos = existingVideo?._nicheVideos || [];
+  const availableVideos = nicheVideos.length > 0 ? nicheVideos : category?.videos || [];
   const [allVideos, setAllVideos] = useState(() => {
     if (existingVideo && existingVideo.editorMode === 'solo-clip') {
       // Re-editing an existing solo clip draft
@@ -173,10 +165,10 @@ const SoloClipEditor = ({
   // Derived reads from active video
   const activeVideo = allVideos[activeVideoIndex];
   const clip = activeVideo?.clip;
-  const textOverlays = useMemo(() => activeVideo?.textOverlays || [], [activeVideo?.textOverlays]);
+  const textOverlays = activeVideo?.textOverlays || [];
   const textOverlaysRef = useRef(textOverlays);
   textOverlaysRef.current = textOverlays;
-  const words = useMemo(() => activeVideo?.words || [], [activeVideo?.words]);
+  const words = activeVideo?.words || [];
 
   // ── Footer state ──
   const [isSavingAll, setIsSavingAll] = useState(false);
@@ -520,7 +512,7 @@ const SoloClipEditor = ({
         ),
       );
     },
-    [artistId, collections, db],
+    [artistId, collections],
   );
 
   // ── Video playback ──
@@ -811,7 +803,7 @@ const SoloClipEditor = ({
       setLibraryMedia(getLibrary(artistId));
       toastSuccess(`Saved clip "${clipData.name}" to library`);
     },
-    [selectedAudio, artistId, toastSuccess, db],
+    [selectedAudio, artistId, toastSuccess],
   );
 
   // ── Preset handler ──
@@ -1211,11 +1203,11 @@ const SoloClipEditor = ({
   }, [
     allVideos,
     generateCount,
+    category,
     getVideoTextBanks,
     keepTemplateText,
     toastSuccess,
     toastError,
-    availableVideos,
   ]);
 
   // Auto-generate on mount when coming from niche preview (Create N flow)
@@ -1235,7 +1227,7 @@ const SoloClipEditor = ({
     }
     autoGenTriggeredRef.current = true;
     executeGeneration();
-  }, [nicheGenCount, allVideos, category, executeGeneration, availableVideos]);
+  }, [nicheGenCount, allVideos, category, executeGeneration]);
 
   // ── Save Draft (active video only) ──
   const handleSaveDraft = useCallback(() => {

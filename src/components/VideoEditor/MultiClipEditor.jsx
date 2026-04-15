@@ -1,88 +1,86 @@
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
-  FeatherAlignCenter,
-  FeatherAlignLeft,
-  FeatherAlignRight,
-  FeatherCheck,
-  FeatherChevronDown,
+  subscribeToLibrary,
+  subscribeToCollections,
+  getCollections,
+  getLibrary,
+  getLyrics,
+  addToVideoTextBank,
+  removeFromVideoTextBank,
+  updateVideoTextBank,
+  updateTextBankEntry,
+  addToLibraryAsync,
+  incrementUseCount,
+  MEDIA_TYPES,
+  getBankColor,
+  getBankLabel,
+} from '../../services/libraryService';
+import { useToast } from '../ui';
+import { useTheme } from '../../contexts/ThemeContext';
+import log from '../../utils/logger';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import {
+  FeatherX,
+  FeatherPlay,
+  FeatherPause,
+  FeatherVolume2,
+  FeatherVolumeX,
+  FeatherPlus,
+  FeatherTrash2,
   FeatherChevronUp,
+  FeatherChevronDown,
+  FeatherRefreshCw,
+  FeatherMusic,
+  FeatherUpload,
   FeatherDatabase,
   FeatherMic,
-  FeatherMusic,
-  FeatherPause,
-  FeatherPlay,
-  FeatherPlus,
-  FeatherRefreshCw,
   FeatherScissors,
   FeatherSkipBack,
   FeatherSkipForward,
   FeatherStar,
-  FeatherTrash2,
-  FeatherUpload,
-  FeatherVolume2,
-  FeatherVolumeX,
-  FeatherX,
+  FeatherCheck,
   FeatherZoomIn,
   FeatherZoomOut,
 } from '@subframe/core';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTheme } from '../../contexts/ThemeContext';
-import { useBeatDetection } from '../../hooks/useBeatDetection';
-import useEditorHistory from '../../hooks/useEditorHistory';
-import useIsMobile from '../../hooks/useIsMobile';
-import useTimelineZoom from '../../hooks/useTimelineZoom';
-import useWaveform from '../../hooks/useWaveform';
-import {
-  addToLibraryAsync,
-  addToVideoTextBank,
-  getBankColor,
-  getBankLabel,
-  getCollections,
-  getLibrary,
-  getLyrics,
-  incrementUseCount,
-  MEDIA_TYPES,
-  removeFromVideoTextBank,
-  subscribeToCollections,
-  subscribeToLibrary,
-  updateTextBankEntry,
-  updateVideoTextBank,
-} from '../../services/libraryService';
 import { Badge } from '../../ui/components/Badge';
-import { Button } from '../../ui/components/Button';
-import { IconButton } from '../../ui/components/IconButton';
-import { ToggleGroup } from '../../ui/components/ToggleGroup';
-import log from '../../utils/logger';
+import { useBeatDetection } from '../../hooks/useBeatDetection';
 import { normalizeBeatsToTrimRange } from '../../utils/timelineNormalization';
-import { useToast } from '../ui';
-import AudioClipSelector from './AudioClipSelector';
-import BeatSelector from './BeatSelector';
-import CloudImportButton from './CloudImportButton';
-import LyricAnalyzer from './LyricAnalyzer';
-import LyricBank from './LyricBank';
-import MomentumSelector from './MomentumSelector';
-import CloseConfirmOverlay from './shared/CloseConfirmOverlay';
-import EditorFooter from './shared/EditorFooter';
 import EditorShell from './shared/EditorShell';
 import EditorTopBar from './shared/EditorTopBar';
+import EditorFooter from './shared/EditorFooter';
+import useCollapsibleSections from './shared/useCollapsibleSections';
+import useIsMobile from '../../hooks/useIsMobile';
+import AudioClipSelector from './AudioClipSelector';
+import BeatSelector from './BeatSelector';
+import MomentumSelector from './MomentumSelector';
+import CloudImportButton from './CloudImportButton';
+import LyricBank from './LyricBank';
+import LyricAnalyzer from './LyricAnalyzer';
+import WordTimeline from './WordTimeline';
+import useEditorHistory from '../../hooks/useEditorHistory';
+import useWaveform from '../../hooks/useWaveform';
+import useMediaMultiSelect from './shared/useMediaMultiSelect';
+import useEditorSessionState from './shared/useEditorSessionState';
+import useUnsavedChanges from './shared/useUnsavedChanges';
+import usePixelTimeline from './shared/usePixelTimeline';
+import useTimelineZoom from '../../hooks/useTimelineZoom';
+import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
+import LyricBankSection from './shared/LyricBankSection';
+import { FeatherAlignLeft, FeatherAlignCenter, FeatherAlignRight } from '@subframe/core';
 import {
+  parseStroke,
   buildStroke,
   getAvailableFonts,
-  makeFieldSetter,
-  parseStroke,
   saveCustomFont,
+  makeFieldSetter,
 } from './shared/editorConstants';
-import InlineWordsRow from './shared/InlineWordsRow';
-import LyricBankSection from './shared/LyricBankSection';
-import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
-import useCollapsibleSections from './shared/useCollapsibleSections';
-import useEditorSessionState from './shared/useEditorSessionState';
-import useMediaMultiSelect from './shared/useMediaMultiSelect';
-import usePixelTimeline from './shared/usePixelTimeline';
-import useUnsavedChanges from './shared/useUnsavedChanges';
-import useWordBoundaryDrag from './shared/useWordBoundaryDrag';
-import WordBoundaryLines from './shared/WordBoundaryLines';
+import CloseConfirmOverlay from './shared/CloseConfirmOverlay';
 import WordPreview from './shared/WordPreview';
-import WordTimeline from './WordTimeline';
+import InlineWordsRow from './shared/InlineWordsRow';
+import WordBoundaryLines from './shared/WordBoundaryLines';
+import useWordBoundaryDrag from './shared/useWordBoundaryDrag';
 
 /**
  * MultiClipEditor v1 — "Multi-Clip" video editor mode
@@ -164,11 +162,11 @@ const MultiClipEditor = ({
 
   // Derived reads from active video
   const activeVideo = allVideos[activeVideoIndex];
-  const clips = useMemo(() => activeVideo?.clips || [], [activeVideo?.clips]);
-  const textOverlays = useMemo(() => activeVideo?.textOverlays || [], [activeVideo?.textOverlays]);
+  const clips = activeVideo?.clips || [];
+  const textOverlays = activeVideo?.textOverlays || [];
   const textOverlaysRef = useRef(textOverlays);
   textOverlaysRef.current = textOverlays;
-  const words = useMemo(() => activeVideo?.words || [], [activeVideo?.words]);
+  const words = activeVideo?.words || [];
 
   // ── Footer state ──
   const [isSavingAll, setIsSavingAll] = useState(false);
@@ -582,7 +580,7 @@ const MultiClipEditor = ({
         ),
       );
     },
-    [artistId, collections, db],
+    [artistId, collections],
   );
 
   // ── Video playback ──
@@ -818,7 +816,7 @@ const MultiClipEditor = ({
         audioRef.current.currentTime = time + startBoundary;
       }
     },
-    [clips, selectedAudio, activeClipIndex],
+    [clips, selectedAudio],
   );
   const handleSeekRef = useRef(handleSeek);
   handleSeekRef.current = handleSeek;
@@ -978,7 +976,7 @@ const MultiClipEditor = ({
       setLibraryMedia(getLibrary(artistId));
       toastSuccess(`Saved clip "${clipData.name}" to library`);
     },
-    [selectedAudio, artistId, db, toastSuccess],
+    [selectedAudio, artistId, toastSuccess],
   );
 
   // ── Preset handler ──
@@ -1130,12 +1128,12 @@ const MultiClipEditor = ({
   }, [isMuted, selectedAudio, sourceVideoMuted, sourceVideoVolume, externalAudioVolume]);
 
   // Get clip URL safely (must be before useWaveform which references it)
-  const getClipUrl = useCallback((clipObj) => {
+  const getClipUrl = (clipObj) => {
     if (!clipObj) return null;
     const localUrl = clipObj.localUrl;
     const isBlobUrl = localUrl && localUrl.startsWith('blob:');
     return isBlobUrl ? clipObj.url : localUrl || clipObj.url || clipObj.src;
-  }, []);
+  };
 
   // Waveform data via shared hook
   const { waveformData, clipWaveforms, waveformSource } = useWaveform({
@@ -1510,7 +1508,7 @@ const MultiClipEditor = ({
     } else {
       toastError('Select consecutive clips to combine');
     }
-  }, [clips, getEffectiveClipIndices, setClips, toastSuccess, toastError]);
+  }, [clips, getEffectiveClipIndices, toastSuccess, toastError]);
 
   const handleBreak = useCallback(() => {
     const clipIndex = getClipAtPlayhead();
@@ -1546,7 +1544,7 @@ const MultiClipEditor = ({
     });
     setSelectedClips([]);
     toastSuccess('Split clip at playhead');
-  }, [clips, currentTime, getClipAtPlayhead, setClips, toastSuccess, toastError]);
+  }, [clips, currentTime, getClipAtPlayhead, toastSuccess, toastError]);
 
   const handleRearrange = useCallback(() => {
     if (clips.length < 2) {
@@ -1562,7 +1560,7 @@ const MultiClipEditor = ({
       }));
     });
     toastSuccess(`Shuffled ${clips.length} clips`);
-  }, [clips, setClips, toastSuccess, toastError]);
+  }, [clips, toastSuccess, toastError]);
 
   // ── Audio upload handler — route through trimmer ──
   const handleAudioUpload = useCallback((e) => {

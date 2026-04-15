@@ -1,97 +1,98 @@
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
-  FeatherAlignCenter,
-  FeatherAlignLeft,
-  FeatherAlignRight,
-  FeatherCheck,
-  FeatherGrid,
-  FeatherMaximize2,
-  FeatherMic,
-  FeatherMusic,
-  FeatherPause,
-  FeatherPlay,
-  FeatherPlus,
-  FeatherRefreshCw,
-  FeatherScissors,
-  FeatherSkipBack,
-  FeatherSkipForward,
-  FeatherStar,
-  FeatherTrash2,
-  FeatherUpload,
-  FeatherX,
-  FeatherZoomIn,
-  FeatherZoomOut,
-} from '@subframe/core';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTheme } from '../../contexts/ThemeContext';
-import { useBeatDetection } from '../../hooks/useBeatDetection';
-import useEditorHistory from '../../hooks/useEditorHistory';
-import useIsMobile from '../../hooks/useIsMobile';
-import useTimelineZoom from '../../hooks/useTimelineZoom';
-import useWaveform from '../../hooks/useWaveform';
-import { uploadFile, uploadFileWithQuota } from '../../services/firebaseStorage';
-import {
-  addBankToCollection,
-  addCreatedVideo,
-  addToLibraryAsync,
-  addToTextBank,
-  getBankColor,
-  getBankLabel,
+  subscribeToLibrary,
+  subscribeToCollections,
   getCollections,
   getLibrary,
   getLyrics,
-  getTextBankStyle,
-  getTextBankText,
   incrementUseCount,
-  MAX_BANKS,
   MEDIA_TYPES,
-  MIN_BANKS,
-  migrateCollectionBanks,
-  removeBankFromCollection,
-  removeFromTextBank,
-  saveCollectionToFirestore,
+  addToLibraryAsync,
+  addCreatedVideo,
   saveCreatedContentAsync,
-  subscribeToCollections,
-  subscribeToLibrary,
+  getBankColor,
+  getBankLabel,
+  getTextBankText,
+  getTextBankStyle,
+  addToTextBank,
+  removeFromTextBank,
   updateTextBankEntry,
+  migrateCollectionBanks,
+  addBankToCollection,
+  removeBankFromCollection,
+  saveCollectionToFirestore,
+  MAX_BANKS,
+  MIN_BANKS,
 } from '../../services/libraryService';
+import { uploadFile, uploadFileWithQuota } from '../../services/firebaseStorage';
 import { renderPhotoMontage } from '../../services/photoMontageExportService';
 import { quickQC } from '../../services/qcService';
-import { Badge } from '../../ui/components/Badge';
+import { useBeatDetection } from '../../hooks/useBeatDetection';
+import { normalizeBeatsToTrimRange } from '../../utils/timelineNormalization';
+import useEditorHistory from '../../hooks/useEditorHistory';
+import useWaveform from '../../hooks/useWaveform';
+import { useToast } from '../ui';
+import { useTheme } from '../../contexts/ThemeContext';
+import log from '../../utils/logger';
+import useIsMobile from '../../hooks/useIsMobile';
+import AudioClipSelector from './AudioClipSelector';
+import LyricBank from './LyricBank';
+import WordTimeline from './WordTimeline';
+import LyricAnalyzer from './LyricAnalyzer';
+import CloudImportButton from './CloudImportButton';
+import BeatSelector from './BeatSelector';
+import MomentumSelector from './MomentumSelector';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
-import log from '../../utils/logger';
-import { normalizeBeatsToTrimRange } from '../../utils/timelineNormalization';
-import { useToast } from '../ui';
-import AudioClipSelector from './AudioClipSelector';
-import BeatSelector from './BeatSelector';
-import CloudImportButton from './CloudImportButton';
-import LyricAnalyzer from './LyricAnalyzer';
-import LyricBank from './LyricBank';
-import MomentumSelector from './MomentumSelector';
-import CloseConfirmOverlay from './shared/CloseConfirmOverlay';
-import EditorFooter from './shared/EditorFooter';
+import { Badge } from '../../ui/components/Badge';
+import {
+  FeatherMaximize2,
+  FeatherGrid,
+  FeatherStar,
+  FeatherMusic,
+  FeatherUpload,
+  FeatherTrash2,
+  FeatherScissors,
+  FeatherPlus,
+  FeatherMic,
+  FeatherRefreshCw,
+  FeatherPlay,
+  FeatherPause,
+  FeatherSkipBack,
+  FeatherSkipForward,
+  FeatherCheck,
+  FeatherZoomIn,
+  FeatherZoomOut,
+  FeatherAlignLeft,
+  FeatherAlignCenter,
+  FeatherAlignRight,
+  FeatherX,
+} from '@subframe/core';
 import EditorShell from './shared/EditorShell';
 import EditorTopBar from './shared/EditorTopBar';
+import EditorFooter from './shared/EditorFooter';
+import useCollapsibleSections from './shared/useCollapsibleSections';
+import useMediaMultiSelect from './shared/useMediaMultiSelect';
+import useEditorSessionState from './shared/useEditorSessionState';
+import useUnsavedChanges from './shared/useUnsavedChanges';
+import usePixelTimeline from './shared/usePixelTimeline';
+import useTimelineZoom from '../../hooks/useTimelineZoom';
+import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
+import LyricBankSection from './shared/LyricBankSection';
+
 import {
+  parseStroke,
   buildStroke,
   getAvailableFonts,
-  makeFieldSetter,
-  parseStroke,
   saveCustomFont,
+  makeFieldSetter,
 } from './shared/editorConstants';
-import InlineWordsRow from './shared/InlineWordsRow';
-import LyricBankSection from './shared/LyricBankSection';
-import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
-import useCollapsibleSections from './shared/useCollapsibleSections';
-import useEditorSessionState from './shared/useEditorSessionState';
-import useMediaMultiSelect from './shared/useMediaMultiSelect';
-import usePixelTimeline from './shared/usePixelTimeline';
-import useUnsavedChanges from './shared/useUnsavedChanges';
-import useWordBoundaryDrag from './shared/useWordBoundaryDrag';
-import WordBoundaryLines from './shared/WordBoundaryLines';
+import CloseConfirmOverlay from './shared/CloseConfirmOverlay';
 import WordPreview from './shared/WordPreview';
-import WordTimeline from './WordTimeline';
+import InlineWordsRow from './shared/InlineWordsRow';
+import WordBoundaryLines from './shared/WordBoundaryLines';
+import useWordBoundaryDrag from './shared/useWordBoundaryDrag';
 
 /**
  * PhotoMontageEditor — Turn photos into a fast-paced video with transitions.
@@ -171,12 +172,12 @@ const PhotoMontageEditor = ({
 
   // Derived reads from active video
   const activeVideo = allVideos[activeVideoIndex];
-  const photos = useMemo(() => activeVideo?.photos || [], [activeVideo?.photos]);
-  const textOverlays = useMemo(() => activeVideo?.textOverlays || [], [activeVideo?.textOverlays]);
+  const photos = activeVideo?.photos || [];
+  const textOverlays = activeVideo?.textOverlays || [];
   const textOverlaysRef = useRef(textOverlays);
   textOverlaysRef.current = textOverlays;
-  const words = useMemo(() => activeVideo?.words || [], [activeVideo?.words]);
-  const textStyle = useMemo(() => activeVideo?.textStyle || {}, [activeVideo?.textStyle]);
+  const words = activeVideo?.words || [];
+  const textStyle = activeVideo?.textStyle || {};
 
   // Wrapper setters (route through allVideos via shared factory)
   const setPhotos = useMemo(
@@ -408,7 +409,7 @@ const PhotoMontageEditor = ({
 
       // Cycle text from words if keepTemplateText is 'none'
       let genWords = [...(template.words || [])];
-      const genTextOverlays = [...(template.textOverlays || [])];
+      let genTextOverlays = [...(template.textOverlays || [])];
       if (keepTemplateText === 'none' && genWords.length > 0) {
         // Rotate words by variation index for variety
         const rotateBy = (g + 1) % genWords.length;
@@ -874,7 +875,7 @@ const PhotoMontageEditor = ({
         toastSuccess(`Added ${newPhotos.length} photo${newPhotos.length !== 1 ? 's' : ''}`);
       }
     },
-    [toastSuccess, setPhotos],
+    [toastSuccess],
   );
 
   const addPhotosFromLibrary = useCallback(
@@ -890,7 +891,7 @@ const PhotoMontageEditor = ({
       setShowLibraryPicker(false);
       toastSuccess(`Added ${newPhotos.length} photo${newPhotos.length !== 1 ? 's' : ''}`);
     },
-    [toastSuccess, setPhotos],
+    [toastSuccess],
   );
 
   const removePhoto = useCallback(
@@ -903,20 +904,17 @@ const PhotoMontageEditor = ({
       // Remove all instances of this photo from the (possibly materialized) array
       setPhotos((prev) => prev.filter((p) => p.id !== photoToRemove.id));
     },
-    [basePhotos, setPhotos],
+    [basePhotos],
   );
 
-  const movePhoto = useCallback(
-    (fromIndex, toIndex) => {
-      setPhotos((prev) => {
-        const updated = [...prev];
-        const [moved] = updated.splice(fromIndex, 1);
-        updated.splice(toIndex, 0, moved);
-        return updated;
-      });
-    },
-    [setPhotos],
-  );
+  const movePhoto = useCallback((fromIndex, toIndex) => {
+    setPhotos((prev) => {
+      const updated = [...prev];
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+      return updated;
+    });
+  }, []);
 
   // ── Text bank helpers (must be before handleReroll which references getTextBanks) ──
   const textBanksCache = useMemo(() => {
@@ -1023,7 +1021,7 @@ const PhotoMontageEditor = ({
       setShowBeatSelector(false);
       toastSuccess('Photos synced to beats');
     },
-    [photos.length, selectedAudio, audioDuration, setPhotos, toastSuccess, waveformDuration],
+    [photos.length, selectedAudio, audioDuration, setPhotos, toastSuccess],
   );
 
   // ── Text overlay default style (must be before functions that reference it) ──
@@ -1082,15 +1080,12 @@ const PhotoMontageEditor = ({
       setEditingTextId(newOverlay.id);
       setEditingTextValue(newOverlay.text);
     },
-    [getDefaultTextStyle, totalDuration, setTextOverlays],
+    [getDefaultTextStyle, totalDuration],
   );
 
-  const updateTextOverlay = useCallback(
-    (overlayId, updates) => {
-      setTextOverlays((prev) => prev.map((o) => (o.id === overlayId ? { ...o, ...updates } : o)));
-    },
-    [setTextOverlays],
-  );
+  const updateTextOverlay = useCallback((overlayId, updates) => {
+    setTextOverlays((prev) => prev.map((o) => (o.id === overlayId ? { ...o, ...updates } : o)));
+  }, []);
 
   const removeTextOverlay = useCallback(
     (overlayId) => {
@@ -1100,7 +1095,7 @@ const PhotoMontageEditor = ({
         setEditingTextValue('');
       }
     },
-    [editingTextId, setTextOverlays],
+    [editingTextId],
   );
 
   // ── Text track marquee selection ──
@@ -1148,16 +1143,13 @@ const PhotoMontageEditor = ({
   );
 
   // ── Preset handler ──
-  const handleApplyPreset = useCallback(
-    (preset) => {
-      setSelectedPreset(preset);
-      if (preset.settings) {
-        setTextStyle((prev) => ({ ...prev, ...preset.settings }));
-        if (preset.settings.cropMode) setAspectRatio(preset.settings.cropMode);
-      }
-    },
-    [setTextStyle],
-  );
+  const handleApplyPreset = useCallback((preset) => {
+    setSelectedPreset(preset);
+    if (preset.settings) {
+      setTextStyle((prev) => ({ ...prev, ...preset.settings }));
+      if (preset.settings.cropMode) setAspectRatio(preset.settings.cropMode);
+    }
+  }, []);
 
   // ── Save Draft ──
   const handleSaveDraft = useCallback(() => {
@@ -1366,7 +1358,7 @@ const PhotoMontageEditor = ({
       // Open WordTimeline so user can choose text cell mode
       setShowWordTimeline(true);
     },
-    [totalDuration, toastError, setWords],
+    [totalDuration, toastError],
   );
 
   // ── Lyrics as timed text overlays ──
@@ -1388,7 +1380,7 @@ const PhotoMontageEditor = ({
       setTextOverlays(newOverlays);
       toastSuccess(`Created ${newOverlays.length} timed word overlays`);
     },
-    [totalDuration, getDefaultTextStyle, toastSuccess, setTextOverlays],
+    [totalDuration, getDefaultTextStyle, toastSuccess],
   );
 
   // ── Unsaved changes guard (beforeunload) ──
@@ -1562,8 +1554,6 @@ const PhotoMontageEditor = ({
     category,
     textOverlays,
     textStyle,
-    words,
-    user,
     onSave,
     onClose,
     toastSuccess,
