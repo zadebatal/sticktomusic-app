@@ -1895,6 +1895,15 @@ const VideoNicheContent = ({
                           >
                             Import from Library
                           </button>
+                          <button
+                            type="button"
+                            className="px-4 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium cursor-pointer transition-colors"
+                            onClick={() =>
+                              onWebImportToMediaBank?.(activeBank?.id || mediaBanks[0]?.id)
+                            }
+                          >
+                            Import from Web
+                          </button>
                         </div>
                       </div>
                     )}
