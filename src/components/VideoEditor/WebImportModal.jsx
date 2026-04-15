@@ -101,15 +101,14 @@ const WebImportModal = ({
       // Desktop app: try local yt-dlp first for single videos (instant analysis)
       const canLocal = await isLocalDownloadAvailable();
       if (canLocal && !trimmed.match(/pinterest\.com|instagram\.com/i)) {
-        try {
-          data = await getLocalVideoInfo(trimmed);
-          data._useLocal = true; // flag for import handler
-        } catch {
-          // Local failed, fall back to Railway
-          data = await analyzeUrl(trimmed);
-        }
+        data = await getLocalVideoInfo(trimmed);
+        data._useLocal = true; // flag for import handler
+      } else if (canLocal) {
+        // Pinterest/Instagram — local yt-dlp can still handle these
+        data = await getLocalVideoInfo(trimmed);
+        data._useLocal = true;
       } else {
-        data = await analyzeUrl(trimmed);
+        throw new Error('yt-dlp is not available. Please restart the app.');
       }
       setMetadata(data);
       if (data.type === 'playlist') setMaxItems(10);
@@ -284,24 +283,11 @@ const WebImportModal = ({
     onClose?.();
   }, [onClose]);
 
-  // Paste handler — auto-analyze if pasting a URL
+  // Paste handler — populate the URL field (user clicks Analyze)
   const handlePaste = useCallback((e) => {
     const pasted = e.clipboardData?.getData('text') || '';
     if (isUrlSupported(pasted.trim())) {
-      setTimeout(() => {
-        setUrl(pasted.trim());
-        setError(null);
-        setState(STATES.ANALYZING);
-        analyzeUrl(pasted.trim())
-          .then((data) => {
-            setMetadata(data);
-            setState(STATES.PREVIEW);
-          })
-          .catch((err) => {
-            setError(err.message);
-            setState(STATES.INPUT);
-          });
-      }, 0);
+      setUrl(pasted.trim());
     }
   }, []);
 
