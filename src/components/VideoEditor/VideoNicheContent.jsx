@@ -39,6 +39,7 @@ import {
   MAX_MEDIA_BANKS,
   migrateToMediaBanks,
   moveMediaBetweenBanks,
+  removeFromLibraryAsync,
   removeFromMediaBank,
   removeFromVideoTextBank,
   removeMediaBank,
@@ -965,13 +966,25 @@ const VideoNicheContent = ({
 
   const handleDeleteSelected = useCallback(() => {
     if (!niche || !selectionBankId || bankSelectedIds.size === 0) return;
+    const isAllMedia = selectionBankId === '__all__';
+    const count = bankSelectedIds.size;
     setConfirmDialog({
       isOpen: true,
-      title: 'Remove from Bank',
-      message: `Remove ${bankSelectedIds.size} item${bankSelectedIds.size !== 1 ? 's' : ''} from this bank?`,
-      confirmLabel: 'Remove',
-      onConfirm: () => {
-        removeFromMediaBank(artistId, niche.id, [...bankSelectedIds], selectionBankId, db, true);
+      title: isAllMedia ? 'Delete from Library' : 'Remove from Bank',
+      message: isAllMedia
+        ? `Permanently delete ${count} item${count !== 1 ? 's' : ''} from the library? This cannot be undone.`
+        : `Remove ${count} item${count !== 1 ? 's' : ''} from this bank?`,
+      confirmLabel: isAllMedia ? 'Delete' : 'Remove',
+      onConfirm: async () => {
+        if (isAllMedia) {
+          // Delete from library entirely
+          for (const id of bankSelectedIds) {
+            await removeFromLibraryAsync(db, artistId, id);
+          }
+          toastSuccess(`Deleted ${count} items from library`);
+        } else {
+          removeFromMediaBank(artistId, niche.id, [...bankSelectedIds], selectionBankId, db, true);
+        }
         clearBankSelection();
         onRefreshCollections?.();
         setConfirmDialog({ isOpen: false });
@@ -985,6 +998,7 @@ const VideoNicheContent = ({
     db,
     clearBankSelection,
     onRefreshCollections,
+    toastSuccess,
   ]);
 
   // Bank selection toggle
@@ -1745,6 +1759,33 @@ const VideoNicheContent = ({
                               <FeatherPlus style={{ width: 10, height: 10 }} /> New Bank
                             </button>
                           ))}
+                        {/* In All Media view, offer "Add to Bank" buttons */}
+                        {selectionBankId === '__all__' &&
+                          mediaBanks.length > 0 &&
+                          visibleMediaBanks.map((targetBank) => {
+                            const tColor = getBankColor(mediaBanks.indexOf(targetBank));
+                            return (
+                              <button
+                                key={targetBank.id}
+                                className="flex items-center gap-1 rounded px-2 py-0.5 text-caption font-caption bg-transparent border border-solid cursor-pointer hover:brightness-125 transition-colors"
+                                style={{ borderColor: tColor.primary, color: tColor.light }}
+                                onClick={() => {
+                                  const ids = [...bankSelectedIds];
+                                  if (ids.length > 0) {
+                                    assignToMediaBank(artistId, niche.id, ids, targetBank.id, db);
+                                    toastSuccess(`Added ${ids.length} clips to ${targetBank.name}`);
+                                    clearBankSelection();
+                                  }
+                                }}
+                              >
+                                <div
+                                  className="h-2 w-2 rounded-full"
+                                  style={{ backgroundColor: tColor.primary }}
+                                />
+                                Add to {targetBank.name}
+                              </button>
+                            );
+                          })}
                         <button
                           className="flex items-center gap-1 rounded px-2 py-0.5 text-caption font-caption bg-transparent border border-solid border-blue-500/50 text-blue-300 cursor-pointer hover:bg-blue-500/10 transition-colors"
                           onClick={handleBulkUploadToCloud}
