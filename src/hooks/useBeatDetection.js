@@ -3,22 +3,37 @@ import log from '../utils/logger';
 import { normalizeBeatsToTrimRange } from '../utils/timelineNormalization';
 
 /**
- * Custom hook for beat detection in audio files.
- * Uses web-audio-beat-detector for professional-grade BPM detection.
+ * Custom hook for beat detection using Essentia.js (WASM-powered).
  *
- * IMPORTANT: This hook returns beats in GLOBAL time (full audio file timeline).
- * If you have trimmed audio, use getLocalBeats() or normalizeBeatsToTrimRange()
- * to convert to LOCAL time before using in UI or clip creation.
+ * Uses BeatTrackerMultiFeature for professional-grade beat TRACKING — returns
+ * actual beat positions from the audio, not generated ticks from BPM+offset.
+ * This handles tempo variations, syncopation, and complex rhythms.
  *
- * @example
- * const { beats, bpm, getLocalBeats } = useBeatDetection();
- * // For full audio:
- * const allBeats = beats; // GLOBAL time
- * // For trimmed audio:
- * const localBeats = getLocalBeats(trimStart, trimEnd); // LOCAL time
+ * IMPORTANT: Returns beats in GLOBAL time (full audio file timeline).
+ * Use getLocalBeats() or normalizeBeatsToTrimRange() for trimmed audio.
  */
+
 // Skip full audio decode for files larger than this (prevents browser tab freeze)
 const MAX_BEAT_DETECT_SIZE = 50 * 1024 * 1024; // 50MB
+
+// Lazy singleton — Essentia WASM is ~2MB, only load once
+let essentiaInstance = null;
+let essentiaLoadPromise = null;
+
+async function getEssentia() {
+  if (essentiaInstance) return essentiaInstance;
+  if (essentiaLoadPromise) return essentiaLoadPromise;
+
+  essentiaLoadPromise = (async () => {
+    const { Essentia, EssentiaWASM } = await import('essentia.js');
+    const wasm = await EssentiaWASM();
+    essentiaInstance = new Essentia(wasm);
+    log(`[BeatDetection] Essentia.js loaded (v${essentiaInstance.version})`);
+    return essentiaInstance;
+  })();
+
+  return essentiaLoadPromise;
+}
 
 export const useBeatDetection = () => {
   const [beats, setBeats] = useState([]);
@@ -27,7 +42,8 @@ export const useBeatDetection = () => {
   const [error, setError] = useState(null);
 
   /**
-   * Analyze audio file or URL for beats
+   * Analyze audio file or URL for beats using Essentia.js BeatTrackerMultiFeature.
+   * Returns actual beat positions from the audio — not generated from BPM.
    * @param {File|Blob|string} audioSource - File object, Blob, or URL string
    */
   const analyzeAudio = useCallback(async (audioSource) => {
@@ -35,42 +51,32 @@ export const useBeatDetection = () => {
     setError(null);
 
     try {
-      // Create audio context
+      // Create audio context and decode
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
-      // Get array buffer - handle both File objects and URLs
       let arrayBuffer;
 
       if (audioSource instanceof File || audioSource instanceof Blob) {
-        // Check file size before processing
         if (audioSource.size > MAX_BEAT_DETECT_SIZE) {
           log.warn(
             `[BeatDetection] File too large (${(audioSource.size / 1024 / 1024).toFixed(0)}MB), using fallback BPM`,
           );
           await audioContext.close();
           const fallbackBpm = 120;
+          const fallbackBeats = generateBeatTimestamps(fallbackBpm, 0, 60);
           setBpm(fallbackBpm);
-          setBeats(generateBeatTimestamps(fallbackBpm, 0, 60));
+          setBeats(fallbackBeats);
           setIsAnalyzing(false);
-          return {
-            bpm: fallbackBpm,
-            beats: generateBeatTimestamps(fallbackBpm, 0, 60),
-            isFallback: true,
-          };
+          return { bpm: fallbackBpm, beats: fallbackBeats, isFallback: true };
         }
-        // Direct file/blob - most reliable, no CORS issues
-        log('Beat detection: Analyzing from file/blob');
+        log('[BeatDetection] Analyzing from file/blob');
         arrayBuffer = await audioSource.arrayBuffer();
       } else if (typeof audioSource === 'string') {
-        // Reject stale blob URLs early
         if (audioSource.startsWith('blob:')) {
           log.warn('[BeatDetection] Rejected stale blob URL');
           setIsAnalyzing(false);
           return;
         }
-        // It's a URL - try to fetch the audio data
-        log('Beat detection: Fetching from URL:', audioSource.substring(0, 50) + '...');
-
+        log('[BeatDetection] Fetching from URL:', audioSource.substring(0, 50) + '...');
         try {
           // Check size with HEAD before full download
           try {
@@ -82,110 +88,116 @@ export const useBeatDetection = () => {
               );
               await audioContext.close();
               const fallbackBpm = 120;
+              const fallbackBeats = generateBeatTimestamps(fallbackBpm, 0, 60);
               setBpm(fallbackBpm);
-              setBeats(generateBeatTimestamps(fallbackBpm, 0, 60));
+              setBeats(fallbackBeats);
               setIsAnalyzing(false);
-              return {
-                bpm: fallbackBpm,
-                beats: generateBeatTimestamps(fallbackBpm, 0, 60),
-                isFallback: true,
-              };
+              return { bpm: fallbackBpm, beats: fallbackBeats, isFallback: true };
             }
           } catch {
             /* HEAD failed, continue with fetch */
           }
           const response = await fetch(audioSource, { mode: 'cors' });
-          if (!response.ok) {
-            throw new Error(`Failed to fetch audio: ${response.status}`);
-          }
+          if (!response.ok) throw new Error(`Failed to fetch audio: ${response.status}`);
           arrayBuffer = await response.arrayBuffer();
         } catch (fetchError) {
-          // CORS error or network issue - try loading via audio element
-          log.warn('Direct fetch failed, trying audio element method:', fetchError.message);
-
-          // Create an audio element to load the audio
-          const audio = new Audio();
-          audio.crossOrigin = 'anonymous';
-          audio.src = audioSource;
-
-          // Wait for it to load
-          await new Promise((resolve, reject) => {
-            audio.oncanplaythrough = resolve;
-            audio.onerror = () => reject(new Error('Failed to load audio via element'));
-            setTimeout(() => reject(new Error('Audio load timeout')), 15000);
-          });
-
-          // Use MediaElementSourceNode to get the audio data
-          // This approach doesn't give us raw ArrayBuffer, so fall back to basic detection
-          log.warn('Could not get raw audio data due to CORS. Using fallback BPM estimation.');
-
-          // Estimate based on common music tempos (this is a fallback)
+          log.warn('Direct fetch failed, using fallback:', fetchError.message);
+          await audioContext.close();
           const fallbackBpm = 120;
-          const duration = audio.duration || 60;
-
+          const fallbackBeats = generateBeatTimestamps(fallbackBpm, 0, 60);
           setBpm(fallbackBpm);
-          setBeats(generateBeatTimestamps(fallbackBpm, 0, duration));
+          setBeats(fallbackBeats);
           setIsAnalyzing(false);
-
-          return {
-            bpm: fallbackBpm,
-            beats: generateBeatTimestamps(fallbackBpm, 0, duration),
-            isFallback: true,
-          };
+          return { bpm: fallbackBpm, beats: fallbackBeats, isFallback: true };
         }
       } else {
         throw new Error('Invalid audio source - must be File, Blob, or URL string');
       }
 
-      // Decode audio data
-      log('Beat detection: Decoding audio data...');
+      // Decode audio
+      log('[BeatDetection] Decoding audio...');
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
       const duration = audioBuffer.duration;
 
-      // Use web-audio-beat-detector for professional BPM detection
-      log('Beat detection: Running BPM analysis...');
+      // Get Essentia instance (lazy load WASM on first use)
+      log('[BeatDetection] Loading Essentia.js...');
+      const essentia = await getEssentia();
 
+      // Convert AudioBuffer to mono Float32Array → Essentia VectorFloat
+      const monoSignal = essentia.audioBufferToMonoSignal(audioBuffer);
+      const signal = essentia.arrayToVector(monoSignal);
+
+      // Run BeatTrackerMultiFeature — uses 5 onset detection functions for best accuracy
+      log('[BeatDetection] Running BeatTrackerMultiFeature...');
+      let result;
       try {
-        const { guess } = await import('web-audio-beat-detector');
-        const result = await guess(audioBuffer);
-
-        log('Beat detection result:', result);
-
-        const detectedBpm = Math.round(result.bpm || result.tempo);
-        const offset = result.offset || 0;
-
-        // Generate beat timestamps from BPM and offset
-        const beatTimestamps = generateBeatTimestamps(detectedBpm, offset, duration);
-
-        setBpm(detectedBpm);
-        setBeats(beatTimestamps);
-
-        // Close audio context
-        await audioContext.close();
-
-        log(`Beat detection complete: ${detectedBpm} BPM, ${beatTimestamps.length} beats`);
-
-        return { bpm: detectedBpm, beats: beatTimestamps, offset };
-      } catch (detectError) {
-        log.warn('Professional beat detection failed, using fallback:', detectError.message);
-
-        // Fallback to basic onset detection
-        const fallbackResult = detectBeatsBasic(audioBuffer);
-
-        setBpm(fallbackResult.bpm);
-        setBeats(fallbackResult.beats);
-
-        await audioContext.close();
-
-        return fallbackResult;
+        result = essentia.BeatTrackerMultiFeature(signal);
+      } catch (multiErr) {
+        // Fallback to faster Degara tracker
+        log.warn('[BeatDetection] MultiFeature failed, trying Degara:', multiErr.message);
+        try {
+          result = essentia.BeatTrackerDegara(signal);
+        } catch (degaraErr) {
+          log.warn('[BeatDetection] Degara also failed:', degaraErr.message);
+          // Ultimate fallback — basic onset detection
+          await audioContext.close();
+          const fallbackResult = detectBeatsBasic(audioBuffer);
+          setBpm(fallbackResult.bpm);
+          setBeats(fallbackResult.beats);
+          return fallbackResult;
+        }
       }
+
+      // Extract beat timestamps from Essentia result
+      const ticks = essentia.vectorToArray(result.ticks);
+      const beatTimestamps = Array.from(ticks)
+        .filter((t) => t >= 0 && t <= duration)
+        .map((t) => parseFloat(t.toFixed(3)));
+
+      // Ensure beats start at 0 (fill gap before first detected beat)
+      if (beatTimestamps.length > 0 && beatTimestamps[0] > 0.05) {
+        beatTimestamps.unshift(0);
+      }
+
+      // Estimate BPM from median beat interval
+      let detectedBpm = 120;
+      if (beatTimestamps.length >= 3) {
+        const intervals = [];
+        for (let i = 1; i < beatTimestamps.length; i++) {
+          intervals.push(beatTimestamps[i] - beatTimestamps[i - 1]);
+        }
+        intervals.sort((a, b) => a - b);
+        const medianInterval = intervals[Math.floor(intervals.length / 2)];
+        if (medianInterval > 0) {
+          detectedBpm = Math.round(60 / medianInterval);
+          // Keep BPM in reasonable range
+          while (detectedBpm < 60) detectedBpm *= 2;
+          while (detectedBpm > 200) detectedBpm /= 2;
+        }
+      }
+
+      // Also try Essentia's confidence if available
+      const confidence = result.confidence ?? null;
+
+      setBpm(detectedBpm);
+      setBeats(beatTimestamps);
+      await audioContext.close();
+
+      log(
+        `[BeatDetection] Complete: ${detectedBpm} BPM, ${beatTimestamps.length} beats` +
+          (confidence !== null ? `, confidence: ${confidence.toFixed(2)}` : ''),
+      );
+
+      return { bpm: detectedBpm, beats: beatTimestamps, confidence };
     } catch (err) {
-      log.error('Beat detection error:', err);
+      log.error('[BeatDetection] Error:', err);
       setError(err.message);
 
       // Set default values so UI doesn't break
-      setBpm(120);
-      setBeats(generateBeatTimestamps(120, 0, 60));
+      const fallbackBpm = 120;
+      const fallbackBeats = generateBeatTimestamps(fallbackBpm, 0, 60);
+      setBpm(fallbackBpm);
+      setBeats(fallbackBeats);
 
       throw err;
     } finally {
@@ -214,11 +226,6 @@ export const useBeatDetection = () => {
 
   /**
    * Get beats normalized to LOCAL time for a trim range
-   * Use this when working with trimmed audio
-   *
-   * @param {number} trimStart - Start of trim range in GLOBAL seconds
-   * @param {number} trimEnd - End of trim range in GLOBAL seconds
-   * @returns {Array<number>} - Beats in LOCAL time (0 = trimStart)
    */
   const getLocalBeats = useCallback(
     (trimStart, trimEnd) => {
@@ -228,48 +235,44 @@ export const useBeatDetection = () => {
   );
 
   return {
-    beats, // GLOBAL time - use for full audio only
+    beats, // GLOBAL time — actual beat positions from audio
     bpm,
     isAnalyzing,
     error,
     analyzeAudio,
     generateBeatsFromBPM,
     clearBeats,
-    getLocalBeats, // LOCAL time - use for trimmed audio
+    getLocalBeats,
   };
 };
 
 /**
- * Generate beat timestamps from BPM and offset
+ * Generate evenly-spaced beat timestamps from BPM and offset.
+ * Used for manual BPM entry and as ultimate fallback.
  */
 function generateBeatTimestamps(bpm, offset = 0, duration = 60) {
   const beatInterval = 60 / bpm;
   const beats = [];
-
-  // Start from offset, generate beats until duration
   for (let time = offset; time < duration; time += beatInterval) {
-    if (time >= 0) {
-      beats.push(parseFloat(time.toFixed(3)));
-    }
+    if (time >= 0) beats.push(parseFloat(time.toFixed(3)));
   }
-
+  // Always start at 0
+  if (beats.length === 0 || beats[0] > 0.01) beats.unshift(0);
   return beats;
 }
 
 /**
- * Basic fallback beat detection using onset detection
- * Used when the professional library fails
+ * Basic fallback beat detection using onset detection.
+ * Used when Essentia.js fails completely.
  */
 function detectBeatsBasic(audioBuffer) {
   const channelData = audioBuffer.getChannelData(0);
   const sampleRate = audioBuffer.sampleRate;
   const duration = audioBuffer.duration;
 
-  // Parameters
-  const windowSize = Math.floor(sampleRate * 0.02); // 20ms windows
+  const windowSize = Math.floor(sampleRate * 0.02);
   const hopSize = Math.floor(windowSize / 2);
 
-  // Calculate energy for each window
   const energies = [];
   for (let i = 0; i < channelData.length - windowSize; i += hopSize) {
     let energy = 0;
@@ -279,15 +282,12 @@ function detectBeatsBasic(audioBuffer) {
     energies.push(energy / windowSize);
   }
 
-  // Normalize energies
   const maxEnergy = Math.max(...energies);
   if (maxEnergy === 0) {
     return { bpm: 120, beats: generateBeatTimestamps(120, 0, duration) };
   }
 
   const normalizedEnergies = energies.map((e) => e / maxEnergy);
-
-  // Detect onsets (sudden increases in energy)
   const onsets = [];
   const threshold = 0.15;
   const minTimeBetweenOnsets = 0.15;
@@ -302,7 +302,6 @@ function detectBeatsBasic(audioBuffer) {
     }
   }
 
-  // Estimate BPM from onset intervals
   let bpm = 120;
   if (onsets.length >= 4) {
     const intervals = [];
@@ -311,7 +310,6 @@ function detectBeatsBasic(audioBuffer) {
     }
     intervals.sort((a, b) => a - b);
     const medianInterval = intervals[Math.floor(intervals.length / 2)];
-
     if (medianInterval > 0) {
       bpm = Math.round(60 / medianInterval);
       while (bpm < 60) bpm *= 2;
@@ -321,7 +319,6 @@ function detectBeatsBasic(audioBuffer) {
 
   const firstBeat = onsets.length > 0 ? onsets[0] % (60 / bpm) : 0;
   const beats = generateBeatTimestamps(bpm, firstBeat, duration);
-
   return { bpm, beats };
 }
 

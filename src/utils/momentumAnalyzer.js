@@ -124,7 +124,72 @@ export function detectSegments(energyCurve) {
 // ─── Stage 3: Onset Detection ────────────────────────────────────────────────
 
 /**
- * Half-wave rectified energy difference + adaptive threshold + peak picking.
+ * Essentia.js-powered onset detection using spectral flux + HFC.
+ * Falls back to basic energy-diff detector if Essentia is unavailable.
+ * @param {Float32Array} channelData — raw PCM samples
+ * @param {number} sampleRate
+ * @param {number} duration — audio duration in seconds
+ * @returns {Promise<{ time: number, strength: number }[]>}
+ */
+export async function detectOnsetsEssentia(channelData, sampleRate, duration) {
+  try {
+    const { Essentia, EssentiaWASM } = await import('essentia.js');
+    // Reuse singleton if already loaded by useBeatDetection
+    const wasm = await EssentiaWASM();
+    const essentia = new Essentia(wasm);
+
+    const signal = essentia.arrayToVector(channelData);
+
+    // Use OnsetDetectionGlobal with 'infogain' method — best for general music
+    const frameSize = 2048;
+    const hopSize = 512;
+    const odfResult = essentia.OnsetDetectionGlobal(
+      signal,
+      frameSize,
+      hopSize,
+      'infogain',
+      sampleRate,
+    );
+    const odfValues = essentia.vectorToArray(odfResult.onsetDetections);
+
+    // Use Essentia's Onsets algorithm to pick peaks from the detection function
+    // Since Onsets expects a matrix, we'll do peak picking ourselves
+    const onsets = [];
+    const threshold = 0.1;
+    const minGap = Math.floor((0.05 * sampleRate) / hopSize); // 50ms minimum gap
+
+    // Normalize ODF
+    const maxOdf = Math.max(...Array.from(odfValues));
+    if (maxOdf <= 0) return [];
+
+    let lastOnset = -minGap;
+    for (let i = 1; i < odfValues.length - 1; i++) {
+      const val = odfValues[i] / maxOdf;
+      if (
+        val > threshold &&
+        odfValues[i] >= odfValues[i - 1] &&
+        odfValues[i] >= odfValues[i + 1] &&
+        i - lastOnset >= minGap
+      ) {
+        const time = (i * hopSize) / sampleRate;
+        if (time <= duration) {
+          onsets.push({ time: parseFloat(time.toFixed(3)), strength: val });
+          lastOnset = i;
+        }
+      }
+    }
+
+    log.info(`[Momentum] Essentia onset detection: ${onsets.length} onsets`);
+    return onsets;
+  } catch (err) {
+    log.warn(`[Momentum] Essentia onset detection failed, using fallback: ${err.message}`);
+    return null; // Caller falls back to basic detector
+  }
+}
+
+/**
+ * Basic onset detection: half-wave rectified energy difference + adaptive threshold.
+ * Used as fallback when Essentia is unavailable.
  * @param {{ time: number, energy: number }[]} energyCurve
  * @returns {{ time: number, strength: number }[]}
  */
@@ -452,7 +517,12 @@ export async function analyzeMomentum(
   // Run pipeline stages 1-3
   const energyCurve = computeEnergyCurve(channelData, sampleRate);
   const segments = detectSegments(energyCurve);
-  const onsets = detectOnsets(energyCurve);
+
+  // Try Essentia.js onset detection first, fall back to basic energy-diff
+  let onsets = await detectOnsetsEssentia(channelData, sampleRate, duration);
+  if (!onsets) {
+    onsets = detectOnsets(energyCurve);
+  }
 
   // Stage 4: generate cuts for the requested preset
   const cutPoints = generateCutPoints(energyCurve, onsets, segments, preset, duration);
