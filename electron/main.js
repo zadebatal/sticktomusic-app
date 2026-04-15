@@ -1122,11 +1122,17 @@ function splitVideo(videoPath, cutTimes, outputDir) {
 
   for (let i = 0; i < boundaries.length - 1; i++) {
     const rawStart = boundaries[i];
-    // Offset by 1 frame (~0.033s at 30fps) to avoid grabbing the last frame of the previous scene
-    const start = i > 0 ? rawStart + 0.033 : rawStart;
-    const end = boundaries[i + 1];
+    // Offset by 2 frames to avoid bleed from the previous scene's last frames.
+    // The detector marks the frame where the transition occurs, but the visual
+    // cut may start 1-2 frames earlier. Trimming 2 frames from the start of
+    // each clip (except the first) ensures clean cuts.
+    const start = i > 0 ? rawStart + 0.067 : rawStart;
+    // End 1 frame before the next cut to prevent the transition frame from
+    // bleeding into this clip's final frames
+    const isLastClip = i === boundaries.length - 2;
+    const end = isLastClip ? boundaries[i + 1] : boundaries[i + 1] - 0.033;
     const clipDur = end - start;
-    if (clipDur < 0.03) continue;
+    if (clipDur < 0.05) continue;
 
     const clipName = `${basename}_clip${String(i + 1).padStart(3, '0')}.mp4`;
     const clipPath = path.join(outputDir, clipName);

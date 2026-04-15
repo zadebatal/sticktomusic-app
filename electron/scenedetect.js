@@ -137,21 +137,54 @@ function detectScenes(videoPath, ffmpegPath, options = {}) {
   // Using 0.5 as the cutoff cleanly separates real cuts from noise.
   const absThreshold = threshold || 0.5;
 
-  // Find frames where distance exceeds threshold
+  // Find candidate cut frames
   const minFrameGap = Math.round(minSceneDuration * fps);
-  const cuts = [];
+  const candidates = [];
   let lastCut = -minFrameGap;
 
   for (let i = 0; i < distances.length; i++) {
     if (distances[i] > absThreshold && (i - lastCut) >= minFrameGap) {
-      cuts.push((i + 1) / fps);
+      candidates.push(i);
       lastCut = i;
+    }
+  }
+
+  // ── Flash suppression ──
+  // A camera flash spikes the histogram then returns to the same scene within
+  // a few frames. A real cut changes the histogram permanently.
+  // For each candidate cut, compare the histogram BEFORE the cut (frame i-1)
+  // with histograms 3-6 frames AFTER. If they're similar (distance < threshold),
+  // the scene returned to normal → flash, not a real cut.
+  const FLASH_LOOKAHEAD = Math.min(6, Math.round(fps * 0.2)); // ~200ms or 6 frames
+  const FLASH_SIMILARITY = absThreshold * 0.6; // must be well below cut threshold
+  const cuts = [];
+  let flashesRemoved = 0;
+
+  for (const i of candidates) {
+    const preFlashFrame = i; // frame before the spike (distances[i] = diff between frame i and i+1)
+    let isFlash = false;
+
+    // Check if the scene "returns" within FLASH_LOOKAHEAD frames
+    for (let look = 2; look <= FLASH_LOOKAHEAD; look++) {
+      const checkFrame = i + look;
+      if (checkFrame >= histograms.length) break;
+      const recovery = chiSquaredDistance(histograms[preFlashFrame], histograms[checkFrame]);
+      if (recovery < FLASH_SIMILARITY) {
+        isFlash = true;
+        break;
+      }
+    }
+
+    if (isFlash) {
+      flashesRemoved++;
+    } else {
+      cuts.push((i + 1) / fps);
     }
   }
 
   const mean = distances.reduce((a, b) => a + b, 0) / distances.length;
   const maxDist = Math.max(...distances);
-  console.log(`[scenedetect] ${path.basename(videoPath)}: ${frameCount} frames, ${cuts.length} cuts (threshold=${absThreshold}, mean=${mean.toFixed(3)}, max=${maxDist.toFixed(3)})`);
+  console.log(`[scenedetect] ${path.basename(videoPath)}: ${frameCount} frames, ${cuts.length} cuts, ${flashesRemoved} flashes suppressed (threshold=${absThreshold}, mean=${mean.toFixed(3)}, max=${maxDist.toFixed(3)})`);
   return cuts;
 }
 
