@@ -137,7 +137,12 @@ export async function detectOnsetsEssentia(channelData, sampleRate, duration) {
       import('essentia.js/dist/essentia.js-core.es.js'),
       import('essentia.js/dist/essentia-wasm.web.js'),
     ]);
-    const wasm = await EssentiaWASM();
+    const wasm = await EssentiaWASM({
+      locateFile: (path) => {
+        if (path.endsWith('.wasm')) return '/essentia-wasm.web.wasm';
+        return path;
+      },
+    });
     const essentia = new Essentia(wasm);
 
     const signal = essentia.arrayToVector(channelData);

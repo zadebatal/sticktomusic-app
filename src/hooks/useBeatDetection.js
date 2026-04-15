@@ -29,7 +29,13 @@ async function getEssentia() {
       import('essentia.js/dist/essentia.js-core.es.js'),
       import('essentia.js/dist/essentia-wasm.web.js'),
     ]);
-    const wasm = await EssentiaWASM();
+    // Tell Emscripten where to find the .wasm file (served from public/)
+    const wasm = await EssentiaWASM({
+      locateFile: (path) => {
+        if (path.endsWith('.wasm')) return '/essentia-wasm.web.wasm';
+        return path;
+      },
+    });
     essentiaInstance = new Essentia(wasm);
     log(`[BeatDetection] Essentia.js loaded (v${essentiaInstance.version})`);
     return essentiaInstance;
@@ -130,19 +136,17 @@ export const useBeatDetection = () => {
       const monoSignal = essentia.audioBufferToMonoSignal(audioBuffer);
       const signal = essentia.arrayToVector(monoSignal);
 
-      // Run BeatTrackerMultiFeature — uses 5 onset detection functions for best accuracy
+      // Run BeatTrackerMultiFeature — 5 detection functions for best accuracy
       log('[BeatDetection] Running BeatTrackerMultiFeature...');
       let result;
       try {
         result = essentia.BeatTrackerMultiFeature(signal);
       } catch (multiErr) {
-        // Fallback to faster Degara tracker
         log.warn('[BeatDetection] MultiFeature failed, trying Degara:', multiErr.message);
         try {
           result = essentia.BeatTrackerDegara(signal);
         } catch (degaraErr) {
           log.warn('[BeatDetection] Degara also failed:', degaraErr.message);
-          // Ultimate fallback — basic onset detection
           await audioContext.close();
           const fallbackResult = detectBeatsBasic(audioBuffer);
           setBpm(fallbackResult.bpm);
