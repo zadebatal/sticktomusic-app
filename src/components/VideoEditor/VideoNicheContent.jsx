@@ -763,12 +763,10 @@ const VideoNicheContent = ({
             const [lo, hi] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
             for (let i = lo; i <= hi; i++) next.add(ids[i]);
           }
-        } else if (e?.metaKey || e?.ctrlKey) {
+        } else {
+          // Plain click toggles the item in/out of selection (multi-select by default)
           if (next.has(itemId)) next.delete(itemId);
           else next.add(itemId);
-        } else {
-          if (next.size === 1 && next.has(itemId)) return new Set();
-          return new Set([itemId]);
         }
         return next;
       });
@@ -1337,6 +1335,7 @@ const VideoNicheContent = ({
                 <ToggleGroup
                   value={bankSearchMode}
                   onValueChange={(v) => v && setBankSearchMode(v)}
+                  className="flex-none"
                 >
                   <ToggleGroup.Item icon={null} value="name">
                     Name
@@ -1664,6 +1663,16 @@ const VideoNicheContent = ({
                         <span className="text-caption-bold font-caption-bold text-white">
                           {bankSelectedIds.size} selected
                         </span>
+                        <button
+                          className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer"
+                          onClick={() => {
+                            const bankId = activeBankId === 'all' ? '__all__' : activeBank?.id;
+                            if (bankId) setSelectionBankId(bankId);
+                            setBankSelectedIds(new Set(activeBankMedia.map((item) => item.id)));
+                          }}
+                        >
+                          Select All ({activeBankMedia.length})
+                        </button>
                         <div className="flex-1" />
                         {/* Move-to-bank buttons only make sense when the user
                             is operating on a specific source bank. When they
