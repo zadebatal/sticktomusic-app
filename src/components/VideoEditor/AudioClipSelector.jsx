@@ -468,7 +468,8 @@ const AudioClipSelector = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [playheadTime, inPoint, outPoint, duration, editingTime, togglePlayback]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playheadTime, inPoint, outPoint, duration, editingTime]);
 
   // Auto-scroll during playback when zoomed in
   useEffect(() => {

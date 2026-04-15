@@ -249,7 +249,8 @@ const WordTimeline = ({
     gradient.addColorStop(1, 'rgba(139, 92, 246, 0.1)');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
-  }, [waveformData, zoom, duration, getTimelineWidth]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waveformData, zoom, duration]);
 
   // Save current state to undo history
   const saveToHistory = useCallback(() => {
